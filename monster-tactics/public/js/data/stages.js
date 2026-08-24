@@ -8,53 +8,56 @@
 // pathCells: waypoints in grid cells the path bends through, in order.
 // Every consecutive pair must share a row OR a column (BattleScene walks
 // straight segments between them) - see BattleScene.buildPathBlockedCells.
-// Grid is 16 cols x 8 rows (see BattleScene GRID_COLS/GRID_ROWS) - every
-// path here enters at col 15 (the spawn edge) and exits at col 0 (the base
-// edge).
+// Grid is 28 cols x 16 rows (see BattleScene GRID_COLS/GRID_ROWS) - big
+// enough that BattleScene needs a scrollable camera to see it all at once -
+// every path here enters near col 27 (the spawn edge) and exits near col 0
+// (the base edge).
 
 const STAGES = [
   {
     id: 'valley',
     name: 'Winding Valley',
     pathCells: [
-      { col: 15, row: 1 }, { col: 10, row: 1 }, { col: 10, row: 6 },
-      { col: 5, row: 6 }, { col: 5, row: 1 }, { col: 0, row: 1 }
+      { col: 26, row: 2 }, { col: 18, row: 2 }, { col: 18, row: 12 },
+      { col: 9, row: 12 }, { col: 9, row: 2 }, { col: 0, row: 2 }
     ]
   },
   {
     id: 'switchback',
     name: 'Switchback Ridge',
     pathCells: [
-      { col: 15, row: 6 }, { col: 12, row: 6 }, { col: 12, row: 1 },
-      { col: 9, row: 1 }, { col: 9, row: 6 }, { col: 6, row: 6 },
-      { col: 6, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 6 },
-      { col: 0, row: 6 }
+      { col: 27, row: 14 }, { col: 24, row: 14 }, { col: 24, row: 2 },
+      { col: 21, row: 2 }, { col: 21, row: 14 }, { col: 18, row: 14 },
+      { col: 18, row: 2 }, { col: 15, row: 2 }, { col: 15, row: 14 },
+      { col: 12, row: 14 }, { col: 12, row: 2 }, { col: 9, row: 2 },
+      { col: 9, row: 14 }, { col: 6, row: 14 }, { col: 6, row: 2 },
+      { col: 3, row: 2 }, { col: 3, row: 14 }, { col: 0, row: 14 }
     ]
   },
   {
     id: 'sweep',
     name: 'Full Sweep',
     pathCells: [
-      { col: 15, row: 0 }, { col: 1, row: 0 }, { col: 1, row: 3 },
-      { col: 14, row: 3 }, { col: 14, row: 6 }, { col: 1, row: 6 },
-      { col: 1, row: 7 }, { col: 0, row: 7 }
+      { col: 27, row: 0 }, { col: 2, row: 0 }, { col: 2, row: 6 },
+      { col: 25, row: 6 }, { col: 25, row: 12 }, { col: 2, row: 12 },
+      { col: 2, row: 15 }, { col: 0, row: 15 }
     ]
   },
   {
     id: 'gauntlet',
     name: 'The Gauntlet',
     pathCells: [
-      { col: 15, row: 4 }, { col: 5, row: 4 }, { col: 5, row: 0 }, { col: 0, row: 0 }
+      { col: 27, row: 8 }, { col: 9, row: 8 }, { col: 9, row: 0 }, { col: 0, row: 0 }
     ]
   },
   {
     id: 'coil',
     name: "Serpent's Coil",
     pathCells: [
-      { col: 15, row: 2 }, { col: 13, row: 2 }, { col: 13, row: 7 },
-      { col: 10, row: 7 }, { col: 10, row: 2 }, { col: 7, row: 2 },
-      { col: 7, row: 7 }, { col: 4, row: 7 }, { col: 4, row: 2 },
-      { col: 1, row: 2 }, { col: 1, row: 5 }, { col: 0, row: 5 }
+      { col: 27, row: 3 }, { col: 23, row: 3 }, { col: 23, row: 14 },
+      { col: 18, row: 14 }, { col: 18, row: 3 }, { col: 13, row: 3 },
+      { col: 13, row: 14 }, { col: 8, row: 14 }, { col: 8, row: 3 },
+      { col: 3, row: 3 }, { col: 3, row: 10 }, { col: 0, row: 10 }
     ]
   }
 ];

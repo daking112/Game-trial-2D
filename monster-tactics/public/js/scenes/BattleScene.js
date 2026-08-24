@@ -1,8 +1,16 @@
-const GRID_COLS = 16;
-const GRID_ROWS = 8;
+// A grid this size doesn't fit in one 1920x1080 screen by design - see the
+// camera setup in create() and setupCamera(). WORLD_PAD is empty space left
+// past the grid's right/bottom edge for decorations to sit in without the
+// camera bumping its bounds right at the grid line.
+const GRID_COLS = 28;
+const GRID_ROWS = 16;
 const CELL = 96;
-const GRID_X = 200;
-const GRID_Y = 170;
+const GRID_X = 150;
+const GRID_Y = 150;
+const WORLD_PAD = 180;
+const WORLD_WIDTH = GRID_X + GRID_COLS * CELL + WORLD_PAD;
+const WORLD_HEIGHT = GRID_Y + GRID_ROWS * CELL + WORLD_PAD;
+const CAMERA_PAN_SPEED = 900; // px/sec, keyboard pan
 const HP_BAR_W = 60;
 const HP_BAR_H = 8;
 const HP_BAR_Y_OFFSET = -42;
@@ -43,9 +51,54 @@ class BattleScene extends Phaser.Scene {
     this.buildHud();
     this.buildBench();
     this.buildOverlay();
+    this.setupCamera();
 
     this.updateHud();
     this.refreshStartButton();
+  }
+
+  // ---------- camera ----------
+
+  // The grid is bigger than the viewport, so the player needs to actively
+  // move around it: WASD/arrow keys and mouse wheel both pan the same
+  // camera (edge-scroll was tried and dropped - the bench sits flush against
+  // the left edge and the Menu/Center View links flush against the right, so
+  // just hovering them to click fought with edge-pan). Every HUD/bench/
+  // overlay element is set scrollFactor(0) (see buildHud/buildBench/
+  // buildOverlay) so none of this drags the UI around with the world - only
+  // grid/path/decorations/allies/enemies scroll.
+  setupCamera() {
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    cam.centerOn(GRID_X + (GRID_COLS * CELL) / 2, GRID_Y + (GRID_ROWS * CELL) / 2);
+
+    this.panKeys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
+
+    this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
+      cam.scrollX += deltaX;
+      cam.scrollY += deltaY;
+    });
+
+    UiKit.makeLink(this, this.scale.width - 30, 60, 'Center View', () => {
+      cam.centerOn(GRID_X + (GRID_COLS * CELL) / 2, GRID_Y + (GRID_ROWS * CELL) / 2);
+    }, { originX: 1, originY: 0, fontSize: '16px' }).setScrollFactor(0);
+  }
+
+  updateCameraPan(delta) {
+    // No keyboard pan while a modal overlay is up - the player is reading
+    // results, not scouting the map.
+    if (this.overlayBg.visible) return;
+
+    const cam = this.cameras.main;
+    const step = (CAMERA_PAN_SPEED * delta) / 1000;
+    let dx = 0, dy = 0;
+
+    if (this.panKeys.A.isDown || this.panKeys.LEFT.isDown) dx -= step;
+    if (this.panKeys.D.isDown || this.panKeys.RIGHT.isDown) dx += step;
+    if (this.panKeys.W.isDown || this.panKeys.UP.isDown) dy -= step;
+    if (this.panKeys.S.isDown || this.panKeys.DOWN.isDown) dy += step;
+
+    if (dx !== 0 || dy !== 0) cam.scrollX += dx, cam.scrollY += dy;
   }
 
   // ---------- path ----------
@@ -158,33 +211,52 @@ class BattleScene extends Phaser.Scene {
   drawMapDecorations() {
     const left = GRID_X - 100;
     const right = GRID_X + GRID_COLS * CELL + 90;
-    this.add.sprite(left, GRID_Y + 60, 'tree-1').play('tree-1-sway').setScale(0.85);
-    this.add.sprite(left - 15, GRID_Y + 350, 'bush-1').play('bush-1-sway').setScale(1.05);
-    this.add.image(left, GRID_Y + 620, 'rock-2').setScale(1.3);
-    this.add.sprite(right, GRID_Y + 90, 'tree-2').play('tree-2-sway').setScale(0.75);
-    this.add.image(right + 5, GRID_Y + 380, 'rock-3').setScale(1.3);
-    this.add.sprite(right, GRID_Y + 650, 'bush-2').play('bush-2-sway').setScale(0.95);
+    // A 16-row grid runs much taller than the old 8-row one - repeat the
+    // same tree/bush/rock rhythm down both margins instead of leaving most
+    // of the map's edges bare. Still fixed positions, not randomized (see
+    // the note above isPathCell's caller) so a stage looks the same on replay.
+    const pattern = [
+      { key: 'tree-1', anim: 'tree-1-sway', scale: 0.85 },
+      { key: 'bush-1', anim: 'bush-1-sway', scale: 1.05 },
+      { key: 'rock-2', anim: null, scale: 1.3 },
+      { key: 'tree-2', anim: 'tree-2-sway', scale: 0.75 },
+      { key: 'rock-3', anim: null, scale: 1.3 },
+      { key: 'bush-2', anim: 'bush-2-sway', scale: 0.95 }
+    ];
+    const rowSpacing = 240;
+    const rows = Math.ceil((GRID_ROWS * CELL) / rowSpacing);
+    for (let i = 0; i < rows; i++) {
+      const y = GRID_Y + 60 + i * rowSpacing;
+      const leftDeco = pattern[i % pattern.length];
+      const rightDeco = pattern[(i + 3) % pattern.length];
+      const addDeco = (x, deco) => deco.anim
+        ? this.add.sprite(x, y, deco.key).play(deco.anim).setScale(deco.scale)
+        : this.add.image(x, y, deco.key).setScale(deco.scale);
+      addDeco(left, leftDeco);
+      addDeco(right, rightDeco);
+    }
   }
 
   buildHud() {
-    this.add.image(960, 48, 'panel-hud');
+    this.add.image(960, 48, 'panel-hud').setScrollFactor(0);
     this.hudText = this.add.text(30, 32, '', {
       fontFamily: 'monospace', fontSize: '22px', color: '#f5f7fa'
-    });
+    }).setScrollFactor(0);
 
     this.backBtn = UiKit.makeLink(this, this.scale.width - 30, 32, 'Menu >', () => this.scene.start('MenuScene'), {
       originX: 1, originY: 0, fontSize: '22px'
-    });
+    }).setScrollFactor(0);
 
     this.startWaveBtn = UiKit.makeButton(this, this.scale.width / 2, 125, 'Start Wave', () => {
       if (this.phase === 'placement' && this.allies.length > 0) this.startWave();
     });
+    this.startWaveBtn.container.setScrollFactor(0);
   }
 
   buildBench() {
     this.benchLabel = this.add.text(30, 950, 'Bench (click, then click an empty non-path cell):', {
       fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
-    }).setStroke('#1c2530', 3);
+    }).setStroke('#1c2530', 3).setScrollFactor(0);
     this.benchIcons = [];
     this.layoutBench();
   }
@@ -201,12 +273,14 @@ class BattleScene extends Phaser.Scene {
       const species = getSpecies(entry.speciesId);
       const rarity = RARITY[species.rarity];
       const x = startX + i * spacing;
-      const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(78, 78).setTint(rarity.color);
-      const selectionRing = this.add.rectangle(x, y, 84, 84, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false);
-      const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.35);
+      const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(78, 78).setTint(rarity.color).setScrollFactor(0);
+      const selectionRing = this.add.rectangle(x, y, 84, 84, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false).setScrollFactor(0);
+      const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.35).setScrollFactor(0);
       const { icon: costIcon, text: costText } = UiKit.iconLabel(this, x, y + 48, 'icon-coin', `${species.cost}`, {
         fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
       }, 18);
+      costIcon.setScrollFactor(0);
+      costText.setScrollFactor(0);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => this.onBenchClicked(entry.speciesId));
       const icon = { bg, selectionRing, sprite, costIcon, costText, speciesId: entry.speciesId };
@@ -228,21 +302,21 @@ class BattleScene extends Phaser.Scene {
     // everything else, a monster in-frame when the overlay opens renders
     // through it instead of being hidden behind it.
     const OVERLAY_DEPTH = 100;
-    this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(OVERLAY_DEPTH).setVisible(false);
-    this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(OVERLAY_DEPTH).setVisible(false);
+    this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(OVERLAY_DEPTH).setScrollFactor(0).setVisible(false);
+    this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(OVERLAY_DEPTH).setScrollFactor(0).setVisible(false);
     this.overlayTitle = this.add.text(width / 2, height / 2 - 140, '', {
       fontFamily: 'monospace', fontSize: '45px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 6).setDepth(OVERLAY_DEPTH).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 6).setDepth(OVERLAY_DEPTH).setScrollFactor(0).setVisible(false);
     this.overlaySub = this.add.text(width / 2, height / 2 - 60, '', {
       fontFamily: 'monospace', fontSize: '24px', color: '#c8ceda'
-    }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(OVERLAY_DEPTH).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(OVERLAY_DEPTH).setScrollFactor(0).setVisible(false);
 
     this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 40, '', () => {}, { size: 'large' });
     this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 140, 'Return to Menu', () => {
       this.scene.start('MenuScene');
     }, { size: 'large' });
-    this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH);
-    this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH);
+    this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH).setScrollFactor(0);
+    this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH).setScrollFactor(0);
     this.setOverlayVisible(false);
   }
 
@@ -387,6 +461,8 @@ class BattleScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    this.updateCameraPan(delta);
+
     if (this.phase !== 'wave') return;
 
     // spawning

@@ -37,8 +37,13 @@ lock, not just rough onboarding.
    evolves into Rollodon (EARTH, splash), a genuinely different tower.
 3. **Battle** - a run is 5 stages (`RUN_TARGET_STAGES`), each 3 waves
    (`WAVES_PER_STAGE`), for 15 waves total; a fixed winding path (one of
-   5 distinct layouts, see `data/stages.js`) crosses a 16x8 grid from a spawn
-   edge to your base. Placement is only allowed on cells the path doesn't
+   5 distinct layouts, see `data/stages.js`) crosses a 28x16 grid from a
+   spawn edge to your base - bigger than the 1920x1080 viewport by design,
+   so BattleScene runs a scrollable camera (WASD/arrow keys, mouse wheel, or
+   the "Center View" link) rather than showing the whole map at once. HUD,
+   bench, and the wave-result overlay are all pinned to the screen
+   (`setScrollFactor(0)`) so panning never drags the UI around with the
+   world. Placement is only allowed on cells the path doesn't
    cross, and hovering a cell with a bench monster selected previews its
    actual range circle before you commit - placed towers keep a faint
    persistent one too, so coverage is always visible, never guessed at.
@@ -205,9 +210,22 @@ hand-rolled `makeButton()` copies.
 
 ## Bigger design not built yet
 
-The long-term pitch is larger than what's here - bosses, evolution for the
-other 11 species (only the 3 starters have an evolution defined right now),
-an Ultimate combat tier, differentiated pull currencies, and eventual co-op.
-Co-op specifically needs backend infrastructure (matchmaking, real-time
-state sync) this project doesn't have and was explicitly deferred rather
-than half-built.
+The long-term pitch is larger than what's here. Immediate next targets, in
+priority order per direction from the project owner: **enemy variety**
+(flying/armored/fast enemies with real resistances, plus boss waves - the
+combat archetypes already differentiate towers by type, but every enemy
+today is just a bigger-numbers version of the same "walk and die" unit) and
+**meta-progression** (a talent tree or other permanent-upgrade track unlocked
+by completed runs, on top of the per-run gacha/leveling loop that currently
+resets to nothing but roster/essence between runs). Also on the list:
+evolution for the other 11 species (only the 3 starters have one defined
+right now), an Ultimate combat tier (`archetypes.js` has a documented, unused
+shape for it), and differentiated pull currencies.
+
+Longer-term, the stated direction is a multiplayer .io-style game (think
+Roblox tycoon-tower-defense) - a shared world players build/defend in
+together rather than solo runs. Nothing here is built for that yet, and it
+needs backend infrastructure (matchmaking, real-time state sync) this
+project doesn't have, but it's why the battle grid was built with a camera
+scrolling a world bigger than one screen instead of just a bigger fixed
+viewport - a shared world needs to be navigable, not just large.
