@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "name": "Castle Clash Duel - Asset Packs Index",
+    "description": "Top-level index of every asset pack under public/assets/. Each pack has its own index.json with the actual texture/frame/animation data - this file just points to them so a Phaser game knows what's available and where.",
+    "basePath": "assets/"
+  },
+  "packs": [
+    {
+      "name": "Tiny Swords",
+      "path": "tinyswords/",
+      "index": "tinyswords/index.json",
+      "status": "in use",
+      "description": "Curated Tiny Swords pack actively loaded and animated by public/index.html - the canonical, verified manifest for the shipping game."
+    },
+    {
+      "name": "RF Catacombs",
+      "path": "rf-catacombs/",
+      "index": "rf-catacombs/index.json",
+      "status": "unused",
+      "description": "Free dungeon/catacombs tileset and candle/torch/spike animations. Not yet wired into any scene."
+    },
+    {
+      "name": "UI Bundle Free",
+      "path": "ui-bundle-free/",
+      "index": "ui-bundle-free/index.json",
+      "status": "unused",
+      "description": "Eight themed UI mockup sheets (casino, medieval, horror, generic fantasy, pastel, demo, fantasy, cozy). Not yet wired into any scene."
+    },
+    {
+      "name": "Pixelole Overworld Tileset",
+      "path": "pixelole-overworld-tileset/",
+      "index": "pixelole-overworld-tileset/index.json",
+      "status": "unused",
+      "description": "Single overworld terrain/object tileset sheet. Not yet wired into any scene."
+    },
+    {
+      "name": "Unsorted VFX Pack",
+      "path": "vfx-pack/",
+      "index": "vfx-pack/index.json",
+      "status": "unused",
+      "description": "126 particle/VFX spritesheets (explosions, splashes, magic effects) from an unidentified source, each a 64x64-cell grid of 9 color variants x N animation frames. Not yet wired into any scene."
+    }
+  ]
+}

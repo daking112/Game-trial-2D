@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "name": "UI Bundle Free",
+    "description": "Free sample sheets from a UI mockup bundle (UIBundleFree.zip), unzipped from the repo root. Each file is a themed set of UI mockups (menu panel + icon grid) from a different style pack. Not wired into any game yet. macOS __MACOSX/.DS_Store junk from the zip was discarded.",
+    "basePath": "assets/ui-bundle-free/"
+  },
+  "atlases": [
+    { "key": "ui-bundle-casino", "path": "freecasinoui.png", "width": 256, "height": 256, "layout": "irregular", "note": "Casino-themed UI mockup: mixed-size panel + icon grid, not a uniform frame grid." },
+    { "key": "ui-bundle-medieval", "path": "MediavelFree.png", "width": 256, "height": 128, "layout": "irregular", "note": "Medieval-themed UI mockup, mixed-size elements." },
+    { "key": "ui-bundle-horror", "path": "FreeHorrorUi.png", "width": 256, "height": 256, "layout": "irregular", "note": "Horror-themed UI mockup, mixed-size elements." },
+    { "key": "ui-bundle-generic", "path": "FreeUI.png", "width": 224, "height": 256, "layout": "irregular", "note": "Generic fantasy UI mockup: menu panel (Play/Settings/Exit) plus a grid of small icon buttons - mixed sizes, not a uniform frame grid." },
+    { "key": "ui-bundle-pastel", "path": "PastelUIFree.png", "width": 256, "height": 300, "layout": "irregular", "note": "Pastel-themed UI mockup, mixed-size elements." },
+    { "key": "ui-bundle-demo", "path": "FreeDemo.png", "width": 256, "height": 256, "layout": "irregular", "note": "Demo/sampler UI mockup, mixed-size elements." },
+    { "key": "ui-bundle-fantasy", "path": "freefantasy.png", "width": 256, "height": 256, "layout": "irregular", "note": "Fantasy-themed UI mockup, mixed-size elements." },
+    { "key": "ui-bundle-cozy", "path": "UiCozyFree.png", "width": 256, "height": 256, "layout": "irregular", "note": "Cozy-themed UI mockup, mixed-size elements." }
+  ],
+  "usage": "Each file is a single irregular atlas (panel art + icon grid mixed at different sizes), not a fixed-cell spritesheet. Load with this.load.image(key, basePath + path) and slice the individual icon/panel regions by hand (e.g. this.textures.get(key).add(frameName, 0, x, y, w, h)) or repack with a texture-packer tool before use."
+}

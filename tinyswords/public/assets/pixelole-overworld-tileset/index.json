@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "name": "Pixelole Overworld Tileset",
+    "description": "Free sample tileset (Pixelole's overword Tileset1.0 free.zip), unzipped from the repo root. Not wired into any game yet.",
+    "basePath": "assets/pixelole-overworld-tileset/"
+  },
+  "atlases": [
+    {
+      "key": "pixelole-overworld-master",
+      "path": "MasterSimple.png",
+      "width": 256,
+      "height": 256,
+      "layout": "irregular",
+      "note": "Overworld terrain blocks (grass, water, cliff) plus separate object sprites (trees, rocks, a small house, bridges, a signpost) packed into one sheet. Terrain blocks look grid-aligned on inspection but an exact tile size could not be verified without the original source/README, so no frameWidth/frameHeight is asserted here - confirm visually or against the pack's own docs before treating this as a fixed-cell spritesheet."
+    }
+  ],
+  "usage": "Load with this.load.image('pixelole-overworld-master', basePath + 'MasterSimple.png') and slice regions manually once tile boundaries are confirmed, or repack with a texture-packer tool."
+}

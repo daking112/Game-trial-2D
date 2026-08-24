@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "name": "RF Catacombs",
+    "description": "Free dungeon/catacombs tileset pack (RF_Catacombs_v1.0.zip), unzipped from the repo root. Not wired into any game yet. PSD source files from the original zip were dropped when extracting (design sources, not needed for a Phaser build); the full originals remain recoverable from git history on the commit that added this pack.",
+    "basePath": "assets/rf-catacombs/",
+    "license": "public-license.txt (bundled, see file for terms)"
+  },
+  "atlases": [
+    {
+      "key": "catacombs-mainlevbuild",
+      "path": "mainlevbuild.png",
+      "width": 1024,
+      "height": 640,
+      "layout": "irregular",
+      "note": "Mixed-size wall/floor/door/torch-holder tiles packed into one sheet, not a uniform grid. Individual regions need to be sliced by hand or with a texture-packer atlas (Phaser texture.add.rect / TexturePacker JSON), not a fixed frameWidth/frameHeight."
+    },
+    {
+      "key": "catacombs-decorative",
+      "path": "decorative.png",
+      "width": 256,
+      "height": 256,
+      "layout": "irregular",
+      "note": "Mixed-size decorative props (banners, statues, rocks, crates) packed into one sheet, not a uniform grid."
+    }
+  ],
+  "animationFrameSets": [
+    {
+      "key": "catacombs-candleA",
+      "description": "Candle A flicker animation, one file per frame (dimensions vary slightly frame to frame - normal for hand-trimmed pixel animation).",
+      "frames": [
+        { "file": "candleA_01.png", "width": 7, "height": 14 },
+        { "file": "candleA_02.png", "width": 7, "height": 15 },
+        { "file": "candleA_03.png", "width": 7, "height": 16 },
+        { "file": "candleA_04.png", "width": 7, "height": 14 }
+      ]
+    },
+    {
+      "key": "catacombs-candleB",
+      "description": "Candle B flicker animation, one file per frame.",
+      "frames": [
+        { "file": "candleB_01.png", "width": 13, "height": 16 },
+        { "file": "candleB_02.png", "width": 13, "height": 14 },
+        { "file": "candleB_03.png", "width": 13, "height": 14 },
+        { "file": "candleB_04.png", "width": 13, "height": 15 }
+      ]
+    },
+    {
+      "key": "catacombs-spike",
+      "description": "Floor spike trap animation (extend/retract), one file per frame.",
+      "frames": [
+        { "file": "spike_0.png", "width": 13, "height": 12 },
+        { "file": "spike_1.png", "width": 13, "height": 12 },
+        { "file": "spike_2.png", "width": 13, "height": 12 },
+        { "file": "spike_3.png", "width": 13, "height": 13 },
+        { "file": "spike_4.png", "width": 13, "height": 14 }
+      ]
+    },
+    {
+      "key": "catacombs-torch",
+      "description": "Wall torch flame animation, one file per frame.",
+      "frames": [
+        { "file": "torch_1.png", "width": 16, "height": 16 },
+        { "file": "torch_2.png", "width": 16, "height": 15 },
+        { "file": "torch_3.png", "width": 16, "height": 15 },
+        { "file": "torch_4.png", "width": 16, "height": 16 }
+      ]
+    }
+  ],
+  "usage": "For the atlases: load with this.load.image(key, basePath + path) and either slice manually with frame rects or repack with a texture-packer tool - there is no fixed frameWidth/frameHeight. For the animationFrameSets: load each frame file as a separate image (this.load.image), then this.anims.create({ key, frames: frames.map(f => ({ key: f.textureKey })), frameRate, repeat }) since these are discrete files rather than one spritesheet."
+}
