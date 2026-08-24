@@ -16,10 +16,10 @@ class RosterScene extends Phaser.Scene {
     gameState.team = gameState.team.filter(uid => gameState.roster.some(m => m.uid === uid));
 
     if (gameState.roster.length === 0) {
-      this.add.text(width / 2, 260, 'No monsters yet.\nGo catch some first!', {
+      this.add.text(width / 2, 260, 'No monsters yet.\nGo open some eggs first!', {
         fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b8', align: 'center'
       }).setOrigin(0.5);
-      this.makeButton(width / 2, 360, 'Catch Monsters', () => this.scene.start('CatchScene'));
+      this.makeButton(width / 2, 360, 'Egg Shop', () => this.scene.start('EggScene'));
       return;
     }
 
@@ -50,7 +50,8 @@ class RosterScene extends Phaser.Scene {
 
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
-    const bg = this.add.rectangle(x, y, 130, 120, 0x2a3040).setStrokeStyle(2, 0x4a5468);
+    const rarity = RARITY[species.rarity];
+    const bg = this.add.rectangle(x, y, 130, 120, 0x2a3040).setStrokeStyle(2, rarity.color);
     const sprite = this.add.sprite(x, y - 30, species.sheetKey, species.frame).setScale(1.1);
     const name = this.add.text(x, y + 8, species.name, {
       fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa'
@@ -60,7 +61,7 @@ class RosterScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     bg.setInteractive({ useHandCursor: true });
-    const card = { bg, sprite, name, stats, uid: entry.uid };
+    const card = { bg, sprite, name, stats, uid: entry.uid, rarityColor: rarity.color };
     this.cards.push(card);
     this.refreshCard(card);
 
@@ -75,7 +76,7 @@ class RosterScene extends Phaser.Scene {
 
   refreshCard(card) {
     const selected = gameState.team.includes(card.uid);
-    card.bg.setStrokeStyle(2, selected ? 0x4caf50 : 0x4a5468);
+    card.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0x4caf50 : card.rarityColor);
     card.bg.setFillStyle(selected ? 0x223428 : 0x2a3040);
   }
 

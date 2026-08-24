@@ -1,18 +1,23 @@
 // Persistent-ish game state shared across scenes.
-// Roster is saved to localStorage so caught monsters survive a page reload;
-// everything else (team selection, battle progress) is in-memory per session.
+// Roster and essence are saved to localStorage so they survive a page reload;
+// coins and battle progress are in-memory per battle run only.
 
 const ROSTER_STORAGE_KEY = 'monster-tactics:roster';
+const ESSENCE_STORAGE_KEY = 'monster-tactics:essence';
 const MAX_TEAM_SIZE = 5;
+const STARTING_COINS = 120;
+const EGG_COST = 40;
 
 class GameState {
   constructor() {
     this.roster = this.loadRoster();
+    this.essence = this.loadEssence();
     this.team = [];
-    this.baseHp = 10;
-    this.maxBaseHp = 10;
+    this.lives = 20;
+    this.maxLives = 20;
     this.wave = 1;
     this.score = 0;
+    this.coins = STARTING_COINS;
   }
 
   loadRoster() {
@@ -32,6 +37,23 @@ class GameState {
     }
   }
 
+  loadEssence() {
+    try {
+      const raw = localStorage.getItem(ESSENCE_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  saveEssence() {
+    try {
+      localStorage.setItem(ESSENCE_STORAGE_KEY, JSON.stringify(this.essence));
+    } catch (e) {
+      // localStorage unavailable - essence just won't persist
+    }
+  }
+
   addToRoster(speciesId) {
     const entry = {
       uid: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -40,6 +62,28 @@ class GameState {
     this.roster.push(entry);
     this.saveRoster();
     return entry;
+  }
+
+  earnEssence(amount) {
+    this.essence += amount;
+    this.saveEssence();
+  }
+
+  spendEssence(amount) {
+    if (this.essence < amount) return false;
+    this.essence -= amount;
+    this.saveEssence();
+    return true;
+  }
+
+  earnCoins(amount) {
+    this.coins += amount;
+  }
+
+  spendCoins(amount) {
+    if (this.coins < amount) return false;
+    this.coins -= amount;
+    return true;
   }
 
   toggleTeamMember(uid) {
@@ -56,9 +100,10 @@ class GameState {
   }
 
   resetBattle() {
-    this.baseHp = this.maxBaseHp;
+    this.lives = this.maxLives;
     this.wave = 1;
     this.score = 0;
+    this.coins = STARTING_COINS;
   }
 }
 

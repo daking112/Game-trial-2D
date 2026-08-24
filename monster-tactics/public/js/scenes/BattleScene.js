@@ -4,6 +4,18 @@ const CELL = 64;
 const GRID_X = 160;
 const GRID_Y = 130;
 
+// Waypoints the enemy path bends through, in grid cells. Enemies spawn off
+// the right edge, follow these in order, then exit off the left edge and
+// damage the base. Cells the path crosses are blocked for tower placement.
+const PATH_CELLS = [
+  { col: 9, row: 1 },
+  { col: 6, row: 1 },
+  { col: 6, row: 4 },
+  { col: 3, row: 4 },
+  { col: 3, row: 1 },
+  { col: 0, row: 1 }
+];
+
 class BattleScene extends Phaser.Scene {
   constructor() {
     super('BattleScene');
@@ -13,6 +25,9 @@ class BattleScene extends Phaser.Scene {
     gameState.resetBattle();
 
     this.phase = 'placement'; // 'placement' | 'wave' | 'waveComplete' | 'gameOver'
+    this.pathWaypoints = this.buildPathWaypoints();
+    this.pathBlockedCells = this.buildPathBlockedCells();
+
     this.grid = Array.from({ length: GRID_ROWS }, () => new Array(GRID_COLS).fill(null));
     this.allies = [];
     this.enemies = [];
@@ -35,10 +50,52 @@ class BattleScene extends Phaser.Scene {
     this.refreshStartButton();
   }
 
+  // ---------- path ----------
+
+  buildPathWaypoints() {
+    const entry = this.cellToPixel(PATH_CELLS[0].col, PATH_CELLS[0].row);
+    const exit = this.cellToPixel(PATH_CELLS[PATH_CELLS.length - 1].col, PATH_CELLS[PATH_CELLS.length - 1].row);
+    const spawn = { x: GRID_X + GRID_COLS * CELL + 30, y: entry.y };
+    const base = { x: GRID_X - 30, y: exit.y };
+    const onGrid = PATH_CELLS.map(c => this.cellToPixel(c.col, c.row));
+    return [spawn, ...onGrid, base];
+  }
+
+  buildPathBlockedCells() {
+    const blocked = new Set();
+    const mark = (c, r) => blocked.add(r + ',' + c);
+    for (let i = 0; i < PATH_CELLS.length - 1; i++) {
+      const a = PATH_CELLS[i], b = PATH_CELLS[i + 1];
+      if (a.row === b.row) {
+        const [from, to] = a.col < b.col ? [a.col, b.col] : [b.col, a.col];
+        for (let c = from; c <= to; c++) mark(c, a.row);
+      } else {
+        const [from, to] = a.row < b.row ? [a.row, b.row] : [b.row, a.row];
+        for (let r = from; r <= to; r++) mark(a.col, r);
+      }
+    }
+    return blocked;
+  }
+
+  isPathCell(col, row) {
+    return this.pathBlockedCells.has(row + ',' + col);
+  }
+
   // ---------- setup ----------
 
   drawGrid() {
     const g = this.add.graphics();
+
+    // Road surface first, so grid lines still show through it.
+    g.fillStyle(0x3a3020, 1);
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (this.isPathCell(c, r)) {
+          g.fillRect(GRID_X + c * CELL, GRID_Y + r * CELL, CELL, CELL);
+        }
+      }
+    }
+
     g.lineStyle(1, 0x2a3040, 1);
     for (let c = 0; c <= GRID_COLS; c++) {
       g.lineBetween(GRID_X + c * CELL, GRID_Y, GRID_X + c * CELL, GRID_Y + GRID_ROWS * CELL);
@@ -47,16 +104,19 @@ class BattleScene extends Phaser.Scene {
       g.lineBetween(GRID_X, GRID_Y + r * CELL, GRID_X + GRID_COLS * CELL, GRID_Y + r * CELL);
     }
 
-    // Base edge (left) and spawn edge (right) markers.
+    // Spawn edge and base edge markers.
+    const entryRow = PATH_CELLS[0].row;
+    const exitRow = PATH_CELLS[PATH_CELLS.length - 1].row;
+    g.lineStyle(4, 0xe0562f, 0.7);
+    g.lineBetween(GRID_X + GRID_COLS * CELL, GRID_Y + entryRow * CELL, GRID_X + GRID_COLS * CELL, GRID_Y + (entryRow + 1) * CELL);
     g.lineStyle(4, 0x4caf50, 1);
-    g.lineBetween(GRID_X, GRID_Y, GRID_X, GRID_Y + GRID_ROWS * CELL);
-    g.lineStyle(4, 0xe0562f, 0.6);
-    g.lineBetween(GRID_X + GRID_COLS * CELL, GRID_Y, GRID_X + GRID_COLS * CELL, GRID_Y + GRID_ROWS * CELL);
+    g.lineBetween(GRID_X, GRID_Y + exitRow * CELL, GRID_X, GRID_Y + (exitRow + 1) * CELL);
 
     this.cellZones = [];
     for (let r = 0; r < GRID_ROWS; r++) {
       const rowZones = [];
       for (let c = 0; c < GRID_COLS; c++) {
+        if (this.isPathCell(c, r)) { rowZones.push(null); continue; }
         const { x, y } = this.cellToPixel(c, r);
         const zone = this.add.zone(x, y, CELL - 4, CELL - 4).setInteractive();
         zone.on('pointerdown', () => this.onCellClicked(c, r));
@@ -84,26 +144,33 @@ class BattleScene extends Phaser.Scene {
   }
 
   buildBench() {
-    this.benchLabel = this.add.text(20, 530, 'Bench (click, then click an empty grid cell):', {
+    this.benchLabel = this.add.text(20, 490, 'Bench (click, then click an empty non-path cell):', {
       fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
+    });
+    this.benchCostLabel = this.add.text(20, 508, '', {
+      fontFamily: 'monospace', fontSize: '12px', color: '#f5c94b'
     });
     this.benchIcons = [];
     this.layoutBench();
   }
 
   layoutBench() {
-    this.benchIcons.forEach(i => { i.bg.destroy(); i.sprite.destroy(); });
+    this.benchIcons.forEach(i => { i.bg.destroy(); i.sprite.destroy(); i.costText.destroy(); });
     this.benchIcons = [];
 
-    const startX = 60, y = 585, spacing = 60;
+    const startX = 60, y = 585, spacing = 64;
     this.bench.forEach((entry, i) => {
       const species = getSpecies(entry.speciesId);
+      const rarity = RARITY[species.rarity];
       const x = startX + i * spacing;
-      const bg = this.add.rectangle(x, y, 52, 52, 0x2a3040).setStrokeStyle(2, 0x4a5468);
+      const bg = this.add.rectangle(x, y, 52, 52, 0x2a3040).setStrokeStyle(2, rarity.color);
       const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(0.9);
+      const costText = this.add.text(x, y + 32, `${species.cost}c`, {
+        fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b'
+      }).setOrigin(0.5);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => this.onBenchClicked(entry.uid));
-      const icon = { bg, sprite, uid: entry.uid };
+      const icon = { bg, sprite, costText, uid: entry.uid };
       this.benchIcons.push(icon);
       this.refreshBenchIcon(icon);
     });
@@ -111,7 +178,7 @@ class BattleScene extends Phaser.Scene {
 
   refreshBenchIcon(icon) {
     const selected = this.selectedBenchUid === icon.uid;
-    icon.bg.setStrokeStyle(2, selected ? 0xf5c94b : 0x4a5468);
+    icon.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0xf5c94b : icon.bg.strokeColor);
   }
 
   buildOverlay() {
@@ -151,7 +218,6 @@ class BattleScene extends Phaser.Scene {
     const occupant = this.grid[row][col];
 
     if (occupant) {
-      // Pick the ally back up onto the bench.
       this.removeAllyFromGrid(occupant);
       return;
     }
@@ -160,12 +226,25 @@ class BattleScene extends Phaser.Scene {
       const entryIdx = this.bench.findIndex(m => m.uid === this.selectedBenchUid);
       if (entryIdx === -1) return;
       const entry = this.bench[entryIdx];
+      const species = getSpecies(entry.speciesId);
+
+      if (!gameState.spendCoins(species.cost)) {
+        this.flashInsufficientCoins();
+        return;
+      }
+
       this.bench.splice(entryIdx, 1);
       this.placeAlly(entry, col, row);
       this.selectedBenchUid = null;
       this.layoutBench();
       this.refreshStartButton();
+      this.updateHud();
     }
+  }
+
+  flashInsufficientCoins() {
+    this.hudText.setColor('#e0562f');
+    this.time.delayedCall(300, () => this.hudText.setColor('#f5f7fa'));
   }
 
   placeAlly(entry, col, row) {
@@ -193,6 +272,7 @@ class BattleScene extends Phaser.Scene {
     ally.sprite.destroy();
     ally.hpBg.destroy();
     ally.hpFill.destroy();
+    gameState.earnCoins(Math.floor(ally.species.cost * 0.5));
     this.bench.push({ uid: ally.uid, speciesId: ally.species.id });
     this.layoutBench();
     this.refreshStartButton();
@@ -219,17 +299,15 @@ class BattleScene extends Phaser.Scene {
 
   spawnEnemy() {
     const es = ENEMY_SPECIES[Math.floor(Math.random() * ENEMY_SPECIES.length)];
-    const row = Math.floor(Math.random() * GRID_ROWS);
-    const { y } = this.cellToPixel(0, row);
-    const x = GRID_X + GRID_COLS * CELL + 20;
+    const spawn = this.pathWaypoints[0];
 
-    const sprite = this.add.sprite(x, y, es.sheetKey, es.frame).setScale(1.0);
+    const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.0);
     const enemy = {
-      species: es, x, y, row,
+      species: es, x: spawn.x, y: spawn.y, waypointIndex: 0,
       hp: es.maxHp, maxHp: es.maxHp,
       sprite,
-      hpBg: this.add.rectangle(x, y - 26, 40, 5, 0x1c202a),
-      hpFill: this.add.rectangle(x - 20, y - 26, 40, 5, 0xe0562f).setOrigin(0, 0.5)
+      hpBg: this.add.rectangle(spawn.x, spawn.y - 26, 40, 5, 0x1c202a),
+      hpFill: this.add.rectangle(spawn.x - 20, spawn.y - 26, 40, 5, 0xe0562f).setOrigin(0, 0.5)
     };
     this.enemies.push(enemy);
   }
@@ -247,22 +325,36 @@ class BattleScene extends Phaser.Scene {
       }
     }
 
-    // enemy movement
+    // enemy movement along the path
+    const escaped = [];
     for (const enemy of this.enemies) {
-      enemy.x -= enemy.species.speed * (delta / 1000);
-      enemy.sprite.x = enemy.x;
-      enemy.hpBg.x = enemy.x;
-      enemy.hpFill.x = enemy.x - 20;
+      const target = this.pathWaypoints[enemy.waypointIndex + 1];
+      if (!target) { escaped.push(enemy); continue; }
+
+      const dx = target.x - enemy.x, dy = target.y - enemy.y;
+      const dist = Math.hypot(dx, dy);
+      const step = enemy.species.speed * (delta / 1000);
+
+      if (dist <= step) {
+        enemy.x = target.x; enemy.y = target.y;
+        enemy.waypointIndex++;
+        if (enemy.waypointIndex + 1 >= this.pathWaypoints.length) escaped.push(enemy);
+      } else {
+        enemy.x += (dx / dist) * step;
+        enemy.y += (dy / dist) * step;
+      }
+
+      enemy.sprite.x = enemy.x; enemy.sprite.y = enemy.y;
+      enemy.hpBg.x = enemy.x; enemy.hpBg.y = enemy.y - 26;
+      enemy.hpFill.x = enemy.x - 20; enemy.hpFill.y = enemy.y - 26;
     }
 
-    // enemies reaching the base
-    const reachedBase = this.enemies.filter(e => e.x < GRID_X);
-    if (reachedBase.length > 0) {
-      reachedBase.forEach(e => {
-        gameState.baseHp = Math.max(0, gameState.baseHp - e.species.attack);
+    if (escaped.length > 0) {
+      escaped.forEach(e => {
+        gameState.lives = Math.max(0, gameState.lives - e.species.attack);
         this.destroyEnemy(e);
       });
-      this.enemies = this.enemies.filter(e => !reachedBase.includes(e));
+      this.enemies = this.enemies.filter(e => !escaped.includes(e));
     }
 
     // ally attacks
@@ -288,6 +380,7 @@ class BattleScene extends Phaser.Scene {
     if (dead.length > 0) {
       dead.forEach(e => {
         gameState.score += e.species.reward;
+        gameState.earnCoins(e.species.reward);
         this.destroyEnemy(e);
       });
       this.enemies = this.enemies.filter(e => e.hp > 0);
@@ -295,7 +388,7 @@ class BattleScene extends Phaser.Scene {
 
     this.updateHud();
 
-    if (gameState.baseHp <= 0) {
+    if (gameState.lives <= 0) {
       this.onGameOver();
       return;
     }
@@ -324,9 +417,13 @@ class BattleScene extends Phaser.Scene {
 
   onWaveComplete() {
     this.phase = 'waveComplete';
+    const essenceReward = 10;
+    gameState.earnEssence(essenceReward);
     this.setOverlayVisible(true);
     this.overlayTitle.setText(`Wave ${gameState.wave} Cleared!`);
-    this.overlaySub.setText(`Score: ${gameState.score}   Base HP: ${gameState.baseHp}/${gameState.maxBaseHp}`);
+    this.overlaySub.setText(
+      `Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
+    );
     this.overlayPrimaryBtn.text.setText('Next Wave');
     this.overlayPrimaryBtn.bg.off('pointerdown');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
@@ -340,7 +437,7 @@ class BattleScene extends Phaser.Scene {
   onGameOver() {
     this.phase = 'gameOver';
     this.setOverlayVisible(true);
-    this.overlayTitle.setText('Base Destroyed');
+    this.overlayTitle.setText('Base Overrun');
     this.overlaySub.setText(`You survived to wave ${gameState.wave}   Final Score: ${gameState.score}`);
     this.overlayPrimaryBtn.text.setText('Try Again');
     this.overlayPrimaryBtn.bg.off('pointerdown');
@@ -351,7 +448,7 @@ class BattleScene extends Phaser.Scene {
 
   updateHud() {
     this.hudText.setText(
-      `Wave ${gameState.wave}   Base HP ${gameState.baseHp}/${gameState.maxBaseHp}   Score ${gameState.score}   ` +
+      `Wave ${gameState.wave}   Lives ${gameState.lives}/${gameState.maxLives}   Coins ${gameState.coins}   Score ${gameState.score}   ` +
       `Bench ${this.bench.length}   Placed ${this.allies.length}`
     );
   }

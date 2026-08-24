@@ -10,15 +10,18 @@ class MenuScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '48px', color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, 170, 'catch monsters, place them on the grid, hold the line', {
+    this.add.text(width / 2, 170, 'hatch monsters, place them along the path, hold the line', {
       fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, 260, `Roster: ${gameState.roster.length} monster(s)`, {
+    this.add.text(width / 2, 250, `Roster: ${gameState.roster.length} monster(s)`, {
       fontFamily: 'monospace', fontSize: '18px', color: '#c8ceda'
     }).setOrigin(0.5);
+    this.add.text(width / 2, 278, `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
+    }).setOrigin(0.5);
 
-    this.makeButton(width / 2, 340, 'Catch Monsters', () => this.scene.start('CatchScene'));
+    this.makeButton(width / 2, 340, 'Egg Shop', () => this.scene.start('EggScene'));
     this.makeButton(width / 2, 410, 'Team & Battle', () => this.scene.start('RosterScene'));
   }
 
