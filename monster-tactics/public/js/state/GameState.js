@@ -9,8 +9,10 @@
 
 const ROSTER_STORAGE_KEY = 'monster-tactics:roster';
 const ESSENCE_STORAGE_KEY = 'monster-tactics:essence';
+const STARTER_GRANTED_KEY = 'monster-tactics:starterGranted';
 const MAX_TEAM_SIZE = 5;
 const STARTING_COINS = 120;
+const STARTER_ESSENCE = 80;
 const EGG_COST = 40;
 
 class GameState {
@@ -23,6 +25,38 @@ class GameState {
     this.wave = 1;
     this.score = 0;
     this.coins = STARTING_COINS;
+
+    // A brand-new player has no monsters and no essence to pull one - that's
+    // a hard lock, not just rough onboarding (Team Select says "go pull",
+    // the Sanctuary says "can't afford it"). Grant a starter kit exactly
+    // once, tracked separately from roster size so it never re-fires just
+    // because a returning player happens to be between monsters.
+    if (Object.keys(this.roster).length === 0 && !this.starterAlreadyGranted()) {
+      this.grantStarterKit();
+    }
+  }
+
+  starterAlreadyGranted() {
+    try {
+      return localStorage.getItem(STARTER_GRANTED_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  grantStarterKit() {
+    STARTER_SPECIES_IDS.forEach(id => {
+      this.roster[id] = { speciesId: id, level: 1, essence: 0 };
+    });
+    this.saveRoster();
+    this.essence += STARTER_ESSENCE;
+    this.saveEssence();
+    try {
+      localStorage.setItem(STARTER_GRANTED_KEY, '1');
+    } catch (e) {
+      // localStorage unavailable - worst case this can grant again next
+      // load, which is harmless (roster non-empty check still applies).
+    }
   }
 
   loadRoster() {

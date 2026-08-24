@@ -8,6 +8,14 @@ your collection through a gacha-style Monster Sanctuary instead of a shop.
 No build step - open `public/index.html` in a browser, or serve the `public/`
 folder with any static file server.
 
+A brand-new player starts with 3 starter monsters (one each of a poison-DoT,
+burn-DoT, and splash archetype - Rollpup/Snarlpup/Hornlet) and 80 essence,
+granted once on first load (`GameState.grantStarterKit`, tracked separately
+from roster size so it never re-fires for a returning player). Without this
+a fresh player has zero monsters and zero essence to pull one with - Team
+Select says "go pull" and the Sanctuary says "can't afford it" - a hard
+lock, not just rough onboarding.
+
 ## Current loop
 
 1. **Monster Sanctuary** - pick a themed discovery banner (Standard, or one

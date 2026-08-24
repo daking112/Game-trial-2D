@@ -61,6 +61,12 @@ const SPECIES = [
   { id: 'ogglord', name: 'Ogglord', type: 'GRASS', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 66, maxHp: 65, attack: 20, range: 3.6, attackIntervalMs: 650, cost: 80 }
 ];
 
+// Granted to a brand-new player (empty roster) so there's something to place
+// before they've pulled or earned anything - see GameState.grantStarterKit.
+// Spans three different combat archetypes (poison DoT / burn DoT / splash)
+// so a first battle already shows the kits aren't interchangeable.
+const STARTER_SPECIES_IDS = ['rollpup', 'snarlpup', 'hornlet'];
+
 // Enemy species that spawn during battle waves. speed is pixels/second.
 // Deliberately distinct frames from the player pool above.
 const ENEMY_SPECIES = [
