@@ -1,19 +1,45 @@
 # Generates monster-tactics' hand-authored ground tiles and its stitched UI
-# textures. Run from a checkout that also has the tinyswords/ project (its
-# Tiny Swords UI sheets are the stitching source) - see README.md "Art".
+# textures. Run from a checkout that also has the tinyswords/ project and the
+# extracted "Custom Border and Panels"/"Humble Gift" packs under
+# monster-tactics/public/assets/ - see README.md "Art".
 #
 #   python3 scripts/gen_assets.py
 #
 # Idempotent: re-running overwrites public/assets/{tiles,ui}/*.png in place.
 import random
+import subprocess
 from PIL import Image, ImageDraw
 import numpy as np
 import os
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-TS_UI = os.path.join(REPO, "tinyswords/public/assets/tinyswords/UI Elements/UI Elements")
-OUT_TILES = os.path.join(REPO, "monster-tactics/public/assets/tiles")
-OUT_UI = os.path.join(REPO, "monster-tactics/public/assets/ui")
+ASSETS = os.path.join(REPO, "monster-tactics/public/assets")
+BP_RAW = os.path.join(ASSETS, "border-panels-raw")
+HG_RAW = os.path.join(ASSETS, "humble-gift-raw")
+BP_SHEET = os.path.join(BP_RAW, "Border All 4.png")
+HG_SHEET = os.path.join(HG_RAW, "Humble Gift - v1.3/PNG/SpriteSheet.png")
+OUT_TILES = os.path.join(ASSETS, "tiles")
+OUT_UI = os.path.join(ASSETS, "ui")
+
+
+def ensure_extracted():
+    """The two source packs ship as a .rar and a .zip (both already
+    committed) rather than pre-extracted, to keep the repo lean - unpack them
+    into scratch -raw/ dirs on demand. Requires `unrar` (apt install
+    unrar-free) since 7z's bundled RAR codec doesn't support every RAR5
+    compression method these were saved with."""
+    if not os.path.isdir(BP_RAW):
+        os.makedirs(BP_RAW)
+        subprocess.run(
+            ["unrar", "x", "-y", os.path.join(ASSETS, "Custom Border and Panels Menu All Part.rar")],
+            cwd=BP_RAW, check=True
+        )
+    if not os.path.isdir(HG_RAW):
+        os.makedirs(HG_RAW)
+        subprocess.run(
+            ["unzip", "-o", "-q", os.path.join(ASSETS, "Humble Gift - v1.3.zip"), "-d", HG_RAW],
+            check=True
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +85,13 @@ def make_path_tile():
 
 
 # ---------------------------------------------------------------------------
-# Part 2: auto-detect 3x3 nine-slice cells in a Tiny Swords UI sheet (handles
-# both zero-gap sheets and sheets with transparent spacing between cells) and
-# recompose into a single flattened texture at a target size.
+# Part 2: nine-slice stitching, two source shapes -
+#  (a) a Tiny-Swords-style sheet already fragmented into a 3x3 grid of
+#      separate corner/edge/center pieces (auto-detected via alpha gaps)
+#  (b) a single flat square icon (the "Border and Panels" pack: 80 complete
+#      64x64 frame designs per sheet, one sheet per color) - sliced into 9
+#      pieces ourselves given a measured border thickness.
+# Both funnel into the same stitch_nineslice() recomposition.
 # ---------------------------------------------------------------------------
 
 def detect_groups(mask_sum):
@@ -102,6 +132,21 @@ def load_nineslice_cells(path):
     return cells
 
 
+def single_frame_nineslice_cells(path, box, border):
+    """Slice one complete bordered-square icon (at `box` in the sheet) into a
+    3x3 nine-slice grid using a measured, uniform `border` thickness on all
+    four sides - unlike load_nineslice_cells, the source has no pre-split
+    pieces to detect, just one flat frame image."""
+    frame = Image.open(path).convert('RGBA').crop(box)
+    w, h = frame.size
+    xs = [0, border, w - border, w]
+    ys = [0, border, h - border, h]
+    return [
+        [frame.crop((xs[c], ys[r], xs[c + 1], ys[r + 1])) for c in range(3)]
+        for r in range(3)
+    ]
+
+
 def stitch_nineslice(cells, target_w, target_h):
     tl, tm, tr = cells[0]
     ml, mm, mr = cells[1]
@@ -127,28 +172,35 @@ def stitch_nineslice(cells, target_w, target_h):
 def main():
     os.makedirs(OUT_TILES, exist_ok=True)
     os.makedirs(OUT_UI, exist_ok=True)
+    ensure_extracted()
 
     make_grass_tile().save(os.path.join(OUT_TILES, 'grass.png'))
     make_path_tile().save(os.path.join(OUT_TILES, 'path.png'))
     print('wrote grass.png, path.png')
 
-    btn_cells = load_nineslice_cells(os.path.join(TS_UI, 'Buttons', 'BigBlueButton_Regular.png'))
-    for name, (w, h) in {'btn-large': (260, 56), 'btn-medium': (230, 50)}.items():
-        stitch_nineslice(btn_cells, w, h).save(os.path.join(OUT_UI, f'{name}.png'))
+    # "Border All 4" = the green colorway; cell (row1, col1) of its 10x8
+    # grid of 64x64 frames is a plain rounded-square design (no scalloping),
+    # measured at an 8px uniform border - see the measurement note in
+    # README.md "Art".
+    frame_cells = single_frame_nineslice_cells(BP_SHEET, (64, 64, 128, 128), border=8)
+    sizes = {
+        'btn-large': (260, 56), 'btn-medium': (230, 50),
+        'panel-hud': (1100, 50), 'panel-overlay': (620, 280),
+        'panel-card-roster': (138, 118), 'panel-card-hub': (220, 130),
+        'panel-card-banner': (204, 114), 'panel-egg': (100, 100),
+        'bench-slot': (56, 56),
+    }
+    for name, (w, h) in sizes.items():
+        stitch_nineslice(frame_cells, w, h).save(os.path.join(OUT_UI, f'{name}.png'))
         print('wrote', name, w, h)
 
-    wood_cells = load_nineslice_cells(os.path.join(TS_UI, 'Wood Table', 'WoodTable.png'))
-    panel_sizes = {
-        'panel-hud': (1100, 50),
-        'panel-overlay': (620, 280),
-        'panel-card-roster': (138, 118),
-        'panel-card-hub': (220, 130),
-        'panel-card-banner': (204, 114),
-        'panel-egg': (100, 100),
-    }
-    for name, (w, h) in panel_sizes.items():
-        stitch_nineslice(wood_cells, w, h).save(os.path.join(OUT_UI, f'{name}.png'))
-        print('wrote', name, w, h)
+    # Humble Gift's coin/star icons happen to already match this game's gold
+    # essence/coin color (#f5c94b) - used as-is, no recoloring, next to the
+    # HUD's Coins/Essence numbers.
+    hg = Image.open(HG_SHEET).convert('RGBA')
+    hg.crop((584, 232, 600, 248)).save(os.path.join(OUT_UI, 'icon-coin.png'))
+    hg.crop((552, 232, 568, 248)).save(os.path.join(OUT_UI, 'icon-essence.png'))
+    print('wrote icon-coin.png, icon-essence.png')
 
 
 if __name__ == '__main__':

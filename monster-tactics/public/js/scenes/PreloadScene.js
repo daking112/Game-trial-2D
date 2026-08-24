@@ -24,9 +24,9 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('tile-grass', 'assets/tiles/grass.png');
     this.load.image('tile-path', 'assets/tiles/path.png');
 
-    // UI buttons/panels: stitched from Tiny Swords' fragmented 3x3 nine-slice
-    // sheets (BigBlueButton_Regular.png, WoodTable.png) into flattened
-    // textures at the exact sizes this game uses - see README.md.
+    // UI buttons/panels: stitched from the "Custom Border and Panels" pack's
+    // green frame design into flattened textures at the exact sizes this
+    // game uses - see README.md and scripts/gen_assets.py.
     this.load.image('btn-large', 'assets/ui/btn-large.png');
     this.load.image('btn-medium', 'assets/ui/btn-medium.png');
     this.load.image('panel-hud', 'assets/ui/panel-hud.png');
@@ -36,6 +36,11 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('panel-card-banner', 'assets/ui/panel-card-banner.png');
     this.load.image('panel-egg', 'assets/ui/panel-egg.png');
     this.load.image('bench-slot', 'assets/ui/bench-slot.png');
+
+    // Coin/star icons from the "Humble Gift" pack - already gold-toned to
+    // match this game's existing essence/coin color, used unmodified.
+    this.load.image('icon-coin', 'assets/ui/icon-coin.png');
+    this.load.image('icon-essence', 'assets/ui/icon-essence.png');
 
     // Tiny Swords decorations, used as-is to dress the battle grid border.
     this.load.image('rock-1', 'assets/decor/rock-1.png');

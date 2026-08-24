@@ -28,9 +28,9 @@ class MenuScene extends Phaser.Scene {
     this.add.text(width / 2, 250, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
       fontFamily: 'monospace', fontSize: '18px', color: '#e8ecf5'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.add.text(width / 2, 278, `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    UiKit.iconLabel(this, width / 2, 278, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
+    });
 
     UiKit.makeButton(this, width / 2, 340, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
     UiKit.makeButton(this, width / 2, 410, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });

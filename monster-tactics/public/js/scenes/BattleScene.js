@@ -187,7 +187,10 @@ class BattleScene extends Phaser.Scene {
   }
 
   layoutBench() {
-    this.benchIcons.forEach(i => { i.bg.destroy(); i.selectionRing.destroy(); i.sprite.destroy(); i.costText.destroy(); });
+    this.benchIcons.forEach(i => {
+      i.bg.destroy(); i.selectionRing.destroy(); i.sprite.destroy();
+      i.costIcon.destroy(); i.costText.destroy();
+    });
     this.benchIcons = [];
 
     const startX = 60, y = 585, spacing = 64;
@@ -198,12 +201,12 @@ class BattleScene extends Phaser.Scene {
       const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(52, 52).setTint(rarity.color);
       const selectionRing = this.add.rectangle(x, y, 56, 56, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false);
       const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(0.9);
-      const costText = this.add.text(x, y + 32, `${species.cost}c`, {
-        fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b'
-      }).setOrigin(0.5).setStroke('#1c2530', 2);
+      const { icon: costIcon, text: costText } = UiKit.iconLabel(this, x, y + 32, 'icon-coin', `${species.cost}`, {
+        fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 2
+      }, 12);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => this.onBenchClicked(entry.speciesId));
-      const icon = { bg, selectionRing, sprite, costText, speciesId: entry.speciesId };
+      const icon = { bg, selectionRing, sprite, costIcon, costText, speciesId: entry.speciesId };
       this.benchIcons.push(icon);
       this.refreshBenchIcon(icon);
     });

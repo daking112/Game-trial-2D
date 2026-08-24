@@ -1,7 +1,7 @@
-// Shared button/panel factory backed by the hand-stitched Tiny Swords UI
-// textures (see assets/ui/*.png and the generation notes in README.md).
-// Every scene used to hand-roll its own makeButton() as a plain rectangle +
-// stroke; this replaces all of those with one consistent, reusable look.
+// Shared button/panel factory backed by the hand-stitched UI textures (see
+// assets/ui/*.png and the generation notes in README.md). Every scene used
+// to hand-roll its own makeButton() as a plain rectangle + stroke; this
+// replaces all of those with one consistent, reusable look.
 const UiKit = {
   makeButton(scene, x, y, label, onClick, opts = {}) {
     const size = opts.size || 'medium'; // 'large' | 'medium'
@@ -50,5 +50,18 @@ const UiKit = {
 
   panel(scene, x, y, textureKey) {
     return scene.add.image(x, y, textureKey);
+  },
+
+  // A centered "icon + text" pair (e.g. a coin/essence icon next to its
+  // count) - text is created first so its actual rendered width positions
+  // the icon immediately to its left, rather than guessing an offset.
+  iconLabel(scene, x, y, iconKey, label, textStyle, iconSize = 16) {
+    const text = scene.add.text(x, y, label, textStyle).setOrigin(0, 0.5);
+    const iconGap = 6;
+    const halfWidth = (text.width + iconSize + iconGap) / 2;
+    text.setX(x - halfWidth + iconSize + iconGap);
+    const icon = scene.add.image(x - halfWidth + iconSize / 2, y, iconKey)
+      .setOrigin(0.5).setDisplaySize(iconSize, iconSize);
+    return { icon, text };
   }
 };

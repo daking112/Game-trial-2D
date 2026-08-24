@@ -26,9 +26,9 @@ class SanctuaryScene extends Phaser.Scene {
     this.add.text(width / 2, 40, 'MONSTER SANCTUARY', {
       fontFamily: 'monospace', fontSize: '26px', color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
-    this.add.text(width / 2, 68, `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    UiKit.iconLabel(this, width / 2, 68, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
+    });
 
     const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
     this.backBtn(backTarget, () => this.scene.start(backTarget));
@@ -76,10 +76,9 @@ class SanctuaryScene extends Phaser.Scene {
 
     UiKit.makeLink(this, 24, 24, '< Banners', () => this.showBannerList(), { originX: 0, originY: 0 });
 
-    this.essenceText = this.add.text(width / 2, 78, '', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.updateEssenceText();
+    this.essenceText = UiKit.iconLabel(this, width / 2, 78, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
+    }).text;
 
     this.eggSprite = this.add.image(width / 2, 210, 'panel-egg');
     this.eggLabel = this.add.text(width / 2, 210, '?', {
