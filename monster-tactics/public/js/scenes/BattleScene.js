@@ -215,19 +215,28 @@ class BattleScene extends Phaser.Scene {
 
   buildOverlay() {
     const { width, height } = this.scale;
-    this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setVisible(false);
-    this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setVisible(false);
+    // Explicit high depth: this is built once up front in create(), but
+    // enemy/ally sprites get added to the scene continuously afterwards
+    // during a wave, and Phaser draws later-added objects on top by default
+    // regardless of this overlay's visibility toggle. Without a depth above
+    // everything else, a monster in-frame when the overlay opens renders
+    // through it instead of being hidden behind it.
+    const OVERLAY_DEPTH = 100;
+    this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(OVERLAY_DEPTH).setVisible(false);
+    this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(OVERLAY_DEPTH).setVisible(false);
     this.overlayTitle = this.add.text(width / 2, height / 2 - 60, '', {
       fontFamily: 'monospace', fontSize: '30px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 5).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 5).setDepth(OVERLAY_DEPTH).setVisible(false);
     this.overlaySub = this.add.text(width / 2, height / 2 - 10, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
-    }).setOrigin(0.5).setStroke('#1c2530', 3).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 3).setDepth(OVERLAY_DEPTH).setVisible(false);
 
     this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 50, '', () => {});
     this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 115, 'Return to Menu', () => {
       this.scene.start('MenuScene');
     });
+    this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH);
+    this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH);
     this.setOverlayVisible(false);
   }
 
