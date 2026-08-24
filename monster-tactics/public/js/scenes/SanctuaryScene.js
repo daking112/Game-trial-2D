@@ -48,7 +48,7 @@ class SanctuaryScene extends Phaser.Scene {
     const bg = this.add.image(x, y, 'panel-card-banner').setInteractive({ useHandCursor: true });
     bg.on('pointerover', () => bg.setScale(1.03));
     bg.on('pointerout', () => bg.setScale(1));
-    bg.on('pointerdown', () => this.showPullView(banner));
+    bg.on('pointerdown', () => { Sfx.click(); this.showPullView(banner); });
 
     this.add.text(x, y - 48, banner.icon, { fontSize: '42px' }).setOrigin(0.5);
     this.add.text(x, y - 3, banner.name, {
@@ -121,6 +121,7 @@ class SanctuaryScene extends Phaser.Scene {
 
   openEgg() {
     if (!gameState.spendEssence(EGG_COST)) return;
+    Sfx.egg();
     this.updateEssenceText();
     this.refreshOpenBtn();
 

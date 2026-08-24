@@ -250,7 +250,7 @@ class BattleScene extends Phaser.Scene {
     this.startWaveBtn = UiKit.makeButton(this, this.scale.width / 2, 125, 'Start Wave', () => {
       if (this.phase === 'placement' && this.allies.length > 0) this.startWave();
     });
-    this.startWaveBtn.container.setScrollFactor(0);
+    UiKit.pinToScreen(this.startWaveBtn);
   }
 
   buildBench() {
@@ -315,8 +315,10 @@ class BattleScene extends Phaser.Scene {
     this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 140, 'Return to Menu', () => {
       this.scene.start('MenuScene');
     }, { size: 'large' });
-    this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH).setScrollFactor(0);
-    this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH).setScrollFactor(0);
+    this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH);
+    this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH);
+    UiKit.pinToScreen(this.overlayPrimaryBtn);
+    UiKit.pinToScreen(this.overlaySecondaryBtn);
     this.setOverlayVisible(false);
   }
 
@@ -330,6 +332,7 @@ class BattleScene extends Phaser.Scene {
 
   onBenchClicked(speciesId) {
     if (this.phase !== 'placement') return;
+    Sfx.click();
     this.selectedBenchSpeciesId = (this.selectedBenchSpeciesId === speciesId) ? null : speciesId;
     this.benchIcons.forEach(i => this.refreshBenchIcon(i));
     this.hideRangePreview();
@@ -376,6 +379,7 @@ class BattleScene extends Phaser.Scene {
 
       this.bench.splice(entryIdx, 1);
       this.placeAlly(entry, col, row);
+      Sfx.place();
       this.selectedBenchSpeciesId = null;
       this.layoutBench();
       this.refreshStartButton();
@@ -384,6 +388,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   flashInsufficientCoins() {
+    Sfx.error();
     this.hudText.setColor('#e0562f');
     this.time.delayedCall(300, () => this.hudText.setColor('#f5f7fa'));
   }
@@ -411,6 +416,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   removeAllyFromGrid(ally) {
+    Sfx.pickup();
     this.grid[ally.row][ally.col] = null;
     this.allies = this.allies.filter(a => a !== ally);
     ally.sprite.destroy();
@@ -435,6 +441,7 @@ class BattleScene extends Phaser.Scene {
   // ---------- wave logic ----------
 
   startWave() {
+    Sfx.waveStart();
     this.phase = 'wave';
     this.spawnedCount = 0;
     // Scales off the run-wide wave count, not the within-stage one, so
@@ -545,6 +552,7 @@ class BattleScene extends Phaser.Scene {
         }
         if (target) {
           this.dealDamage(target, ally.attack);
+          Sfx.hit();
           this.playHitSpark(target.x, target.y, TYPE_COLORS[ally.species.type]);
           this.applyAttackSecondaryEffect(ally, target, time);
           const speedMult = this.currentAttackSpeedMultiplier(ally, time);
@@ -560,6 +568,7 @@ class BattleScene extends Phaser.Scene {
     // clear dead enemies
     const dead = this.enemies.filter(e => e.hp <= 0);
     if (dead.length > 0) {
+      Sfx.kill();
       dead.forEach(e => {
         gameState.score += e.species.reward;
         gameState.earnCoins(e.species.reward);
@@ -583,6 +592,27 @@ class BattleScene extends Phaser.Scene {
   dealDamage(enemy, amount) {
     enemy.hp = Math.max(0, enemy.hp - amount);
     enemy.hpFill.scaleX = enemy.hp / enemy.maxHp;
+    this.showDamageNumber(enemy.x, enemy.y, amount);
+  }
+
+  // A floating "-N" that rises and fades - centralized here (rather than at
+  // each of dealDamage's callers) so every damage source gets one for free:
+  // basic attacks, DoT ticks, splash, chain jumps, and ability effects alike.
+  showDamageNumber(x, y, amount) {
+    const text = this.add.text(x, y + HP_BAR_Y_OFFSET - 6, `-${amount}`, {
+      fontFamily: 'monospace', fontSize: '18px', color: '#fff2c4', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#3a1c00', 3).setDepth(50);
+    // Two separate tweens sharing one target rather than one tween animating
+    // both properties: a single tween can only take one ease for all its
+    // properties, and Cubic.Out on alpha front-loads the fade so the number
+    // is nearly invisible within ~150ms of a 550ms tween - unreadable in
+    // practice. Rise stays eased the whole time; alpha holds at full then
+    // fades only in the back third.
+    this.tweens.add({ targets: text, y: text.y - 34, duration: 550, ease: 'Cubic.Out' });
+    this.tweens.add({
+      targets: text, alpha: 0, delay: 280, duration: 270, ease: 'Linear',
+      onComplete: () => text.destroy()
+    });
   }
 
   destroyEnemy(enemy) {
@@ -728,6 +758,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   onWaveComplete() {
+    Sfx.waveClear();
     this.phase = 'waveComplete';
     const essenceReward = 10;
     gameState.earnEssence(essenceReward);
@@ -743,6 +774,7 @@ class BattleScene extends Phaser.Scene {
       );
       this.overlayPrimaryBtn.text.setText('Next Wave');
       this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+        Sfx.click();
         gameState.wave += 1;
         this.phase = 'placement';
         this.setOverlayVisible(false);
@@ -759,12 +791,14 @@ class BattleScene extends Phaser.Scene {
     );
     this.overlayPrimaryBtn.text.setText(runComplete ? 'Claim Victory' : 'Continue');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+      Sfx.click();
       this.setOverlayVisible(false);
       this.scene.start(runComplete ? 'VictoryScene' : 'HubScene');
     });
   }
 
   onGameOver() {
+    Sfx.gameOver();
     this.phase = 'gameOver';
     this.setOverlayVisible(true);
     this.overlayTitle.setText('Base Overrun');
@@ -774,6 +808,7 @@ class BattleScene extends Phaser.Scene {
     this.overlayPrimaryBtn.text.setText('Start New Run');
     this.overlayPrimaryBtn.bg.off('pointerdown');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+      Sfx.click();
       gameState.runActive = false; // team select treats this as "not mid-run"
       this.scene.start('RosterScene');
     });

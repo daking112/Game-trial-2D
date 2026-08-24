@@ -71,6 +71,7 @@ class HubScene extends Phaser.Scene {
     this.refreshStageCard(card);
 
     bg.on('pointerdown', () => {
+      Sfx.click();
       this.selectedStageId = stage.id;
       this.stageCards.forEach(c => this.refreshStageCard(c));
     });

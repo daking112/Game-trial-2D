@@ -116,6 +116,7 @@ public/
     scenes/BattleScene.js     the path, range preview, placement, waves, combat
     scenes/HubScene.js        between-stage hub: stage choice, countdown, Ready
     scenes/VictoryScene.js    run-complete stats screen
+    audio/Sfx.js            procedural Web Audio sound effects - see "Audio" below
     ui/UiKit.js             shared button/panel/link factory - see "Art" below
     vendor/phaser.min.js   Phaser 3.70.0, vendored (no CDN dependency)
   assets/
@@ -179,6 +180,30 @@ bundled RAR codec doesn't support every method these were saved with).
 `public/js/ui/UiKit.js` is the one shared button/panel/link/icon-label
 factory every scene calls into, replacing what used to be six near-identical
 hand-rolled `makeButton()` copies.
+
+## Audio & combat feedback
+
+Every sound in the game is generated at runtime with the raw Web Audio API
+(`public/js/audio/Sfx.js`) - oscillator tones for clean UI/combat blips,
+filtered noise bursts for percussive hits/kills - rather than loaded from
+sample files. No external audio dependency, nothing to license, and no
+network fetch on load. `Sfx` exposes one call per event
+(`place`/`pickup`/`click`/`hit`/`kill`/`coin`/`error`/`waveStart`/
+`waveClear`/`gameOver`/`egg`); every scene's interactive handlers call the
+matching one, and every failure is swallowed internally (`safe()` wrapper)
+so a busted AudioContext can never break gameplay. Browsers require a user
+gesture before audio can play at all - `main.js` unlocks the shared
+`AudioContext` on the first `pointerdown` anywhere on the page.
+
+`BattleScene.dealDamage()` also spawns a floating `-N` combat text at the
+hit target (`showDamageNumber`) - centralized there so every damage source
+(basic attacks, DoT, splash, chain) gets one for free. It rises and fades
+using two independent tweens on the same object rather than one tween
+animating both properties: a single tween can only apply one ease to
+everything it touches, and easing an alpha 1→0 fade the same way as the
+rise (`Cubic.Out`) front-loads the fade almost to invisibility in the
+first ~25% of the tween - the position tween keeps that ease, the alpha
+tween holds full opacity and only fades linearly in the final third.
 
 ## Known limitations (v1)
 

@@ -21,10 +21,13 @@ const UiKit = {
     // Hover-only feedback (no separate press-tween) - some callers (e.g.
     // BattleScene's overlay) dynamically swap the click handler later via
     // bg.off('pointerdown')/bg.once('pointerdown', ...), which would also
-    // strip a press animation bundled into the same listener.
+    // strip a press animation - or a click sound - bundled into a listener
+    // set up here. The click sound is therefore wrapped inside this initial
+    // onClick itself rather than bound as its own listener; a reassigned
+    // handler plays its own Sfx.click() call directly at the call site.
     bg.on('pointerover', () => container.setScale(1.03));
     bg.on('pointerout', () => container.setScale(1));
-    bg.on('pointerdown', onClick);
+    bg.on('pointerdown', () => { Sfx.click(); onClick(); });
 
     return {
       container, bg, text,
@@ -44,12 +47,27 @@ const UiKit = {
     const baseColor = opts.color || '#9aa4b8';
     text.on('pointerover', () => text.setColor(hoverColor));
     text.on('pointerout', () => text.setColor(baseColor));
-    text.on('pointerdown', onClick);
+    text.on('pointerdown', () => { Sfx.click(); onClick(); });
     return text;
   },
 
   panel(scene, x, y, textureKey) {
     return scene.add.image(x, y, textureKey);
+  },
+
+  // Pins a makeButton() result to the screen for scenes with a scrollable
+  // camera (currently only BattleScene). Setting scrollFactor(0) on just the
+  // Container is not enough: Phaser renders a Container's children through
+  // the container's own transform (so it does *look* screen-fixed), but
+  // input hit-testing reads each child's own scrollFactor independently -
+  // still the default 1 unless set directly on the child too. Left as
+  // container-only, the button visually stays put while panning but becomes
+  // impossible to click except when the camera happens to be at scroll (0,0).
+  pinToScreen(btn) {
+    btn.container.setScrollFactor(0);
+    btn.bg.setScrollFactor(0);
+    btn.text.setScrollFactor(0);
+    return btn;
   },
 
   // A centered "icon + text" pair (e.g. a coin/essence icon next to its

@@ -95,6 +95,7 @@ class RosterScene extends Phaser.Scene {
     bg.on('pointerdown', () => {
       const ok = gameState.toggleTeamMember(entry.speciesId);
       if (!ok) return; // team full, ignored
+      Sfx.click();
       this.refreshCard(card);
       this.updateTeamLabel();
       this.refreshStartBtn();
@@ -107,6 +108,7 @@ class RosterScene extends Phaser.Scene {
 
       if (current.level >= MAX_MONSTER_LEVEL) {
         if (gameState.canEvolve(entry.speciesId)) {
+          Sfx.egg();
           gameState.evolveMonster(entry.speciesId);
           // Evolving swaps the roster key (and this card's identity along
           // with it) to a different species - simplest correct thing is to
@@ -118,6 +120,7 @@ class RosterScene extends Phaser.Scene {
       }
 
       if (gameState.upgradeMonster(entry.speciesId)) {
+        Sfx.coin();
         this.refreshCard(card);
       }
     });
