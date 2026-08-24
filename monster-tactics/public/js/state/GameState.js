@@ -127,6 +127,28 @@ class GameState {
     return true;
   }
 
+  canEvolve(speciesId) {
+    const entry = this.roster[speciesId];
+    const targetId = EVOLUTION_MAP[speciesId];
+    return !!(entry && targetId && entry.level >= MAX_MONSTER_LEVEL && entry.essence >= EVOLUTION_ESSENCE_COST);
+  }
+
+  // Swaps the roster entry (and any team slot pointing at it) from the base
+  // species to its evolved form in place - same level, essence minus the
+  // evolution cost. Returns the new speciesId on success, so callers that
+  // hold onto the old id (e.g. a UI card mid-refresh) know what changed.
+  evolveMonster(speciesId) {
+    if (!this.canEvolve(speciesId)) return null;
+    const entry = this.roster[speciesId];
+    const targetId = EVOLUTION_MAP[speciesId];
+
+    delete this.roster[speciesId];
+    this.roster[targetId] = { speciesId: targetId, level: entry.level, essence: entry.essence - EVOLUTION_ESSENCE_COST };
+    this.team = this.team.map(id => id === speciesId ? targetId : id);
+    this.saveRoster();
+    return targetId;
+  }
+
   earnEssence(amount) {
     this.essence += amount;
     this.saveEssence();

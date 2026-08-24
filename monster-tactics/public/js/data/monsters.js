@@ -67,6 +67,37 @@ const SPECIES = [
 // so a first battle already shows the kits aren't interchangeable.
 const STARTER_SPECIES_IDS = ['rollpup', 'snarlpup', 'hornlet'];
 
+// Evolved forms - NOT in the gacha pool (rollGachaSpecies never sees this
+// array), reached only via GameState.evolveMonster once a base species is
+// maxed out and has enough of its own Monster Essence. Deliberately reuse
+// the "enemy" frames of the same visual line (see ENEMY_SPECIES below) so
+// evolving reads as "you can now field what used to threaten you" - but
+// with distinct ids (rollodon_evo etc) so they never collide with the
+// same-named enemy entries in getEnemySpecies() lookups.
+//
+// Rollodon's evolution is the flagship example of evolution changing a
+// monster's function, not just its numbers: Rollpup is GRASS/poison-DoT,
+// Rollodon is EARTH/splash - a different kit, not a bigger version of the
+// same one. Ragefang/Tuskram keep their base type for this first pass
+// (still a real jump in power/range) - shifting every evolution's kit is
+// future work, not required to prove the mechanic.
+const EVOLVED_SPECIES = [
+  { id: 'rollodon_evo', name: 'Rollodon', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 2, maxHp: 60, attack: 14, range: 2.4, attackIntervalMs: 800, cost: 60 },
+  { id: 'ragefang_evo', name: 'Ragefang', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 5, maxHp: 42, attack: 20, range: 1.8, attackIntervalMs: 550, cost: 60 },
+  { id: 'tuskram_evo', name: 'Tuskram', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 8, maxHp: 68, attack: 13, range: 1.8, attackIntervalMs: 750, cost: 60 }
+];
+
+// speciesId (base) -> speciesId (evolved). Only species listed here can
+// evolve; everything else stays as-is once maxed (see RosterScene).
+const EVOLUTION_MAP = {
+  rollpup: 'rollodon_evo',
+  snarlpup: 'ragefang_evo',
+  hornlet: 'tuskram_evo'
+};
+
+// Monster Essence needed (on top of being at MAX_MONSTER_LEVEL) to evolve.
+const EVOLUTION_ESSENCE_COST = 150;
+
 // Enemy species that spawn during battle waves. speed is pixels/second.
 // Deliberately distinct frames from the player pool above.
 const ENEMY_SPECIES = [
@@ -79,7 +110,7 @@ const ENEMY_SPECIES = [
 ];
 
 function getSpecies(id) {
-  return SPECIES.find(s => s.id === id);
+  return SPECIES.find(s => s.id === id) || EVOLVED_SPECIES.find(s => s.id === id);
 }
 
 function getEnemySpecies(id) {
@@ -109,9 +140,10 @@ function rollGachaSpecies(typesFilter) {
 // A monster is owned once, not stacked: pulling a duplicate doesn't give you
 // a second copy to place, it converts into Monster Essence spent leveling up
 // the one you have. This is what makes duplicates feel like progress instead
-// of waste. Levels only scale stats for now - ability upgrades, alternate
-// forms, and evolution (which would change a monster's Attack/Ability kit,
-// not just its numbers) are intentionally not built yet, see README.
+// of waste. Levels scale stats; reaching max level with enough essence also
+// unlocks evolving into a different kit for species in EVOLUTION_MAP above.
+// Ability-level-ups and alternate forms (distinct from evolution) are still
+// not built, see README.
 
 const MAX_MONSTER_LEVEL = 5;
 

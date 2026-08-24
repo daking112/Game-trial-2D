@@ -29,7 +29,11 @@ lock, not just rough onboarding.
 2. **Team Select** - pick up to 5 roster monsters as your battle team. Each
    card shows its level, level-scaled stats, and an Upgrade button (once
    there's enough Monster Essence for that species) that boosts its stats -
-   the payoff for pulling something you already own.
+   the payoff for pulling something you already own. Once a monster hits
+   max level, species in `EVOLUTION_MAP` (currently the 3 starters) can
+   evolve instead, given enough Monster Essence (150) - evolving changes
+   the monster's *kit*, not just its numbers: Rollpup (GRASS, poison-DoT)
+   evolves into Rollodon (EARTH, splash), a genuinely different tower.
 3. **Battle** - a winding path crosses the grid from a spawn edge to your
    base. Placement is only allowed on cells the path doesn't cross, and
    hovering a cell with a bench monster selected previews its actual range
@@ -118,9 +122,10 @@ placeholder shapes drawn at runtime with Phaser Graphics - no art dependency.
   they only ever attack.
 - The path is a single fixed layout hardcoded in `BattleScene.js`
   (`PATH_CELLS`) - no per-wave or per-map path variety yet.
-- Leveling only scales stats (+12%/level, cap level 5). Ability upgrades,
-  alternate forms, and evolution (which would change a monster's Attack/
-  Ability kit, not just its numbers) are not built - see below.
+- Leveling scales stats (+12%/level, cap level 5); evolution (kit-changing,
+  see `data/monsters.js` EVOLUTION_MAP) only covers the 3 starter species so
+  far - everything else just stays maxed. Ability upgrades and alternate
+  forms (distinct from evolution) are not built.
 - All banners share one currency and one pull cost (40 essence). Capture
   Cores / tickets as a differentiated pull currency are not built.
 - The Team Select roster grid doesn't scroll - a very large collection
@@ -134,9 +139,9 @@ placeholder shapes drawn at runtime with Phaser Graphics - no art dependency.
 
 ## Bigger design not built yet
 
-The long-term pitch is larger than what's here - bosses, per-species
-evolution that changes a monster's kit (not just its stats), an Ultimate
-combat tier, differentiated pull currencies, and eventual co-op. Co-op
-specifically needs backend infrastructure (matchmaking, real-time state
-sync) this project doesn't have and was explicitly deferred rather than
-half-built.
+The long-term pitch is larger than what's here - bosses, evolution for the
+other 11 species (only the 3 starters have an evolution defined right now),
+an Ultimate combat tier, differentiated pull currencies, and eventual co-op.
+Co-op specifically needs backend infrastructure (matchmaking, real-time
+state sync) this project doesn't have and was explicitly deferred rather
+than half-built.

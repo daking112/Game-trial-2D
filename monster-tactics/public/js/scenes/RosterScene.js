@@ -84,6 +84,21 @@ class RosterScene extends Phaser.Scene {
 
     upgradeBg.setInteractive({ useHandCursor: true });
     upgradeBg.on('pointerdown', () => {
+      const current = gameState.roster[entry.speciesId];
+      if (!current) return;
+
+      if (current.level >= MAX_MONSTER_LEVEL) {
+        if (gameState.canEvolve(entry.speciesId)) {
+          gameState.evolveMonster(entry.speciesId);
+          // Evolving swaps the roster key (and this card's identity along
+          // with it) to a different species - simplest correct thing is to
+          // rebuild the whole scene from the now-current gameState rather
+          // than patch this card's sprite/text in place.
+          this.scene.restart();
+        }
+        return;
+      }
+
       if (gameState.upgradeMonster(entry.speciesId)) {
         this.refreshCard(card);
       }
@@ -103,11 +118,21 @@ class RosterScene extends Phaser.Scene {
     card.stats.setText(`HP ${effective.maxHp} / ATK ${effective.attack}`);
 
     if (entry.level >= MAX_MONSTER_LEVEL) {
-      card.essenceText.setText('MAX LEVEL');
-      card.upgradeText.setText('Maxed');
-      card.upgradeBg.setFillStyle(0x1c202a);
-      card.upgradeText.setColor('#5a6478');
-      card.upgradeBg.disableInteractive();
+      const evolvesTo = EVOLUTION_MAP[card.speciesId];
+      if (!evolvesTo) {
+        card.essenceText.setText('MAX LEVEL');
+        card.upgradeText.setText('Maxed');
+        card.upgradeBg.setFillStyle(0x1c202a);
+        card.upgradeText.setColor('#5a6478');
+        card.upgradeBg.disableInteractive();
+      } else {
+        const canEvolve = entry.essence >= EVOLUTION_ESSENCE_COST;
+        card.essenceText.setText(`Essence ${entry.essence}/${EVOLUTION_ESSENCE_COST}`);
+        card.upgradeText.setText(canEvolve ? `Evolve! (${getSpecies(evolvesTo).name})` : 'Evolve');
+        card.upgradeBg.setFillStyle(canEvolve ? 0x2f4a34 : 0x394258);
+        card.upgradeText.setColor(canEvolve ? '#4caf50' : '#9aa4b8');
+        card.upgradeBg.setInteractive({ useHandCursor: true });
+      }
     } else {
       const cost = essenceForNextLevel(entry.level);
       const affordable = entry.essence >= cost;
@@ -115,6 +140,7 @@ class RosterScene extends Phaser.Scene {
       card.upgradeText.setText(affordable ? `Upgrade to Lv.${entry.level + 1}` : 'Upgrade');
       card.upgradeBg.setFillStyle(affordable ? 0x2f4a34 : 0x394258);
       card.upgradeText.setColor(affordable ? '#4caf50' : '#9aa4b8');
+      card.upgradeBg.setInteractive({ useHandCursor: true });
     }
   }
 
