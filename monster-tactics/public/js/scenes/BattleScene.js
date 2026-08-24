@@ -120,10 +120,15 @@ class BattleScene extends Phaser.Scene {
         const { x, y } = this.cellToPixel(c, r);
         const zone = this.add.zone(x, y, CELL - 4, CELL - 4).setInteractive();
         zone.on('pointerdown', () => this.onCellClicked(c, r));
+        zone.on('pointerover', () => this.onCellHover(c, r));
+        zone.on('pointerout', () => this.hideRangePreview());
         rowZones.push(zone);
       }
       this.cellZones.push(rowZones);
     }
+
+    this.rangePreview = this.add.circle(0, 0, 1, 0xffffff, 0.12)
+      .setStrokeStyle(1, 0xffffff, 0.5).setDepth(-5).setVisible(false);
   }
 
   buildHud() {
@@ -211,6 +216,26 @@ class BattleScene extends Phaser.Scene {
     if (this.phase !== 'placement') return;
     this.selectedBenchUid = (this.selectedBenchUid === uid) ? null : uid;
     this.benchIcons.forEach(i => this.refreshBenchIcon(i));
+    this.hideRangePreview();
+  }
+
+  onCellHover(col, row) {
+    if (this.phase !== 'placement' || !this.selectedBenchUid || this.grid[row][col]) return;
+    const entry = this.bench.find(m => m.uid === this.selectedBenchUid);
+    if (!entry) return;
+    const species = getSpecies(entry.speciesId);
+    const { x, y } = this.cellToPixel(col, row);
+    const rangePx = species.range * CELL;
+    this.rangePreview.setPosition(x, y);
+    this.rangePreview.radius = rangePx;
+    this.rangePreview
+      .setFillStyle(TYPE_COLORS[species.type], 0.12)
+      .setStrokeStyle(1, TYPE_COLORS[species.type], 0.6)
+      .setVisible(true);
+  }
+
+  hideRangePreview() {
+    this.rangePreview.setVisible(false);
   }
 
   onCellClicked(col, row) {
@@ -251,11 +276,13 @@ class BattleScene extends Phaser.Scene {
     const species = getSpecies(entry.speciesId);
     const { x, y } = this.cellToPixel(col, row);
     const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.0).setInteractive({ useHandCursor: true });
+    const rangeCircle = this.add.circle(x, y, species.range * CELL, TYPE_COLORS[species.type], 0.05)
+      .setStrokeStyle(1, TYPE_COLORS[species.type], 0.25).setDepth(-5);
 
     const ally = {
       uid: entry.uid, species, col, row,
       hp: species.maxHp, maxHp: species.maxHp,
-      nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite,
+      nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite, rangeCircle,
       hpBg: this.add.rectangle(x, y - 26, 40, 5, 0x1c202a),
       hpFill: this.add.rectangle(x - 20, y - 26, 40, 5, 0x4caf50).setOrigin(0, 0.5)
     };
@@ -270,6 +297,7 @@ class BattleScene extends Phaser.Scene {
     this.grid[ally.row][ally.col] = null;
     this.allies = this.allies.filter(a => a !== ally);
     ally.sprite.destroy();
+    ally.rangeCircle.destroy();
     ally.hpBg.destroy();
     ally.hpFill.destroy();
     gameState.earnCoins(Math.floor(ally.species.cost * 0.5));
@@ -303,7 +331,7 @@ class BattleScene extends Phaser.Scene {
 
     const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.0);
     const enemy = {
-      species: es, x: spawn.x, y: spawn.y, waypointIndex: 0,
+      species: es, x: spawn.x, y: spawn.y, waypointIndex: 0, progress: 0,
       hp: es.maxHp, maxHp: es.maxHp, statusEffects: {},
       sprite,
       hpBg: this.add.rectangle(spawn.x, spawn.y - 26, 40, 5, 0x1c202a),
@@ -351,6 +379,14 @@ class BattleScene extends Phaser.Scene {
         enemy.y += (dy / dist) * step;
       }
 
+      // How far along the whole path this enemy is, for "furthest along"
+      // target priority - the BTD6-standard default ("First") rather than
+      // whichever enemy happens to be nearest to a given tower.
+      const from = this.pathWaypoints[enemy.waypointIndex];
+      const segLen = Phaser.Math.Distance.Between(from.x, from.y, target.x, target.y);
+      const remaining = Phaser.Math.Distance.Between(enemy.x, enemy.y, target.x, target.y);
+      enemy.progress = enemy.waypointIndex + (segLen > 0 ? 1 - Phaser.Math.Clamp(remaining / segLen, 0, 1) : 1);
+
       enemy.sprite.x = enemy.x; enemy.sprite.y = enemy.y;
       enemy.hpBg.x = enemy.x; enemy.hpBg.y = enemy.y - 26;
       enemy.hpFill.x = enemy.x - 20; enemy.hpFill.y = enemy.y - 26;
@@ -375,11 +411,15 @@ class BattleScene extends Phaser.Scene {
       if (time >= ally.nextAttackTime) {
         const center = this.cellToPixel(ally.col, ally.row);
         const rangePx = ally.species.range * CELL;
+        // BTD6's default "First" priority: among enemies in range, hit
+        // whichever has traveled furthest along the path (closest to
+        // breaking through), not whichever is geometrically nearest to
+        // this tower.
         let target = null;
-        let bestDist = Infinity;
+        let bestProgress = -Infinity;
         for (const enemy of this.enemies) {
           const d = Phaser.Math.Distance.Between(center.x, center.y, enemy.x, enemy.y);
-          if (d <= rangePx && d < bestDist) { bestDist = d; target = enemy; }
+          if (d <= rangePx && enemy.progress > bestProgress) { bestProgress = enemy.progress; target = enemy; }
         }
         if (target) {
           this.dealDamage(target, ally.species.attack);

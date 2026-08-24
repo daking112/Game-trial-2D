@@ -30,26 +30,35 @@ const RARITY = {
 
 // Player-catchable species - this is the pool eggs pull from.
 // cost = coins to place this monster as a tower during a battle.
-// range/attackIntervalMs are in grid cells / milliseconds.
+// attackIntervalMs is in milliseconds. range is in grid cells, but NOT a
+// round number: a tower placed adjacent to a straight path segment is
+// exactly 1 cell (perpendicular) from it, so an integer range of 1 only
+// ever touches that segment at a single tangent point - zero real coverage
+// window, not a usable arc. Every range here is padded well past the
+// nearest integer specifically so a tower placed 1 cell off the road gets a
+// real firing arc, not a knife-edge. See BattleScene's range-circle preview
+// (drawn on hover while placing, and persistently on placed towers) - that
+// circle is the source of truth for what's actually in range, use it rather
+// than reasoning about the raw number here.
 const SPECIES = [
   // -- Common --
-  { id: 'rollpup', name: 'Rollpup', type: 'GRASS', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 0, maxHp: 24, attack: 7, range: 1, attackIntervalMs: 750, cost: 20 },
-  { id: 'snarlpup', name: 'Snarlpup', type: 'FIRE', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 3, maxHp: 22, attack: 10, range: 1, attackIntervalMs: 650, cost: 20 },
-  { id: 'hornlet', name: 'Hornlet', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 6, maxHp: 30, attack: 6, range: 1, attackIntervalMs: 850, cost: 20 },
-  { id: 'snoutling', name: 'Snoutling', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 30, maxHp: 26, attack: 8, range: 1, attackIntervalMs: 750, cost: 20 },
+  { id: 'rollpup', name: 'Rollpup', type: 'GRASS', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 0, maxHp: 24, attack: 7, range: 1.6, attackIntervalMs: 750, cost: 20 },
+  { id: 'snarlpup', name: 'Snarlpup', type: 'FIRE', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 3, maxHp: 22, attack: 10, range: 1.6, attackIntervalMs: 650, cost: 20 },
+  { id: 'hornlet', name: 'Hornlet', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 6, maxHp: 30, attack: 6, range: 1.6, attackIntervalMs: 850, cost: 20 },
+  { id: 'snoutling', name: 'Snoutling', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 30, maxHp: 26, attack: 8, range: 1.6, attackIntervalMs: 750, cost: 20 },
   // -- Rare --
-  { id: 'puffle', name: 'Puffle', type: 'NORMAL', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 27, maxHp: 38, attack: 5, range: 2, attackIntervalMs: 900, cost: 35 },
-  { id: 'grubcoil', name: 'Grubcoil', type: 'GRASS', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 49, maxHp: 20, attack: 9, range: 2, attackIntervalMs: 700, cost: 35 },
-  { id: 'icewhelp', name: 'Icewhelp', type: 'WATER', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 65, maxHp: 22, attack: 6, range: 2, attackIntervalMs: 800, cost: 35 },
-  { id: 'pincer', name: 'Pincer', type: 'EARTH', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 34, maxHp: 32, attack: 8, range: 2, attackIntervalMs: 800, cost: 35 },
+  { id: 'puffle', name: 'Puffle', type: 'NORMAL', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 27, maxHp: 38, attack: 5, range: 2.2, attackIntervalMs: 900, cost: 35 },
+  { id: 'grubcoil', name: 'Grubcoil', type: 'GRASS', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 49, maxHp: 20, attack: 9, range: 2.2, attackIntervalMs: 700, cost: 35 },
+  { id: 'icewhelp', name: 'Icewhelp', type: 'WATER', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 65, maxHp: 22, attack: 6, range: 2.2, attackIntervalMs: 800, cost: 35 },
+  { id: 'pincer', name: 'Pincer', type: 'EARTH', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 34, maxHp: 32, attack: 8, range: 2.2, attackIntervalMs: 800, cost: 35 },
   // -- Epic --
-  { id: 'molecap', name: 'Molecap', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 41, maxHp: 55, attack: 12, range: 2, attackIntervalMs: 850, cost: 55 },
-  { id: 'tigrub', name: 'Tigrub', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 51, maxHp: 42, attack: 14, range: 2, attackIntervalMs: 650, cost: 55 },
-  { id: 'geodrone', name: 'Geodrone', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 53, maxHp: 60, attack: 11, range: 3, attackIntervalMs: 900, cost: 55 },
+  { id: 'molecap', name: 'Molecap', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 41, maxHp: 55, attack: 12, range: 2.6, attackIntervalMs: 850, cost: 55 },
+  { id: 'tigrub', name: 'Tigrub', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 51, maxHp: 42, attack: 14, range: 2.6, attackIntervalMs: 650, cost: 55 },
+  { id: 'geodrone', name: 'Geodrone', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 53, maxHp: 60, attack: 11, range: 3.2, attackIntervalMs: 900, cost: 55 },
   // -- Legendary --
-  { id: 'frostmaw', name: 'Frostmaw', type: 'WATER', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 26, maxHp: 70, attack: 18, range: 3, attackIntervalMs: 700, cost: 80 },
-  { id: 'goldwasp', name: 'Goldwasp', type: 'ELECTRIC', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 35, maxHp: 55, attack: 22, range: 3, attackIntervalMs: 550, cost: 80 },
-  { id: 'ogglord', name: 'Ogglord', type: 'GRASS', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 66, maxHp: 65, attack: 20, range: 3, attackIntervalMs: 650, cost: 80 }
+  { id: 'frostmaw', name: 'Frostmaw', type: 'WATER', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 26, maxHp: 70, attack: 18, range: 3.6, attackIntervalMs: 700, cost: 80 },
+  { id: 'goldwasp', name: 'Goldwasp', type: 'ELECTRIC', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 35, maxHp: 55, attack: 22, range: 3.6, attackIntervalMs: 550, cost: 80 },
+  { id: 'ogglord', name: 'Ogglord', type: 'GRASS', rarity: 'LEGENDARY', sheetKey: RETROMON_SHEET, frame: 66, maxHp: 65, attack: 20, range: 3.6, attackIntervalMs: 650, cost: 80 }
 ];
 
 // Enemy species that spawn during battle waves. speed is pixels/second.
