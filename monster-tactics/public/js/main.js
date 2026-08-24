@@ -4,7 +4,7 @@ const config = {
   height: 640,
   parent: 'game-container',
   backgroundColor: '#12151d',
-  scene: [PreloadScene, MenuScene, EggScene, RosterScene, BattleScene],
+  scene: [PreloadScene, MenuScene, SanctuaryScene, RosterScene, BattleScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH

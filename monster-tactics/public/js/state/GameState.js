@@ -1,6 +1,11 @@
 // Persistent-ish game state shared across scenes.
 // Roster and essence are saved to localStorage so they survive a page reload;
 // coins and battle progress are in-memory per battle run only.
+//
+// Roster model: a monster is owned once, not stacked. gameState.roster is
+// keyed by speciesId -> { speciesId, level, essence }. "essence" here is
+// per-monster Monster Essence (from pulling duplicates of that species),
+// distinct from gameState.essence (the global currency spent on pulls).
 
 const ROSTER_STORAGE_KEY = 'monster-tactics:roster';
 const ESSENCE_STORAGE_KEY = 'monster-tactics:essence';
@@ -23,9 +28,14 @@ class GameState {
   loadRoster() {
     try {
       const raw = localStorage.getItem(ROSTER_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      // Old save format was an array of {uid, speciesId} stackable copies -
+      // incompatible with the collection model, so just start fresh rather
+      // than trying to migrate pre-release test data.
+      return Array.isArray(parsed) ? {} : parsed;
     } catch (e) {
-      return [];
+      return {};
     }
   }
 
@@ -54,14 +64,33 @@ class GameState {
     }
   }
 
+  // Returns { isNew, essenceGained } so the caller (SanctuaryScene) can show
+  // a different reveal for "new monster" vs "duplicate -> essence".
   addToRoster(speciesId) {
-    const entry = {
-      uid: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      speciesId
-    };
-    this.roster.push(entry);
+    const species = getSpecies(speciesId);
+    const existing = this.roster[speciesId];
+
+    if (existing) {
+      const gained = DUPLICATE_ESSENCE_BY_RARITY[species.rarity];
+      existing.essence += gained;
+      this.saveRoster();
+      return { isNew: false, essenceGained: gained };
+    }
+
+    this.roster[speciesId] = { speciesId, level: 1, essence: 0 };
     this.saveRoster();
-    return entry;
+    return { isNew: true, essenceGained: 0 };
+  }
+
+  upgradeMonster(speciesId) {
+    const entry = this.roster[speciesId];
+    if (!entry || entry.level >= MAX_MONSTER_LEVEL) return false;
+    const cost = essenceForNextLevel(entry.level);
+    if (entry.essence < cost) return false;
+    entry.essence -= cost;
+    entry.level += 1;
+    this.saveRoster();
+    return true;
   }
 
   earnEssence(amount) {
@@ -86,8 +115,8 @@ class GameState {
     return true;
   }
 
-  toggleTeamMember(uid) {
-    const idx = this.team.indexOf(uid);
+  toggleTeamMember(speciesId) {
+    const idx = this.team.indexOf(speciesId);
     if (idx >= 0) {
       this.team.splice(idx, 1);
       return true;
@@ -95,7 +124,7 @@ class GameState {
     if (this.team.length >= MAX_TEAM_SIZE) {
       return false;
     }
-    this.team.push(uid);
+    this.team.push(speciesId);
     return true;
   }
 

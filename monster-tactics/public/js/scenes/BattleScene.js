@@ -31,14 +31,16 @@ class BattleScene extends Phaser.Scene {
     this.grid = Array.from({ length: GRID_ROWS }, () => new Array(GRID_COLS).fill(null));
     this.allies = [];
     this.enemies = [];
-    this.selectedBenchUid = null;
+    this.selectedBenchSpeciesId = null;
     this.spawnedCount = 0;
     this.waveEnemyCount = 0;
     this.spawnTimerMs = 0;
     this.spawnIntervalMs = 700;
 
+    // Each roster entry is unique per species, so a team member can only
+    // ever be on the bench or placed once - no stacked duplicates to place.
     this.bench = gameState.team
-      .map(uid => gameState.roster.find(m => m.uid === uid))
+      .map(id => gameState.roster[id])
       .filter(Boolean);
 
     this.drawGrid();
@@ -152,9 +154,6 @@ class BattleScene extends Phaser.Scene {
     this.benchLabel = this.add.text(20, 490, 'Bench (click, then click an empty non-path cell):', {
       fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
     });
-    this.benchCostLabel = this.add.text(20, 508, '', {
-      fontFamily: 'monospace', fontSize: '12px', color: '#f5c94b'
-    });
     this.benchIcons = [];
     this.layoutBench();
   }
@@ -174,15 +173,15 @@ class BattleScene extends Phaser.Scene {
         fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b'
       }).setOrigin(0.5);
       bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => this.onBenchClicked(entry.uid));
-      const icon = { bg, sprite, costText, uid: entry.uid };
+      bg.on('pointerdown', () => this.onBenchClicked(entry.speciesId));
+      const icon = { bg, sprite, costText, speciesId: entry.speciesId };
       this.benchIcons.push(icon);
       this.refreshBenchIcon(icon);
     });
   }
 
   refreshBenchIcon(icon) {
-    const selected = this.selectedBenchUid === icon.uid;
+    const selected = this.selectedBenchSpeciesId === icon.speciesId;
     icon.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0xf5c94b : icon.bg.strokeColor);
   }
 
@@ -212,16 +211,16 @@ class BattleScene extends Phaser.Scene {
 
   // ---------- placement ----------
 
-  onBenchClicked(uid) {
+  onBenchClicked(speciesId) {
     if (this.phase !== 'placement') return;
-    this.selectedBenchUid = (this.selectedBenchUid === uid) ? null : uid;
+    this.selectedBenchSpeciesId = (this.selectedBenchSpeciesId === speciesId) ? null : speciesId;
     this.benchIcons.forEach(i => this.refreshBenchIcon(i));
     this.hideRangePreview();
   }
 
   onCellHover(col, row) {
-    if (this.phase !== 'placement' || !this.selectedBenchUid || this.grid[row][col]) return;
-    const entry = this.bench.find(m => m.uid === this.selectedBenchUid);
+    if (this.phase !== 'placement' || !this.selectedBenchSpeciesId || this.grid[row][col]) return;
+    const entry = this.bench.find(m => m.speciesId === this.selectedBenchSpeciesId);
     if (!entry) return;
     const species = getSpecies(entry.speciesId);
     const { x, y } = this.cellToPixel(col, row);
@@ -247,8 +246,8 @@ class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (this.selectedBenchUid) {
-      const entryIdx = this.bench.findIndex(m => m.uid === this.selectedBenchUid);
+    if (this.selectedBenchSpeciesId) {
+      const entryIdx = this.bench.findIndex(m => m.speciesId === this.selectedBenchSpeciesId);
       if (entryIdx === -1) return;
       const entry = this.bench[entryIdx];
       const species = getSpecies(entry.speciesId);
@@ -260,7 +259,7 @@ class BattleScene extends Phaser.Scene {
 
       this.bench.splice(entryIdx, 1);
       this.placeAlly(entry, col, row);
-      this.selectedBenchUid = null;
+      this.selectedBenchSpeciesId = null;
       this.layoutBench();
       this.refreshStartButton();
       this.updateHud();
@@ -274,14 +273,15 @@ class BattleScene extends Phaser.Scene {
 
   placeAlly(entry, col, row) {
     const species = getSpecies(entry.speciesId);
+    const effective = getEffectiveStats(species, entry.level);
     const { x, y } = this.cellToPixel(col, row);
     const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.0).setInteractive({ useHandCursor: true });
     const rangeCircle = this.add.circle(x, y, species.range * CELL, TYPE_COLORS[species.type], 0.05)
       .setStrokeStyle(1, TYPE_COLORS[species.type], 0.25).setDepth(-5);
 
     const ally = {
-      uid: entry.uid, species, col, row,
-      hp: species.maxHp, maxHp: species.maxHp,
+      speciesId: entry.speciesId, species, level: entry.level, col, row,
+      attack: effective.attack, hp: effective.maxHp, maxHp: effective.maxHp,
       nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite, rangeCircle,
       hpBg: this.add.rectangle(x, y - 26, 40, 5, 0x1c202a),
       hpFill: this.add.rectangle(x - 20, y - 26, 40, 5, 0x4caf50).setOrigin(0, 0.5)
@@ -301,7 +301,7 @@ class BattleScene extends Phaser.Scene {
     ally.hpBg.destroy();
     ally.hpFill.destroy();
     gameState.earnCoins(Math.floor(ally.species.cost * 0.5));
-    this.bench.push({ uid: ally.uid, speciesId: ally.species.id });
+    this.bench.push(gameState.roster[ally.speciesId]);
     this.layoutBench();
     this.refreshStartButton();
     this.updateHud();
@@ -422,7 +422,7 @@ class BattleScene extends Phaser.Scene {
           if (d <= rangePx && enemy.progress > bestProgress) { bestProgress = enemy.progress; target = enemy; }
         }
         if (target) {
-          this.dealDamage(target, ally.species.attack);
+          this.dealDamage(target, ally.attack);
           this.playHitSpark(target.x, target.y, TYPE_COLORS[ally.species.type]);
           this.applyAttackSecondaryEffect(ally, target, time);
           const speedMult = this.currentAttackSpeedMultiplier(ally, time);
@@ -559,7 +559,7 @@ class BattleScene extends Phaser.Scene {
 
   applyAttackSecondaryEffect(ally, target, time) {
     const archetype = COMBAT_ARCHETYPES[ally.species.type];
-    const effect = archetype.attackEffect(ally.species.attack);
+    const effect = archetype.attackEffect(ally.attack);
     if (!effect) return;
     const tint = TYPE_COLORS[ally.species.type];
 
@@ -570,7 +570,7 @@ class BattleScene extends Phaser.Scene {
         .filter(e => e !== target)
         .forEach(e => { this.dealDamage(e, effect.damage); this.playHitSpark(e.x, e.y, tint); });
     } else if (effect.kind === 'chain') {
-      this.applyChain(target, effect, ally.species.attack, tint, false);
+      this.applyChain(target, effect, ally.attack, tint, false);
     }
   }
 
@@ -590,9 +590,9 @@ class BattleScene extends Phaser.Scene {
     const targets = this.findEnemiesInRange(center.x, center.y, rangePx);
     if (targets.length === 0) return; // don't burn the cooldown swinging at nothing
 
-    const cfg = archetype.abilityEffect(ally.species.attack);
+    const cfg = archetype.abilityEffect(ally.attack);
     if (cfg.kind === 'chain') {
-      this.applyChain(targets[0], cfg, ally.species.attack, tint, true);
+      this.applyChain(targets[0], cfg, ally.attack, tint, true);
     } else {
       targets.forEach(e => {
         if (cfg.splashDamage) this.dealDamage(e, cfg.splashDamage);

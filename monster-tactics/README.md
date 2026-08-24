@@ -3,27 +3,38 @@
 A single-player, browser-based tower-defense game built with Phaser 3, in the
 style of Bloons TD 6: enemies march along a fixed winding path, you place
 monsters off the path to attack anything that comes into range, and you build
-your roster of monsters through a gacha-style egg system instead of a shop.
+your collection through a gacha-style Monster Sanctuary instead of a shop.
 
 No build step - open `public/index.html` in a browser, or serve the `public/`
 folder with any static file server.
 
 ## Current loop
 
-1. **Egg Shop** - spend **essence** (persistent, earned by clearing waves) on
-   an egg pull. Each pull rolls a rarity tier (Common/Rare/Epic/Legendary,
-   weighted) then a random species within that tier, and adds it to your
-   roster (persisted to `localStorage`).
-2. **Team** - pick up to 5 roster monsters as your battle team.
+1. **Monster Sanctuary** - pick a themed discovery banner (Standard, or one
+   restricted to a single type: Verdant/GRASS, Inferno/FIRE, Frozen/WATER,
+   Storm/ELECTRIC, Bedrock/EARTH) and spend **essence** (persistent, earned by
+   clearing waves) on a pull. A monster is owned once, not stacked: pulling a
+   **new** species adds it to your roster at level 1; pulling a **duplicate**
+   of one you already have converts into that species' own Monster Essence
+   instead, spent on leveling it up. Higher rarity = more essence per
+   duplicate.
+2. **Team Select** - pick up to 5 roster monsters as your battle team. Each
+   card shows its level, level-scaled stats, and an Upgrade button (once
+   there's enough Monster Essence for that species) that boosts its stats -
+   the payoff for pulling something you already own.
 3. **Battle** - a winding path crosses the grid from a spawn edge to your
-   base. Placement is only allowed on cells the path doesn't cross. Placing a
-   monster costs **coins** (session-only currency, resets each battle,
-   earned by defeating enemies); picking a placed monster back up refunds
-   half its cost. Start a wave once you're happy with your layout - enemies
-   spawn and follow the path's turns exactly, placed monsters auto-attack
-   anything within range, and any enemy that reaches the end of the path
-   costs you lives. Clear a wave to earn essence and move to the next,
-   harder one. Waves are endless - see how far you get.
+   base. Placement is only allowed on cells the path doesn't cross, and
+   hovering a cell with a bench monster selected previews its actual range
+   circle before you commit - placed towers keep a faint persistent one too,
+   so coverage is always visible, never guessed at. Placing a monster costs
+   **coins** (session-only currency, resets each battle, earned by defeating
+   enemies); picking one back up refunds half its cost. Towers target
+   whichever enemy in range has traveled furthest along the path (BTD6's
+   default "First" priority), not whichever happens to be nearest. Start a
+   wave once you're happy with your layout - enemies spawn and follow the
+   path's turns exactly, and any enemy that reaches the end costs you lives.
+   Clear a wave to earn essence and move to the next, harder one. Waves are
+   endless - see how far you get.
 
 ## Monsters are the towers, not reskinned dart-throwers
 
@@ -46,20 +57,29 @@ Ability" only - a third "Ultimate" tier is intentionally not built yet, but
 `archetypes.js` has a documented, unused shape for one so it can be added
 later without restructuring the combat loop.
 
+Range is deliberately not a round number of grid cells (1.6/2.2/2.6/3.2/3.6,
+not 1/2/3/4). A tower placed adjacent to a straight path segment sits exactly
+1 cell (perpendicular) from it - an integer range of 1 only ever touches that
+segment at a single tangent point, not a real firing arc. Every range is
+padded past the nearest integer so a tower placed the normal way always gets
+real coverage. See the range-circle preview in-game, not the raw number, for
+what's actually in range.
+
 ## Structure
 
 ```
 public/
   index.html
   js/
-    data/monsters.js       species stats, rarity tiers, gacha roll logic
+    data/monsters.js       species stats, rarity/leveling, gacha roll logic
     data/archetypes.js     per-type combat kit: Attack + Ability
+    data/banners.js        Monster Sanctuary discovery banners (type pools)
     state/GameState.js     roster/team/coins/essence/battle progress
     scenes/PreloadScene.js loads art, builds the one generated UI texture
     scenes/MenuScene.js
-    scenes/EggScene.js     the gacha pull screen
-    scenes/RosterScene.js  team selection, rarity-colored cards
-    scenes/BattleScene.js  the path, placement, waves, combat
+    scenes/SanctuaryScene.js  banner select + gacha pull screen
+    scenes/RosterScene.js     team selection, level/essence/upgrade UI
+    scenes/BattleScene.js     the path, range preview, placement, waves, combat
     vendor/phaser.min.js   Phaser 3.70.0, vendored (no CDN dependency)
   assets/
     retromon/               curated, game-ready monster art (see below)
@@ -81,8 +101,8 @@ frames are currently wired up - only 14 of the 288 available frames are used
 so far between the gacha pool and enemy roster, so there's a lot of room to
 add more species before needing new art).
 
-Everything else (grid, road, HUD, buttons, health bars) is placeholder shapes
-drawn at runtime with Phaser Graphics - no art dependency.
+Everything else (grid, road, HUD, buttons, health bars, range circles) is
+placeholder shapes drawn at runtime with Phaser Graphics - no art dependency.
 
 ## Known limitations (v1)
 
@@ -90,22 +110,25 @@ drawn at runtime with Phaser Graphics - no art dependency.
   they only ever attack.
 - The path is a single fixed layout hardcoded in `BattleScene.js`
   (`PATH_CELLS`) - no per-wave or per-map path variety yet.
-- No tower upgrades - a placed monster's stats are fixed once placed (you can
-  only pick it up for a partial refund and place something else).
+- Leveling only scales stats (+12%/level, cap level 5). Ability upgrades,
+  alternate forms, and evolution (which would change a monster's Attack/
+  Ability kit, not just its numbers) are not built - see below.
+- All banners share one currency and one pull cost (40 essence). Capture
+  Cores / tickets as a differentiated pull currency are not built.
+- The Team Select roster grid doesn't scroll - a very large collection
+  (beyond what fits in ~3 rows) will overflow past the Start Battle button.
+  Not a problem yet at 14 total species, but noted before it becomes one.
 - Waves are endless with simple linear scaling, no explicit "win" state.
 - Only `retromon-b1` (Big Pack 1) is wired into species data; Big Packs 2-4
   are extracted and ready to use for more species (see the asset index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -
-  there's no overworld/exploration scene, just menu -> egg shop/battle.
+  there's no overworld/exploration scene, just menu -> sanctuary/battle.
 
 ## Bigger design not built yet
 
-The long-term pitch is larger than this pass - a "Monster Sanctuary" meta
-game where duplicate pulls become Essence spent on stat upgrades and
-essence-gated evolutions that *change a monster's Attack/Ability kit*, plus
-capture cores/tickets, elemental discovery banners, bosses, and eventual
-co-op. None of that is built yet - this pass is deliberately scoped to just
-the combat-identity foundation (Attack + Ability per type) everything else
-depends on. Co-op specifically needs backend infrastructure (matchmaking,
-real-time state sync) this project doesn't have and was explicitly deferred
-rather than half-built.
+The long-term pitch is larger than what's here - bosses, per-species
+evolution that changes a monster's kit (not just its stats), an Ultimate
+combat tier, differentiated pull currencies, and eventual co-op. Co-op
+specifically needs backend infrastructure (matchmaking, real-time state
+sync) this project doesn't have and was explicitly deferred rather than
+half-built.

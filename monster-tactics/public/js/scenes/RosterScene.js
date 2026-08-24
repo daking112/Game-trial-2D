@@ -12,14 +12,15 @@ class RosterScene extends Phaser.Scene {
 
     this.backBtn(() => this.scene.start('MenuScene'));
 
-    // Team selection is scoped to monsters that still exist in the roster.
-    gameState.team = gameState.team.filter(uid => gameState.roster.some(m => m.uid === uid));
+    // Team selection is scoped to monsters still actually in the roster.
+    gameState.team = gameState.team.filter(id => gameState.roster[id]);
 
-    if (gameState.roster.length === 0) {
-      this.add.text(width / 2, 260, 'No monsters yet.\nGo open some eggs first!', {
+    const rosterEntries = Object.values(gameState.roster);
+    if (rosterEntries.length === 0) {
+      this.add.text(width / 2, 260, 'No monsters yet.\nVisit the Sanctuary first!', {
         fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b8', align: 'center'
       }).setOrigin(0.5);
-      this.makeButton(width / 2, 360, 'Egg Shop', () => this.scene.start('EggScene'));
+      this.makeButton(width / 2, 360, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
       return;
     }
 
@@ -29,12 +30,12 @@ class RosterScene extends Phaser.Scene {
     this.updateTeamLabel();
 
     this.cards = [];
-    const cols = 4;
-    const cardW = 150, cardH = 160;
-    const startX = width / 2 - ((Math.min(cols, gameState.roster.length) - 1) * cardW) / 2;
-    const startY = 180;
+    const cols = 5;
+    const cardW = 148, cardH = 128;
+    const startX = width / 2 - ((Math.min(cols, rosterEntries.length) - 1) * cardW) / 2;
+    const startY = 165;
 
-    gameState.roster.forEach((entry, i) => {
+    rosterEntries.forEach((entry, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = startX + col * cardW;
@@ -42,7 +43,7 @@ class RosterScene extends Phaser.Scene {
       this.buildCard(entry, x, y);
     });
 
-    this.startBtn = this.makeButton(width / 2, 560, 'Start Battle', () => {
+    this.startBtn = this.makeButton(width / 2, 610, 'Start Battle', () => {
       if (gameState.team.length > 0) this.scene.start('BattleScene');
     });
     this.refreshStartBtn();
@@ -51,40 +52,70 @@ class RosterScene extends Phaser.Scene {
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
-    const archetype = COMBAT_ARCHETYPES[species.type];
-    const bg = this.add.rectangle(x, y, 130, 150, 0x2a3040).setStrokeStyle(2, rarity.color);
-    const sprite = this.add.sprite(x, y - 40, species.sheetKey, species.frame).setScale(1.1);
-    const name = this.add.text(x, y - 3, species.name, {
-      fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa'
+    const bg = this.add.rectangle(x, y, 138, 118, 0x2a3040).setStrokeStyle(2, rarity.color);
+    const sprite = this.add.sprite(x, y - 40, species.sheetKey, species.frame).setScale(0.95);
+    const name = this.add.text(x, y - 10, `${species.name}  Lv.${entry.level}`, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#f5f7fa'
     }).setOrigin(0.5);
-    const stats = this.add.text(x, y + 15, `HP ${species.maxHp} / ATK ${species.attack}`, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#9aa4b8'
+    const stats = this.add.text(x, y + 5, '', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#9aa4b8'
     }).setOrigin(0.5);
-    const atkLabel = this.add.text(x, y + 32, `ATK: ${archetype.attackLabel}`, {
-      fontFamily: 'monospace', fontSize: '9px', color: '#c8ceda'
-    }).setOrigin(0.5);
-    const ablLabel = this.add.text(x, y + 45, `ABL: ${archetype.abilityLabel}`, {
+    const essenceText = this.add.text(x, y + 19, '', {
       fontFamily: 'monospace', fontSize: '9px', color: '#f5c94b'
     }).setOrigin(0.5);
 
+    const upgradeBg = this.add.rectangle(x, y + 38, 116, 20, 0x394258).setStrokeStyle(1, 0x5a6478);
+    const upgradeText = this.add.text(x, y + 38, '', {
+      fontFamily: 'monospace', fontSize: '9px', color: '#f5f7fa'
+    }).setOrigin(0.5);
+
     bg.setInteractive({ useHandCursor: true });
-    const card = { bg, sprite, name, stats, atkLabel, ablLabel, uid: entry.uid, rarityColor: rarity.color };
+    const card = { bg, sprite, name, stats, essenceText, upgradeBg, upgradeText, speciesId: entry.speciesId, rarityColor: rarity.color };
     this.cards.push(card);
     this.refreshCard(card);
 
     bg.on('pointerdown', () => {
-      const ok = gameState.toggleTeamMember(entry.uid);
+      const ok = gameState.toggleTeamMember(entry.speciesId);
       if (!ok) return; // team full, ignored
       this.refreshCard(card);
       this.updateTeamLabel();
       this.refreshStartBtn();
     });
+
+    upgradeBg.setInteractive({ useHandCursor: true });
+    upgradeBg.on('pointerdown', () => {
+      if (gameState.upgradeMonster(entry.speciesId)) {
+        this.refreshCard(card);
+      }
+    });
   }
 
   refreshCard(card) {
-    const selected = gameState.team.includes(card.uid);
+    const entry = gameState.roster[card.speciesId];
+    const species = getSpecies(card.speciesId);
+    const effective = getEffectiveStats(species, entry.level);
+
+    const selected = gameState.team.includes(card.speciesId);
     card.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0x4caf50 : card.rarityColor);
     card.bg.setFillStyle(selected ? 0x223428 : 0x2a3040);
+
+    card.name.setText(`${species.name}  Lv.${entry.level}`);
+    card.stats.setText(`HP ${effective.maxHp} / ATK ${effective.attack}`);
+
+    if (entry.level >= MAX_MONSTER_LEVEL) {
+      card.essenceText.setText('MAX LEVEL');
+      card.upgradeText.setText('Maxed');
+      card.upgradeBg.setFillStyle(0x1c202a);
+      card.upgradeText.setColor('#5a6478');
+      card.upgradeBg.disableInteractive();
+    } else {
+      const cost = essenceForNextLevel(entry.level);
+      const affordable = entry.essence >= cost;
+      card.essenceText.setText(`Essence ${entry.essence}/${cost}`);
+      card.upgradeText.setText(affordable ? `Upgrade to Lv.${entry.level + 1}` : 'Upgrade');
+      card.upgradeBg.setFillStyle(affordable ? 0x2f4a34 : 0x394258);
+      card.upgradeText.setColor(affordable ? '#4caf50' : '#9aa4b8');
+    }
   }
 
   updateTeamLabel() {

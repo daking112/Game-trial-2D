@@ -80,15 +80,52 @@ function getEnemySpecies(id) {
   return ENEMY_SPECIES.find(s => s.id === id);
 }
 
-// Weighted rarity roll, then a uniform pick among that rarity's species.
-function rollGachaSpecies() {
-  const totalWeight = Object.values(RARITY).reduce((sum, r) => sum + r.weight, 0);
+// Weighted rarity roll restricted to whatever rarities are actually present
+// in the (possibly type-filtered) pool, then a uniform pick within that
+// rarity. typesFilter is an array of type ids, or null/undefined for no
+// filter (the standard banner).
+function rollGachaSpecies(typesFilter) {
+  const pool = typesFilter ? SPECIES.filter(s => typesFilter.includes(s.type)) : SPECIES;
+  const availableRarities = Object.values(RARITY).filter(r => pool.some(s => s.rarity === r.id));
+  const totalWeight = availableRarities.reduce((sum, r) => sum + r.weight, 0);
   let roll = Math.random() * totalWeight;
-  let chosenRarity = RARITY.COMMON;
-  for (const r of Object.values(RARITY)) {
+  let chosenRarity = availableRarities[0];
+  for (const r of availableRarities) {
     if (roll < r.weight) { chosenRarity = r; break; }
     roll -= r.weight;
   }
-  const pool = SPECIES.filter(s => s.rarity === chosenRarity.id);
-  return pool[Math.floor(Math.random() * pool.length)];
+  const rarityPool = pool.filter(s => s.rarity === chosenRarity.id);
+  return rarityPool[Math.floor(Math.random() * rarityPool.length)];
+}
+
+// ---------- collection progression ----------
+//
+// A monster is owned once, not stacked: pulling a duplicate doesn't give you
+// a second copy to place, it converts into Monster Essence spent leveling up
+// the one you have. This is what makes duplicates feel like progress instead
+// of waste. Levels only scale stats for now - ability upgrades, alternate
+// forms, and evolution (which would change a monster's Attack/Ability kit,
+// not just its numbers) are intentionally not built yet, see README.
+
+const MAX_MONSTER_LEVEL = 5;
+
+const DUPLICATE_ESSENCE_BY_RARITY = {
+  COMMON: 15,
+  RARE: 25,
+  EPIC: 40,
+  LEGENDARY: 70
+};
+
+// Monster Essence cost to go from `level` to `level + 1`.
+function essenceForNextLevel(level) {
+  return level * 30;
+}
+
+// Stats actually used in battle: base stats scaled up per level.
+function getEffectiveStats(species, level) {
+  const multiplier = 1 + (level - 1) * 0.12;
+  return {
+    maxHp: Math.round(species.maxHp * multiplier),
+    attack: Math.round(species.attack * multiplier)
+  };
 }
