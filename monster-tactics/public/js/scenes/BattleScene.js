@@ -1,8 +1,11 @@
-const GRID_COLS = 10;
-const GRID_ROWS = 6;
-const CELL = 64;
-const GRID_X = 160;
-const GRID_Y = 130;
+const GRID_COLS = 16;
+const GRID_ROWS = 8;
+const CELL = 96;
+const GRID_X = 200;
+const GRID_Y = 170;
+const HP_BAR_W = 60;
+const HP_BAR_H = 8;
+const HP_BAR_Y_OFFSET = -42;
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -50,8 +53,8 @@ class BattleScene extends Phaser.Scene {
   buildPathWaypoints() {
     const entry = this.cellToPixel(this.pathCells[0].col, this.pathCells[0].row);
     const exit = this.cellToPixel(this.pathCells[this.pathCells.length - 1].col, this.pathCells[this.pathCells.length - 1].row);
-    const spawn = { x: GRID_X + GRID_COLS * CELL + 30, y: entry.y };
-    const base = { x: GRID_X - 30, y: exit.y };
+    const spawn = { x: GRID_X + GRID_COLS * CELL + 45, y: entry.y };
+    const base = { x: GRID_X - 45, y: exit.y };
     const onGrid = this.pathCells.map(c => this.cellToPixel(c.col, c.row));
     return [spawn, ...onGrid, base];
   }
@@ -153,34 +156,34 @@ class BattleScene extends Phaser.Scene {
   // kept clear of the HUD strip, bench row, and the grid's own interactive
   // zones so nothing here can ever intercept a click meant for the game.
   drawMapDecorations() {
-    const left = GRID_X - 70;
-    const right = GRID_X + GRID_COLS * CELL + 70;
-    this.add.sprite(left, GRID_Y + 40, 'tree-1').play('tree-1-sway').setScale(0.55);
-    this.add.sprite(left - 10, GRID_Y + 190, 'bush-1').play('bush-1-sway').setScale(0.7);
-    this.add.image(left, GRID_Y + 300, 'rock-2').setScale(0.9);
-    this.add.sprite(right, GRID_Y + 60, 'tree-2').play('tree-2-sway').setScale(0.5);
-    this.add.image(right + 5, GRID_Y + 210, 'rock-3').setScale(0.9);
-    this.add.sprite(right, GRID_Y + 320, 'bush-2').play('bush-2-sway').setScale(0.65);
+    const left = GRID_X - 100;
+    const right = GRID_X + GRID_COLS * CELL + 90;
+    this.add.sprite(left, GRID_Y + 60, 'tree-1').play('tree-1-sway').setScale(0.85);
+    this.add.sprite(left - 15, GRID_Y + 350, 'bush-1').play('bush-1-sway').setScale(1.05);
+    this.add.image(left, GRID_Y + 620, 'rock-2').setScale(1.3);
+    this.add.sprite(right, GRID_Y + 90, 'tree-2').play('tree-2-sway').setScale(0.75);
+    this.add.image(right + 5, GRID_Y + 380, 'rock-3').setScale(1.3);
+    this.add.sprite(right, GRID_Y + 650, 'bush-2').play('bush-2-sway').setScale(0.95);
   }
 
   buildHud() {
-    this.add.image(480, 33, 'panel-hud');
-    this.hudText = this.add.text(20, 20, '', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5f7fa'
+    this.add.image(960, 48, 'panel-hud');
+    this.hudText = this.add.text(30, 32, '', {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f5f7fa'
     });
 
-    this.backBtn = UiKit.makeLink(this, this.scale.width - 20, 20, 'Menu >', () => this.scene.start('MenuScene'), {
-      originX: 1, originY: 0
+    this.backBtn = UiKit.makeLink(this, this.scale.width - 30, 32, 'Menu >', () => this.scene.start('MenuScene'), {
+      originX: 1, originY: 0, fontSize: '22px'
     });
 
-    this.startWaveBtn = UiKit.makeButton(this, this.scale.width / 2, 88, 'Start Wave', () => {
+    this.startWaveBtn = UiKit.makeButton(this, this.scale.width / 2, 125, 'Start Wave', () => {
       if (this.phase === 'placement' && this.allies.length > 0) this.startWave();
     });
   }
 
   buildBench() {
-    this.benchLabel = this.add.text(20, 490, 'Bench (click, then click an empty non-path cell):', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda'
+    this.benchLabel = this.add.text(30, 950, 'Bench (click, then click an empty non-path cell):', {
+      fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
     }).setStroke('#1c2530', 3);
     this.benchIcons = [];
     this.layoutBench();
@@ -193,17 +196,17 @@ class BattleScene extends Phaser.Scene {
     });
     this.benchIcons = [];
 
-    const startX = 60, y = 585, spacing = 64;
+    const startX = 100, y = 1015, spacing = 96;
     this.bench.forEach((entry, i) => {
       const species = getSpecies(entry.speciesId);
       const rarity = RARITY[species.rarity];
       const x = startX + i * spacing;
-      const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(52, 52).setTint(rarity.color);
-      const selectionRing = this.add.rectangle(x, y, 56, 56, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false);
-      const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(0.9);
-      const { icon: costIcon, text: costText } = UiKit.iconLabel(this, x, y + 32, 'icon-coin', `${species.cost}`, {
-        fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 2
-      }, 12);
+      const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(78, 78).setTint(rarity.color);
+      const selectionRing = this.add.rectangle(x, y, 84, 84, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false);
+      const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.35);
+      const { icon: costIcon, text: costText } = UiKit.iconLabel(this, x, y + 48, 'icon-coin', `${species.cost}`, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
+      }, 18);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => this.onBenchClicked(entry.speciesId));
       const icon = { bg, selectionRing, sprite, costIcon, costText, speciesId: entry.speciesId };
@@ -227,17 +230,17 @@ class BattleScene extends Phaser.Scene {
     const OVERLAY_DEPTH = 100;
     this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(OVERLAY_DEPTH).setVisible(false);
     this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(OVERLAY_DEPTH).setVisible(false);
-    this.overlayTitle = this.add.text(width / 2, height / 2 - 60, '', {
-      fontFamily: 'monospace', fontSize: '30px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 5).setDepth(OVERLAY_DEPTH).setVisible(false);
-    this.overlaySub = this.add.text(width / 2, height / 2 - 10, '', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
-    }).setOrigin(0.5).setStroke('#1c2530', 3).setDepth(OVERLAY_DEPTH).setVisible(false);
+    this.overlayTitle = this.add.text(width / 2, height / 2 - 140, '', {
+      fontFamily: 'monospace', fontSize: '45px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6).setDepth(OVERLAY_DEPTH).setVisible(false);
+    this.overlaySub = this.add.text(width / 2, height / 2 - 60, '', {
+      fontFamily: 'monospace', fontSize: '24px', color: '#c8ceda'
+    }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(OVERLAY_DEPTH).setVisible(false);
 
-    this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 50, '', () => {});
-    this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 115, 'Return to Menu', () => {
+    this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 40, '', () => {}, { size: 'large' });
+    this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 140, 'Return to Menu', () => {
       this.scene.start('MenuScene');
-    });
+    }, { size: 'large' });
     this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH);
     this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH);
     this.setOverlayVisible(false);
@@ -315,7 +318,7 @@ class BattleScene extends Phaser.Scene {
     const species = getSpecies(entry.speciesId);
     const effective = getEffectiveStats(species, entry.level);
     const { x, y } = this.cellToPixel(col, row);
-    const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.0).setInteractive({ useHandCursor: true });
+    const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.5).setInteractive({ useHandCursor: true });
     const rangeCircle = this.add.circle(x, y, species.range * CELL, TYPE_COLORS[species.type], 0.05)
       .setStrokeStyle(1, TYPE_COLORS[species.type], 0.25).setDepth(-5);
 
@@ -323,8 +326,8 @@ class BattleScene extends Phaser.Scene {
       speciesId: entry.speciesId, species, level: entry.level, col, row,
       attack: effective.attack, hp: effective.maxHp, maxHp: effective.maxHp,
       nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite, rangeCircle,
-      hpBg: this.add.rectangle(x, y - 26, 40, 5, 0x1c202a),
-      hpFill: this.add.rectangle(x - 20, y - 26, 40, 5, 0x4caf50).setOrigin(0, 0.5)
+      hpBg: this.add.rectangle(x, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x1c202a),
+      hpFill: this.add.rectangle(x - HP_BAR_W / 2, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x4caf50).setOrigin(0, 0.5)
     };
     sprite.on('pointerdown', () => this.onCellClicked(col, row));
 
@@ -372,13 +375,13 @@ class BattleScene extends Phaser.Scene {
     const es = ENEMY_SPECIES[Math.floor(Math.random() * ENEMY_SPECIES.length)];
     const spawn = this.pathWaypoints[0];
 
-    const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.0);
+    const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.5);
     const enemy = {
       species: es, x: spawn.x, y: spawn.y, waypointIndex: 0, progress: 0,
       hp: es.maxHp, maxHp: es.maxHp, statusEffects: {},
       sprite,
-      hpBg: this.add.rectangle(spawn.x, spawn.y - 26, 40, 5, 0x1c202a),
-      hpFill: this.add.rectangle(spawn.x - 20, spawn.y - 26, 40, 5, 0xe0562f).setOrigin(0, 0.5)
+      hpBg: this.add.rectangle(spawn.x, spawn.y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x1c202a),
+      hpFill: this.add.rectangle(spawn.x - HP_BAR_W / 2, spawn.y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0xe0562f).setOrigin(0, 0.5)
     };
     this.enemies.push(enemy);
   }
@@ -431,8 +434,8 @@ class BattleScene extends Phaser.Scene {
       enemy.progress = enemy.waypointIndex + (segLen > 0 ? 1 - Phaser.Math.Clamp(remaining / segLen, 0, 1) : 1);
 
       enemy.sprite.x = enemy.x; enemy.sprite.y = enemy.y;
-      enemy.hpBg.x = enemy.x; enemy.hpBg.y = enemy.y - 26;
-      enemy.hpFill.x = enemy.x - 20; enemy.hpFill.y = enemy.y - 26;
+      enemy.hpBg.x = enemy.x; enemy.hpBg.y = enemy.y + HP_BAR_Y_OFFSET;
+      enemy.hpFill.x = enemy.x - HP_BAR_W / 2; enemy.hpFill.y = enemy.y + HP_BAR_Y_OFFSET;
     }
 
     if (escaped.length > 0) {
@@ -513,7 +516,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   playHitSpark(x, y, tint, scale) {
-    const fx = this.add.sprite(x, y, 'hit-spark').setScale(scale || 0.9);
+    const fx = this.add.sprite(x, y, 'hit-spark').setScale(scale || 1.3);
     if (tint !== undefined) fx.setTint(tint);
     fx.play('hit-spark-anim');
     fx.once('animationcomplete', () => fx.destroy());
@@ -541,7 +544,7 @@ class BattleScene extends Phaser.Scene {
     const dot = enemy.statusEffects.dot;
     if (dot && time >= dot.nextTickTime) {
       this.dealDamage(enemy, dot.damagePerTick);
-      this.playHitSpark(enemy.x, enemy.y, dot.color, 0.5);
+      this.playHitSpark(enemy.x, enemy.y, dot.color, 0.75);
       dot.ticksRemaining -= 1;
       dot.nextTickTime = time + dot.tickIntervalMs;
       if (dot.ticksRemaining <= 0) delete enemy.statusEffects.dot;

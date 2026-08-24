@@ -6,7 +6,7 @@ const UiKit = {
   makeButton(scene, x, y, label, onClick, opts = {}) {
     const size = opts.size || 'medium'; // 'large' | 'medium'
     const textureKey = size === 'large' ? 'btn-large' : 'btn-medium';
-    const fontSize = opts.fontSize || (size === 'large' ? '18px' : '15px');
+    const fontSize = opts.fontSize || (size === 'large' ? '27px' : '23px');
 
     const bg = scene.add.image(0, 0, textureKey);
     if (opts.tint) bg.setTint(opts.tint);
@@ -14,7 +14,7 @@ const UiKit = {
 
     const text = scene.add.text(0, 0, label, {
       fontFamily: 'monospace', fontSize, color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
     const container = scene.add.container(x, y, [bg, text]);
 
@@ -38,7 +38,7 @@ const UiKit = {
   // link reads the same.
   makeLink(scene, x, y, label, onClick, opts = {}) {
     const text = scene.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: opts.fontSize || '13px', color: opts.color || '#9aa4b8'
+      fontFamily: 'monospace', fontSize: opts.fontSize || '19px', color: opts.color || '#9aa4b8'
     }).setOrigin(opts.originX ?? 0.5, opts.originY ?? 0.5).setInteractive({ useHandCursor: true });
     const hoverColor = opts.hoverColor || '#f5f7fa';
     const baseColor = opts.color || '#9aa4b8';

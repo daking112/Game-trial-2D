@@ -64,24 +64,30 @@ def make_speckle_tile(size, base_color, speckles, seed):
     return img
 
 
+# BattleScene's grid cell size - the tiles must be generated at exactly this
+# size so they lay down one-per-cell with no cropping/gaps. Bumped from 64 to
+# 96 alongside the 1920x1080 canvas (see BattleScene.js CELL and README.md).
+TILE_SIZE = 96
+
+
 def make_grass_tile():
     speckles = [
-        ((0x35, 0x5c, 0x32), 26, 2, 5),   # shadow clumps
-        ((0x5a, 0x8c, 0x4a), 30, 1, 3),   # light blade tufts
-        ((0x6c, 0x9e, 0x55), 10, 1, 2),   # bright highlight flecks
-        ((0x2e, 0x4f, 0x2b), 8, 1, 2),    # dark accents
+        ((0x35, 0x5c, 0x32), 58, 3, 7),   # shadow clumps
+        ((0x5a, 0x8c, 0x4a), 66, 2, 4),   # light blade tufts
+        ((0x6c, 0x9e, 0x55), 22, 2, 3),   # bright highlight flecks
+        ((0x2e, 0x4f, 0x2b), 18, 2, 3),   # dark accents
     ]
-    return make_speckle_tile(64, (0x43, 0x70, 0x3d), speckles, seed=7)
+    return make_speckle_tile(TILE_SIZE, (0x43, 0x70, 0x3d), speckles, seed=7)
 
 
 def make_path_tile():
     speckles = [
-        ((0x6b, 0x4f, 0x34), 22, 2, 5),   # darker dirt clumps
-        ((0xa9, 0x86, 0x5c), 22, 1, 3),   # light dust highlight
-        ((0x5a, 0x40, 0x28), 14, 1, 2),   # pebbles
-        ((0xc2, 0xa3, 0x76), 6, 1, 2),    # bright sand fleck
+        ((0x6b, 0x4f, 0x34), 48, 3, 7),   # darker dirt clumps
+        ((0xa9, 0x86, 0x5c), 48, 2, 4),   # light dust highlight
+        ((0x5a, 0x40, 0x28), 30, 2, 3),   # pebbles
+        ((0xc2, 0xa3, 0x76), 14, 2, 3),   # bright sand fleck
     ]
-    return make_speckle_tile(64, (0x8a, 0x6a, 0x45), speckles, seed=13)
+    return make_speckle_tile(TILE_SIZE, (0x8a, 0x6a, 0x45), speckles, seed=13)
 
 
 # ---------------------------------------------------------------------------
@@ -183,12 +189,16 @@ def main():
     # measured at an 8px uniform border - see the measurement note in
     # README.md "Art".
     frame_cells = single_frame_nineslice_cells(BP_SHEET, (64, 64, 128, 128), border=8)
+    # Sized for the 1920x1080 canvas (roughly 1.5x the sizes used at the old
+    # 960x640 canvas) - panel-hud is deliberately oversized well past the
+    # canvas width so its decorative corner clasps land off-screen and only
+    # the plain stretched middle is ever visible (see README.md "Art").
     sizes = {
-        'btn-large': (260, 56), 'btn-medium': (230, 50),
-        'panel-hud': (1100, 50), 'panel-overlay': (620, 280),
-        'panel-card-roster': (138, 118), 'panel-card-hub': (220, 130),
-        'panel-card-banner': (204, 114), 'panel-egg': (100, 100),
-        'bench-slot': (56, 56),
+        'btn-large': (390, 84), 'btn-medium': (345, 75),
+        'panel-hud': (2200, 75), 'panel-overlay': (930, 420),
+        'panel-card-roster': (207, 177), 'panel-card-hub': (330, 195),
+        'panel-card-banner': (306, 171), 'panel-egg': (150, 150),
+        'bench-slot': (84, 84),
     }
     for name, (w, h) in sizes.items():
         stitch_nineslice(frame_cells, w, h).save(os.path.join(OUT_UI, f'{name}.png'))

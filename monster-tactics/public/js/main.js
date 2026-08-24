@@ -1,7 +1,7 @@
 const config = {
   type: Phaser.AUTO,
-  width: 960,
-  height: 640,
+  width: 1920,
+  height: 1080,
   parent: 'game-container',
   backgroundColor: '#12151d',
   scene: [PreloadScene, MenuScene, SanctuaryScene, RosterScene, BattleScene, HubScene, VictoryScene],

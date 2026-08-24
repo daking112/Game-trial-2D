@@ -6,24 +6,24 @@ class HubScene extends Phaser.Scene {
   }
 
   create() {
-    const { width } = this.scale;
+    const { width, height } = this.scale;
 
-    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
-    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.62);
+    this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.62);
 
-    this.add.text(width / 2, 40, 'STAGE CLEAR', {
-      fontFamily: 'monospace', fontSize: '28px', color: '#f5f7fa', fontStyle: 'bold'
+    this.add.text(width / 2, 65, 'STAGE CLEAR', {
+      fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6);
+    this.add.text(width / 2, 118, `Run progress: stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}`, {
+      fontFamily: 'monospace', fontSize: '21px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
-    this.add.text(width / 2, 72, `Run progress: stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}`, {
-      fontFamily: 'monospace', fontSize: '14px', color: '#c8ceda'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.add.text(width / 2, 92, `Lives ${gameState.lives}/${gameState.maxLives}   Score ${gameState.score}   Essence ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
+    this.add.text(width / 2, 152, `Lives ${gameState.lives}/${gameState.maxLives}   Score ${gameState.score}   Essence ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '19px', color: '#9aa4b8'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    this.add.text(width / 2, 140, 'Choose the next stage:', {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5f7fa'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    this.add.text(width / 2, 220, 'Choose the next stage:', {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f5f7fa'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
     // A lightweight single-player stand-in for "vote on the next map" - see
     // data/stages.js. Pre-select the first option so Ready/the countdown
@@ -31,40 +31,40 @@ class HubScene extends Phaser.Scene {
     this.choices = pickStageChoices(2, gameState.currentStageId);
     this.selectedStageId = this.choices[0].id;
     this.stageCards = [];
-    const cardSpacing = 260;
+    const cardSpacing = 390;
     this.choices.forEach((stage, i) => {
       const x = width / 2 + (i - (this.choices.length - 1) / 2) * cardSpacing;
-      this.buildStageCard(stage, x, 230);
+      this.buildStageCard(stage, x, 370);
     });
 
-    UiKit.makeButton(this, width / 2, 350, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
-    UiKit.makeButton(this, width / 2, 415, 'Team & Upgrades', () => this.scene.start('RosterScene'));
+    UiKit.makeButton(this, width / 2, 560, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 660, 'Team & Upgrades', () => this.scene.start('RosterScene'), { size: 'large' });
 
-    this.readyBtn = UiKit.makeButton(this, width / 2, 500, 'Ready!', () => this.proceed(), { tint: 0x8fdc8f });
+    this.readyBtn = UiKit.makeButton(this, width / 2, 790, 'Ready!', () => this.proceed(), { tint: 0x8fdc8f, size: 'large' });
 
-    this.countdownText = this.add.text(width / 2, 545, '', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda'
+    this.countdownText = this.add.text(width / 2, 855, '', {
+      fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.remaining = HUB_COUNTDOWN_SECONDS;
     this.updateCountdownText();
     this.countdownEvent = this.time.addEvent({ delay: 1000, loop: true, callback: () => this.tickCountdown() });
 
-    UiKit.makeLink(this, width / 2, 600, 'Abandon Run (return to Menu)', () => this.scene.start('MenuScene'), {
+    UiKit.makeLink(this, width / 2, 950, 'Abandon Run (return to Menu)', () => this.scene.start('MenuScene'), {
       color: '#5a6478', hoverColor: '#e0562f'
     });
   }
 
   buildStageCard(stage, x, y) {
-    const w = 220, h = 130;
+    const w = 330, h = 195;
     const bg = this.add.image(x, y, 'panel-card-hub').setInteractive({ useHandCursor: true });
-    const selectionRing = this.add.rectangle(x, y, w + 6, h + 6, 0xffffff, 0).setStrokeStyle(3, 0x4caf50).setVisible(false);
+    const selectionRing = this.add.rectangle(x, y, w + 8, h + 8, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);
 
-    this.add.text(x, y - 30, stage.name, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5f7fa', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 30 }
+    this.add.text(x, y - 45, stage.name, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f5f7fa', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 40 }
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.add.text(x, y + 8, `${stage.pathCells.length} turns`, {
+      fontFamily: 'monospace', fontSize: '17px', color: '#e8ecf5'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.add.text(x, y + 5, `${stage.pathCells.length} turns`, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#e8ecf5'
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
 
     const card = { bg, selectionRing, stageId: stage.id };
     this.stageCards.push(card);

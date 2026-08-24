@@ -14,25 +14,25 @@ class MenuScene extends Phaser.Scene {
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.55);
 
-    this.add.sprite(width / 2, 88, 'tree-1').play('tree-1-sway').setScale(0.7).setAlpha(0.5);
-    this.add.sprite(width - 90, 100, 'tree-2').play('tree-2-sway').setScale(0.6).setAlpha(0.5);
+    this.add.sprite(350, 180, 'tree-1').play('tree-1-sway').setScale(1.0).setAlpha(0.5);
+    this.add.sprite(width - 350, 180, 'tree-2').play('tree-2-sway').setScale(0.85).setAlpha(0.5);
 
-    this.add.text(width / 2, 120, 'MONSTER TACTICS', {
-      fontFamily: 'monospace', fontSize: '48px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 5);
+    this.add.text(width / 2, 220, 'MONSTER TACTICS', {
+      fontFamily: 'monospace', fontSize: '72px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 7);
 
-    this.add.text(width / 2, 170, 'hatch monsters, place them along the path, hold the line', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    this.add.text(width / 2, 300, 'hatch monsters, place them along the path, hold the line', {
+      fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
-    this.add.text(width / 2, 250, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
-      fontFamily: 'monospace', fontSize: '18px', color: '#e8ecf5'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
-    UiKit.iconLabel(this, width / 2, 278, 'icon-essence', `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
-    });
+    this.add.text(width / 2, 440, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
+      fontFamily: 'monospace', fontSize: '26px', color: '#e8ecf5'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    UiKit.iconLabel(this, width / 2, 484, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
+    }, 24);
 
-    UiKit.makeButton(this, width / 2, 340, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
-    UiKit.makeButton(this, width / 2, 410, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 590, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 700, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
   }
 }

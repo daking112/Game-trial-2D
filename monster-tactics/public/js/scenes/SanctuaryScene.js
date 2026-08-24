@@ -18,29 +18,29 @@ class SanctuaryScene extends Phaser.Scene {
   showBannerList() {
     this.clearScreen();
     this.view = 'banners';
-    const { width } = this.scale;
+    const { width, height } = this.scale;
 
-    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
-    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+    this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
 
-    this.add.text(width / 2, 40, 'MONSTER SANCTUARY', {
-      fontFamily: 'monospace', fontSize: '26px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 4);
-    UiKit.iconLabel(this, width / 2, 68, 'icon-essence', `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
-    });
+    this.add.text(width / 2, 60, 'MONSTER SANCTUARY', {
+      fontFamily: 'monospace', fontSize: '39px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6);
+    UiKit.iconLabel(this, width / 2, 102, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
+    }, 24);
 
     const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
     this.backBtn(backTarget, () => this.scene.start(backTarget));
 
-    const cols = 3, cardW = 220, cardH = 130;
+    const cols = 3, cardW = 330, cardH = 195;
     const startX = width / 2 - cardW;
-    const startY = 160;
+    const startY = 260;
     BANNERS.forEach((banner, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const x = startX + col * cardW;
       const y = startY + row * cardH;
-      this.buildBannerCard(banner, x, y, cardW - 16, cardH - 16);
+      this.buildBannerCard(banner, x, y, cardW - 24, cardH - 24);
     });
   }
 
@@ -50,13 +50,13 @@ class SanctuaryScene extends Phaser.Scene {
     bg.on('pointerout', () => bg.setScale(1));
     bg.on('pointerdown', () => this.showPullView(banner));
 
-    this.add.text(x, y - 32, banner.icon, { fontSize: '28px' }).setOrigin(0.5);
-    this.add.text(x, y - 2, banner.name, {
-      fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa', fontStyle: 'bold'
+    this.add.text(x, y - 48, banner.icon, { fontSize: '42px' }).setOrigin(0.5);
+    this.add.text(x, y - 3, banner.name, {
+      fontFamily: 'monospace', fontSize: '19px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.add.text(x, y + 30, banner.blurb, {
+      fontFamily: 'monospace', fontSize: '15px', color: '#e8ecf5', align: 'center', wordWrap: { width: w - 30 }
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.add.text(x, y + 20, banner.blurb, {
-      fontFamily: 'monospace', fontSize: '10px', color: '#e8ecf5', align: 'center', wordWrap: { width: w - 20 }
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
   }
 
   // ---------- pull view ----------
@@ -65,40 +65,41 @@ class SanctuaryScene extends Phaser.Scene {
     this.clearScreen();
     this.view = 'pull';
     this.activeBanner = banner;
-    const { width } = this.scale;
+    const { width, height } = this.scale;
 
-    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
-    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+    this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
 
-    this.add.text(width / 2, 40, `${banner.icon} ${banner.name.toUpperCase()}`, {
-      fontFamily: 'monospace', fontSize: '24px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.add.text(width / 2, 60, `${banner.icon} ${banner.name.toUpperCase()}`, {
+      fontFamily: 'monospace', fontSize: '36px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6);
 
-    UiKit.makeLink(this, 24, 24, '< Banners', () => this.showBannerList(), { originX: 0, originY: 0 });
+    UiKit.makeLink(this, 30, 30, '< Banners', () => this.showBannerList(), { originX: 0, originY: 0 });
 
-    this.essenceText = UiKit.iconLabel(this, width / 2, 78, 'icon-essence', `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
-    }).text;
+    this.essenceText = UiKit.iconLabel(this, width / 2, 115, 'icon-essence', `Essence: ${gameState.essence}`, {
+      fontFamily: 'monospace', fontSize: '24px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
+    }, 26).text;
 
-    this.eggSprite = this.add.image(width / 2, 210, 'panel-egg');
-    this.eggLabel = this.add.text(width / 2, 210, '?', {
-      fontFamily: 'monospace', fontSize: '36px', color: '#f5c94b', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.eggY = 320;
+    this.eggSprite = this.add.image(width / 2, this.eggY, 'panel-egg');
+    this.eggLabel = this.add.text(width / 2, this.eggY, '?', {
+      fontFamily: 'monospace', fontSize: '54px', color: '#f5c94b', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6);
 
     this.resultSprite = null;
-    this.resultText = this.add.text(width / 2, 310, '', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#f5f7fa', align: 'center'
+    this.resultText = this.add.text(width / 2, 460, '', {
+      fontFamily: 'monospace', fontSize: '27px', color: '#f5f7fa', align: 'center'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.resultSubText = this.add.text(width / 2, 500, '', {
+      fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda', align: 'center'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    this.resultSubText = this.add.text(width / 2, 335, '', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda', align: 'center'
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
 
-    this.openBtn = UiKit.makeButton(this, width / 2, 410, `Open Egg (${EGG_COST} essence)`, () => this.openEgg(), { size: 'large' });
+    this.openBtn = UiKit.makeButton(this, width / 2, 600, `Open Egg (${EGG_COST} essence)`, () => this.openEgg(), { size: 'large' });
     this.refreshOpenBtn();
 
-    this.oddsText = this.add.text(width / 2, 470, this.oddsString(banner), {
-      fontFamily: 'monospace', fontSize: '11px', color: '#c8ceda', align: 'center'
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
+    this.oddsText = this.add.text(width / 2, 690, this.oddsString(banner), {
+      fontFamily: 'monospace', fontSize: '17px', color: '#c8ceda', align: 'center'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
   }
 
   oddsString(banner) {
@@ -127,7 +128,7 @@ class SanctuaryScene extends Phaser.Scene {
     const result = gameState.addToRoster(species.id);
 
     if (this.resultSprite) this.resultSprite.destroy();
-    this.resultSprite = this.add.sprite(this.scale.width / 2, 210, species.sheetKey, species.frame).setScale(0);
+    this.resultSprite = this.add.sprite(this.scale.width / 2, this.eggY, species.sheetKey, species.frame).setScale(0);
     this.eggSprite.setVisible(false);
     this.eggLabel.setVisible(false);
 
@@ -166,6 +167,6 @@ class SanctuaryScene extends Phaser.Scene {
 
   backBtn(target, onClick) {
     const label = target === 'HubScene' ? '< Hub' : '< Menu';
-    UiKit.makeLink(this, 24, 24, label, onClick, { originX: 0, originY: 0 });
+    UiKit.makeLink(this, 30, 30, label, onClick, { originX: 0, originY: 0 });
   }
 }

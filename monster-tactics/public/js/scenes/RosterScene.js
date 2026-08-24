@@ -4,14 +4,14 @@ class RosterScene extends Phaser.Scene {
   }
 
   create() {
-    const { width } = this.scale;
+    const { width, height } = this.scale;
 
-    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
-    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+    this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
 
-    this.add.text(width / 2, 40, 'TEAM SELECT', {
-      fontFamily: 'monospace', fontSize: '28px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.add.text(width / 2, 60, 'TEAM SELECT', {
+      fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6);
 
     const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
     this.backBtn(backTarget, () => this.scene.start(backTarget));
@@ -21,23 +21,23 @@ class RosterScene extends Phaser.Scene {
 
     const rosterEntries = Object.values(gameState.roster);
     if (rosterEntries.length === 0) {
-      this.add.text(width / 2, 260, 'No monsters yet.\nVisit the Sanctuary first!', {
-        fontFamily: 'monospace', fontSize: '18px', color: '#c8ceda', align: 'center'
-      }).setOrigin(0.5).setStroke('#1c2530', 3);
-      UiKit.makeButton(this, width / 2, 360, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
+      this.add.text(width / 2, 400, 'No monsters yet.\nVisit the Sanctuary first!', {
+        fontFamily: 'monospace', fontSize: '27px', color: '#c8ceda', align: 'center'
+      }).setOrigin(0.5).setStroke('#1c2530', 4);
+      UiKit.makeButton(this, width / 2, 540, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
       return;
     }
 
-    this.teamLabel = this.add.text(width / 2, 90, '', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#e8ecf5'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    this.teamLabel = this.add.text(width / 2, 135, '', {
+      fontFamily: 'monospace', fontSize: '24px', color: '#e8ecf5'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
     this.updateTeamLabel();
 
     this.cards = [];
     const cols = 5;
-    const cardW = 148, cardH = 128;
+    const cardW = 222, cardH = 192;
     const startX = width / 2 - ((Math.min(cols, rosterEntries.length) - 1) * cardW) / 2;
-    const startY = 165;
+    const startY = 260;
 
     rosterEntries.forEach((entry, i) => {
       const col = i % cols;
@@ -52,11 +52,11 @@ class RosterScene extends Phaser.Scene {
       // the Hub is the only place that actually commits to the next stage
       // (it's what picked gameState.pendingStageId), so send the player
       // back there rather than duplicating that decision here.
-      this.add.text(width / 2, 610, "Head back to the Hub when you're ready", {
-        fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda'
-      }).setOrigin(0.5).setStroke('#1c2530', 3);
+      this.add.text(width / 2, 990, "Head back to the Hub when you're ready", {
+        fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
+      }).setOrigin(0.5).setStroke('#1c2530', 4);
     } else {
-      this.startBtn = UiKit.makeButton(this, width / 2, 610, 'Start Run', () => {
+      this.startBtn = UiKit.makeButton(this, width / 2, 990, 'Start Run', () => {
         if (gameState.team.length === 0) return;
         gameState.resetRun();
         gameState.startStage(FIRST_STAGE_ID);
@@ -70,22 +70,22 @@ class RosterScene extends Phaser.Scene {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
     const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true });
-    const rarityDot = this.add.circle(x - 58, y - 48, 6, rarity.color).setStrokeStyle(1, 0x1c2530);
-    const selectionRing = this.add.rectangle(x, y, 142, 122, 0xffffff, 0).setStrokeStyle(3, 0x4caf50).setVisible(false);
-    const sprite = this.add.sprite(x, y - 40, species.sheetKey, species.frame).setScale(0.95);
-    const name = this.add.text(x, y - 10, `${species.name}  Lv.${entry.level}`, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#f5f7fa'
+    const rarityDot = this.add.circle(x - 87, y - 72, 9, rarity.color).setStrokeStyle(2, 0x1c2530);
+    const selectionRing = this.add.rectangle(x, y, 213, 183, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);
+    const sprite = this.add.sprite(x, y - 60, species.sheetKey, species.frame).setScale(1.4);
+    const name = this.add.text(x, y - 15, `${species.name}  Lv.${entry.level}`, {
+      fontFamily: 'monospace', fontSize: '17px', color: '#f5f7fa'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    const stats = this.add.text(x, y + 8, '', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#e8ecf5'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    const stats = this.add.text(x, y + 5, '', {
-      fontFamily: 'monospace', fontSize: '10px', color: '#e8ecf5'
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
-    const essenceText = this.add.text(x, y + 19, '', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#f5c94b'
-    }).setOrigin(0.5).setStroke('#1c2530', 2);
+    const essenceText = this.add.text(x, y + 29, '', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#f5c94b'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    const upgradeBg = this.add.rectangle(x, y + 38, 116, 20, 0x394258).setStrokeStyle(1, 0x5a6478);
-    const upgradeText = this.add.text(x, y + 38, '', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#f5f7fa'
+    const upgradeBg = this.add.rectangle(x, y + 57, 174, 30, 0x394258).setStrokeStyle(2, 0x5a6478);
+    const upgradeText = this.add.text(x, y + 57, '', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#f5f7fa'
     }).setOrigin(0.5);
 
     const card = { bg, selectionRing, sprite, name, stats, essenceText, upgradeBg, upgradeText, speciesId: entry.speciesId, rarityColor: rarity.color };
@@ -174,6 +174,6 @@ class RosterScene extends Phaser.Scene {
 
   backBtn(target, onClick) {
     const label = target === 'HubScene' ? '< Hub' : '< Menu';
-    UiKit.makeLink(this, 24, 24, label, onClick, { originX: 0, originY: 0 });
+    UiKit.makeLink(this, 30, 30, label, onClick, { originX: 0, originY: 0 });
   }
 }
