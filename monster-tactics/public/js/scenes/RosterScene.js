@@ -6,9 +6,12 @@ class RosterScene extends Phaser.Scene {
   create() {
     const { width } = this.scale;
 
+    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
+    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+
     this.add.text(width / 2, 40, 'TEAM SELECT', {
       fontFamily: 'monospace', fontSize: '28px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
     const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
     this.backBtn(backTarget, () => this.scene.start(backTarget));
@@ -19,15 +22,15 @@ class RosterScene extends Phaser.Scene {
     const rosterEntries = Object.values(gameState.roster);
     if (rosterEntries.length === 0) {
       this.add.text(width / 2, 260, 'No monsters yet.\nVisit the Sanctuary first!', {
-        fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b8', align: 'center'
-      }).setOrigin(0.5);
-      this.makeButton(width / 2, 360, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
+        fontFamily: 'monospace', fontSize: '18px', color: '#c8ceda', align: 'center'
+      }).setOrigin(0.5).setStroke('#1c2530', 3);
+      UiKit.makeButton(this, width / 2, 360, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
       return;
     }
 
     this.teamLabel = this.add.text(width / 2, 90, '', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '16px', color: '#e8ecf5'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.updateTeamLabel();
 
     this.cards = [];
@@ -50,15 +53,15 @@ class RosterScene extends Phaser.Scene {
       // (it's what picked gameState.pendingStageId), so send the player
       // back there rather than duplicating that decision here.
       this.add.text(width / 2, 610, "Head back to the Hub when you're ready", {
-        fontFamily: 'monospace', fontSize: '13px', color: '#5a6478'
-      }).setOrigin(0.5);
+        fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda'
+      }).setOrigin(0.5).setStroke('#1c2530', 3);
     } else {
-      this.startBtn = this.makeButton(width / 2, 610, 'Start Run', () => {
+      this.startBtn = UiKit.makeButton(this, width / 2, 610, 'Start Run', () => {
         if (gameState.team.length === 0) return;
         gameState.resetRun();
         gameState.startStage(FIRST_STAGE_ID);
         this.scene.start('BattleScene');
-      });
+      }, { size: 'large' });
       this.refreshStartBtn();
     }
   }
@@ -66,25 +69,26 @@ class RosterScene extends Phaser.Scene {
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
-    const bg = this.add.rectangle(x, y, 138, 118, 0x2a3040).setStrokeStyle(2, rarity.color);
+    const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true });
+    const rarityDot = this.add.circle(x - 58, y - 48, 6, rarity.color).setStrokeStyle(1, 0x1c2530);
+    const selectionRing = this.add.rectangle(x, y, 142, 122, 0xffffff, 0).setStrokeStyle(3, 0x4caf50).setVisible(false);
     const sprite = this.add.sprite(x, y - 40, species.sheetKey, species.frame).setScale(0.95);
     const name = this.add.text(x, y - 10, `${species.name}  Lv.${entry.level}`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#f5f7fa'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     const stats = this.add.text(x, y + 5, '', {
-      fontFamily: 'monospace', fontSize: '10px', color: '#9aa4b8'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '10px', color: '#e8ecf5'
+    }).setOrigin(0.5).setStroke('#1c2530', 2);
     const essenceText = this.add.text(x, y + 19, '', {
       fontFamily: 'monospace', fontSize: '9px', color: '#f5c94b'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 2);
 
     const upgradeBg = this.add.rectangle(x, y + 38, 116, 20, 0x394258).setStrokeStyle(1, 0x5a6478);
     const upgradeText = this.add.text(x, y + 38, '', {
       fontFamily: 'monospace', fontSize: '9px', color: '#f5f7fa'
     }).setOrigin(0.5);
 
-    bg.setInteractive({ useHandCursor: true });
-    const card = { bg, sprite, name, stats, essenceText, upgradeBg, upgradeText, speciesId: entry.speciesId, rarityColor: rarity.color };
+    const card = { bg, selectionRing, sprite, name, stats, essenceText, upgradeBg, upgradeText, speciesId: entry.speciesId, rarityColor: rarity.color };
     this.cards.push(card);
     this.refreshCard(card);
 
@@ -125,8 +129,7 @@ class RosterScene extends Phaser.Scene {
     const effective = getEffectiveStats(species, entry.level);
 
     const selected = gameState.team.includes(card.speciesId);
-    card.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0x4caf50 : card.rarityColor);
-    card.bg.setFillStyle(selected ? 0x223428 : 0x2a3040);
+    card.selectionRing.setVisible(selected);
 
     card.name.setText(`${species.name}  Lv.${entry.level}`);
     card.stats.setText(`HP ${effective.maxHp} / ATK ${effective.attack}`);
@@ -165,37 +168,12 @@ class RosterScene extends Phaser.Scene {
   refreshStartBtn() {
     if (!this.startBtn) return; // no Start Run button mid-run - see create()
     const ready = gameState.team.length > 0;
-    this.startBtn.bg.setFillStyle(ready ? 0x2a3040 : 0x1c202a);
-    this.startBtn.text.setColor(ready ? '#f5f7fa' : '#5a6478');
-  }
-
-  makeButton(x, y, label, onClick) {
-    const w = 240, h = 52;
-    const bg = this.add.rectangle(x, y, w, h, 0x2a3040).setStrokeStyle(2, 0x4a5468);
-    const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#f5f7fa'
-    }).setOrigin(0.5);
-
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => bg.setFillStyle(0x394258));
-    bg.on('pointerout', () => this.refreshStartBtnColor(bg));
-    bg.on('pointerdown', onClick);
-
-    return { bg, text };
-  }
-
-  refreshStartBtnColor(bg) {
-    const ready = gameState.team.length > 0;
-    bg.setFillStyle(ready ? 0x2a3040 : 0x1c202a);
+    this.startBtn.bg.setTint(ready ? 0xffffff : 0x777777);
+    this.startBtn.text.setColor(ready ? '#f5f7fa' : '#8a95ab');
   }
 
   backBtn(target, onClick) {
     const label = target === 'HubScene' ? '< Hub' : '< Menu';
-    const text = this.add.text(24, 24, label, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
-    }).setInteractive({ useHandCursor: true });
-    text.on('pointerover', () => text.setColor('#f5f7fa'));
-    text.on('pointerout', () => text.setColor('#9aa4b8'));
-    text.on('pointerdown', onClick);
+    UiKit.makeLink(this, 24, 24, label, onClick, { originX: 0, originY: 0 });
   }
 }

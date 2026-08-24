@@ -79,19 +79,41 @@ class BattleScene extends Phaser.Scene {
   // ---------- setup ----------
 
   drawGrid() {
-    const g = this.add.graphics();
-
-    // Road surface first, so grid lines still show through it.
-    g.fillStyle(0x3a3020, 1);
+    // Grass fills the whole grid; path tiles lay on top only on path cells -
+    // both are hand-authored 64x64 seamless textures (see README.md), so
+    // there's no visible tiling seam within either surface.
+    this.add.tileSprite(
+      GRID_X + (GRID_COLS * CELL) / 2, GRID_Y + (GRID_ROWS * CELL) / 2,
+      GRID_COLS * CELL, GRID_ROWS * CELL, 'tile-grass'
+    );
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         if (this.isPathCell(c, r)) {
-          g.fillRect(GRID_X + c * CELL, GRID_Y + r * CELL, CELL, CELL);
+          const { x, y } = this.cellToPixel(c, r);
+          this.add.image(x, y, 'tile-path');
         }
       }
     }
 
-    g.lineStyle(1, 0x2a3040, 1);
+    this.drawMapDecorations();
+
+    const g = this.add.graphics();
+
+    // A dark rim where path meets grass reads the road's shape clearly even
+    // where the faint grid lines below are hard to see against the texture.
+    g.lineStyle(2, 0x33210f, 0.85);
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (!this.isPathCell(c, r)) continue;
+        const x0 = GRID_X + c * CELL, y0 = GRID_Y + r * CELL;
+        if (!this.isPathCell(c, r - 1)) g.lineBetween(x0, y0, x0 + CELL, y0);
+        if (!this.isPathCell(c, r + 1)) g.lineBetween(x0, y0 + CELL, x0 + CELL, y0 + CELL);
+        if (!this.isPathCell(c - 1, r)) g.lineBetween(x0, y0, x0, y0 + CELL);
+        if (!this.isPathCell(c + 1, r)) g.lineBetween(x0 + CELL, y0, x0 + CELL, y0 + CELL);
+      }
+    }
+
+    g.lineStyle(1, 0xf5f7fa, 0.12);
     for (let c = 0; c <= GRID_COLS; c++) {
       g.lineBetween(GRID_X + c * CELL, GRID_Y, GRID_X + c * CELL, GRID_Y + GRID_ROWS * CELL);
     }
@@ -126,33 +148,46 @@ class BattleScene extends Phaser.Scene {
       .setStrokeStyle(1, 0xffffff, 0.5).setDepth(-5).setVisible(false);
   }
 
+  // Purely cosmetic dressing in the margins flanking the grid - fixed
+  // positions (not random) so a stage always looks the same on replay, and
+  // kept clear of the HUD strip, bench row, and the grid's own interactive
+  // zones so nothing here can ever intercept a click meant for the game.
+  drawMapDecorations() {
+    const left = GRID_X - 70;
+    const right = GRID_X + GRID_COLS * CELL + 70;
+    this.add.sprite(left, GRID_Y + 40, 'tree-1').play('tree-1-sway').setScale(0.55);
+    this.add.sprite(left - 10, GRID_Y + 190, 'bush-1').play('bush-1-sway').setScale(0.7);
+    this.add.image(left, GRID_Y + 300, 'rock-2').setScale(0.9);
+    this.add.sprite(right, GRID_Y + 60, 'tree-2').play('tree-2-sway').setScale(0.5);
+    this.add.image(right + 5, GRID_Y + 210, 'rock-3').setScale(0.9);
+    this.add.sprite(right, GRID_Y + 320, 'bush-2').play('bush-2-sway').setScale(0.65);
+  }
+
   buildHud() {
+    this.add.image(480, 33, 'panel-hud');
     this.hudText = this.add.text(20, 20, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#f5f7fa'
     });
 
-    this.backBtn = this.add.text(this.scale.width - 20, 20, 'Menu >', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    this.backBtn.on('pointerdown', () => this.scene.start('MenuScene'));
-    this.backBtn.on('pointerover', () => this.backBtn.setColor('#f5f7fa'));
-    this.backBtn.on('pointerout', () => this.backBtn.setColor('#9aa4b8'));
+    this.backBtn = UiKit.makeLink(this, this.scale.width - 20, 20, 'Menu >', () => this.scene.start('MenuScene'), {
+      originX: 1, originY: 0
+    });
 
-    this.startWaveBtn = this.makeButton(this.scale.width / 2, 88, 'Start Wave', () => {
+    this.startWaveBtn = UiKit.makeButton(this, this.scale.width / 2, 88, 'Start Wave', () => {
       if (this.phase === 'placement' && this.allies.length > 0) this.startWave();
     });
   }
 
   buildBench() {
     this.benchLabel = this.add.text(20, 490, 'Bench (click, then click an empty non-path cell):', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
-    });
+      fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda'
+    }).setStroke('#1c2530', 3);
     this.benchIcons = [];
     this.layoutBench();
   }
 
   layoutBench() {
-    this.benchIcons.forEach(i => { i.bg.destroy(); i.sprite.destroy(); i.costText.destroy(); });
+    this.benchIcons.forEach(i => { i.bg.destroy(); i.selectionRing.destroy(); i.sprite.destroy(); i.costText.destroy(); });
     this.benchIcons = [];
 
     const startX = 60, y = 585, spacing = 64;
@@ -160,43 +195,44 @@ class BattleScene extends Phaser.Scene {
       const species = getSpecies(entry.speciesId);
       const rarity = RARITY[species.rarity];
       const x = startX + i * spacing;
-      const bg = this.add.rectangle(x, y, 52, 52, 0x2a3040).setStrokeStyle(2, rarity.color);
+      const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(52, 52).setTint(rarity.color);
+      const selectionRing = this.add.rectangle(x, y, 56, 56, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false);
       const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(0.9);
       const costText = this.add.text(x, y + 32, `${species.cost}c`, {
         fontFamily: 'monospace', fontSize: '11px', color: '#f5c94b'
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setStroke('#1c2530', 2);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => this.onBenchClicked(entry.speciesId));
-      const icon = { bg, sprite, costText, speciesId: entry.speciesId };
+      const icon = { bg, selectionRing, sprite, costText, speciesId: entry.speciesId };
       this.benchIcons.push(icon);
       this.refreshBenchIcon(icon);
     });
   }
 
   refreshBenchIcon(icon) {
-    const selected = this.selectedBenchSpeciesId === icon.speciesId;
-    icon.bg.setStrokeStyle(selected ? 3 : 2, selected ? 0xf5c94b : icon.bg.strokeColor);
+    icon.selectionRing.setVisible(this.selectedBenchSpeciesId === icon.speciesId);
   }
 
   buildOverlay() {
     const { width, height } = this.scale;
     this.overlayBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setVisible(false);
+    this.overlayPanel = this.add.image(width / 2, height / 2, 'panel-overlay').setVisible(false);
     this.overlayTitle = this.add.text(width / 2, height / 2 - 60, '', {
       fontFamily: 'monospace', fontSize: '30px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 5).setVisible(false);
     this.overlaySub = this.add.text(width / 2, height / 2 - 10, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
-    }).setOrigin(0.5).setVisible(false);
+    }).setOrigin(0.5).setStroke('#1c2530', 3).setVisible(false);
 
-    this.overlayPrimaryBtn = this.makeButton(width / 2, height / 2 + 50, '', () => {});
-    this.overlaySecondaryBtn = this.makeButton(width / 2, height / 2 + 115, 'Return to Menu', () => {
+    this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 50, '', () => {});
+    this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 115, 'Return to Menu', () => {
       this.scene.start('MenuScene');
     });
     this.setOverlayVisible(false);
   }
 
   setOverlayVisible(visible) {
-    [this.overlayBg, this.overlayTitle, this.overlaySub,
+    [this.overlayBg, this.overlayPanel, this.overlayTitle, this.overlaySub,
       this.overlayPrimaryBtn.bg, this.overlayPrimaryBtn.text,
       this.overlaySecondaryBtn.bg, this.overlaySecondaryBtn.text].forEach(o => o.setVisible(visible));
   }
@@ -303,8 +339,8 @@ class BattleScene extends Phaser.Scene {
     const ready = this.phase === 'placement' && this.allies.length > 0;
     this.startWaveBtn.bg.setVisible(this.phase === 'placement');
     this.startWaveBtn.text.setVisible(this.phase === 'placement');
-    this.startWaveBtn.bg.setFillStyle(ready ? 0x2a3040 : 0x1c202a);
-    this.startWaveBtn.text.setColor(ready ? '#f5f7fa' : '#5a6478');
+    this.startWaveBtn.bg.setTint(ready ? 0xffffff : 0x777777);
+    this.startWaveBtn.text.setColor(ready ? '#f5f7fa' : '#8a95ab');
   }
 
   // ---------- wave logic ----------
@@ -664,20 +700,5 @@ class BattleScene extends Phaser.Scene {
 
   cellToPixel(col, row) {
     return { x: GRID_X + col * CELL + CELL / 2, y: GRID_Y + row * CELL + CELL / 2 };
-  }
-
-  makeButton(x, y, label, onClick) {
-    const w = 200, h = 44;
-    const bg = this.add.rectangle(x, y, w, h, 0x2a3040).setStrokeStyle(2, 0x4a5468);
-    const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5f7fa'
-    }).setOrigin(0.5);
-
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => bg.setFillStyle(0x394258));
-    bg.on('pointerout', () => bg.setFillStyle(0x2a3040));
-    bg.on('pointerdown', onClick);
-
-    return { bg, text };
   }
 }

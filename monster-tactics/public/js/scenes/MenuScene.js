@@ -11,37 +11,28 @@ class MenuScene extends Phaser.Scene {
     // button to the Hub instead of here.
     gameState.runActive = false;
 
+    this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.55);
+
+    this.add.sprite(width / 2, 88, 'tree-1').play('tree-1-sway').setScale(0.7).setAlpha(0.5);
+    this.add.sprite(width - 90, 100, 'tree-2').play('tree-2-sway').setScale(0.6).setAlpha(0.5);
+
     this.add.text(width / 2, 120, 'MONSTER TACTICS', {
       fontFamily: 'monospace', fontSize: '48px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 5);
 
     this.add.text(width / 2, 170, 'hatch monsters, place them along the path, hold the line', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '16px', color: '#c8ceda'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
     this.add.text(width / 2, 250, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
-      fontFamily: 'monospace', fontSize: '18px', color: '#c8ceda'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '18px', color: '#e8ecf5'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.add.text(width / 2, 278, `Essence: ${gameState.essence}`, {
       fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    this.makeButton(width / 2, 340, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'));
-    this.makeButton(width / 2, 410, 'Team & Battle', () => this.scene.start('RosterScene'));
-  }
-
-  makeButton(x, y, label, onClick) {
-    const w = 260, h = 56;
-    const bg = this.add.rectangle(x, y, w, h, 0x2a3040).setStrokeStyle(2, 0x4a5468);
-    const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '18px', color: '#f5f7fa'
-    }).setOrigin(0.5);
-
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => bg.setFillStyle(0x394258));
-    bg.on('pointerout', () => bg.setFillStyle(0x2a3040));
-    bg.on('pointerdown', onClick);
-
-    return { bg, text };
+    UiKit.makeButton(this, width / 2, 340, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 410, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
   }
 }

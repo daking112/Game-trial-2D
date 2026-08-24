@@ -18,11 +18,37 @@ class PreloadScene extends Phaser.Scene {
       frameWidth: 56,
       frameHeight: 56
     });
+
+    // Hand-authored seamless ground tiles (see scripts note in README.md -
+    // procedurally generated, not sourced from any asset pack).
+    this.load.image('tile-grass', 'assets/tiles/grass.png');
+    this.load.image('tile-path', 'assets/tiles/path.png');
+
+    // UI buttons/panels: stitched from Tiny Swords' fragmented 3x3 nine-slice
+    // sheets (BigBlueButton_Regular.png, WoodTable.png) into flattened
+    // textures at the exact sizes this game uses - see README.md.
+    this.load.image('btn-large', 'assets/ui/btn-large.png');
+    this.load.image('btn-medium', 'assets/ui/btn-medium.png');
+    this.load.image('panel-hud', 'assets/ui/panel-hud.png');
+    this.load.image('panel-overlay', 'assets/ui/panel-overlay.png');
+    this.load.image('panel-card-roster', 'assets/ui/panel-card-roster.png');
+    this.load.image('panel-card-hub', 'assets/ui/panel-card-hub.png');
+    this.load.image('panel-card-banner', 'assets/ui/panel-card-banner.png');
+    this.load.image('panel-egg', 'assets/ui/panel-egg.png');
+    this.load.image('bench-slot', 'assets/ui/bench-slot.png');
+
+    // Tiny Swords decorations, used as-is to dress the battle grid border.
+    this.load.image('rock-1', 'assets/decor/rock-1.png');
+    this.load.image('rock-2', 'assets/decor/rock-2.png');
+    this.load.image('rock-3', 'assets/decor/rock-3.png');
+    this.load.image('rock-4', 'assets/decor/rock-4.png');
+    this.load.spritesheet('bush-1', 'assets/decor/bush-1.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('bush-2', 'assets/decor/bush-2.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('tree-1', 'assets/decor/tree-1.png', { frameWidth: 192, frameHeight: 256 });
+    this.load.spritesheet('tree-2', 'assets/decor/tree-2.png', { frameWidth: 192, frameHeight: 256 });
   }
 
   create() {
-    this.generatePlaceholderTextures();
-
     this.anims.create({
       key: 'hit-spark-anim',
       frames: this.anims.generateFrameNumbers('hit-spark', { start: 0, end: 7 }),
@@ -30,20 +56,23 @@ class PreloadScene extends Phaser.Scene {
       hideOnComplete: true
     });
 
+    this.anims.create({
+      key: 'bush-1-sway', frames: this.anims.generateFrameNumbers('bush-1', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+    this.anims.create({
+      key: 'bush-2-sway', frames: this.anims.generateFrameNumbers('bush-2', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+    this.anims.create({
+      key: 'tree-1-sway', frames: this.anims.generateFrameNumbers('tree-1', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+    this.anims.create({
+      key: 'tree-2-sway', frames: this.anims.generateFrameNumbers('tree-2', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+
     this.scene.start('MenuScene');
-  }
-
-  generatePlaceholderTextures() {
-    const g = this.add.graphics();
-
-    // Flat UI panel texture (a plain rounded rect) used for buttons/cards.
-    g.clear();
-    g.fillStyle(0x2a3040, 1);
-    g.fillRoundedRect(0, 0, 64, 64, 10);
-    g.lineStyle(2, 0x4a5468, 1);
-    g.strokeRoundedRect(1, 1, 62, 62, 10);
-    g.generateTexture('ui-panel', 64, 64);
-
-    g.destroy();
   }
 }

@@ -1,0 +1,11 @@
+
+Source: Tiny Swords asset pack by Pixel Frog - https://pixelfrog-assets.itch.io/tiny-swords
+(via this repo's tinyswords/ project, which vendors a curated subset of the pack)
+
+Files in this directory (btn-*.png, panel-*.png, bench-slot.png) are
+flattened compositions built from that pack's button/wood-table nine-slice
+sheets - see the stitching script referenced in monster-tactics/README.md.
+../decor/*.png are used unmodified from the same pack.
+
+Check the original asset page for full license terms before reuse outside
+this project.

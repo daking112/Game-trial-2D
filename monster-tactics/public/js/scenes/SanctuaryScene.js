@@ -20,12 +20,15 @@ class SanctuaryScene extends Phaser.Scene {
     this.view = 'banners';
     const { width } = this.scale;
 
+    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
+    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+
     this.add.text(width / 2, 40, 'MONSTER SANCTUARY', {
       fontFamily: 'monospace', fontSize: '26px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
     this.add.text(width / 2, 68, `Essence: ${gameState.essence}`, {
       fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
     const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
     this.backBtn(backTarget, () => this.scene.start(backTarget));
@@ -42,19 +45,18 @@ class SanctuaryScene extends Phaser.Scene {
   }
 
   buildBannerCard(banner, x, y, w, h) {
-    const bg = this.add.rectangle(x, y, w, h, 0x2a3040).setStrokeStyle(2, 0x4a5468);
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => bg.setFillStyle(0x394258));
-    bg.on('pointerout', () => bg.setFillStyle(0x2a3040));
+    const bg = this.add.image(x, y, 'panel-card-banner').setInteractive({ useHandCursor: true });
+    bg.on('pointerover', () => bg.setScale(1.03));
+    bg.on('pointerout', () => bg.setScale(1));
     bg.on('pointerdown', () => this.showPullView(banner));
 
     this.add.text(x, y - 32, banner.icon, { fontSize: '28px' }).setOrigin(0.5);
     this.add.text(x, y - 2, banner.name, {
       fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.add.text(x, y + 20, banner.blurb, {
-      fontFamily: 'monospace', fontSize: '10px', color: '#9aa4b8', align: 'center', wordWrap: { width: w - 20 }
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '10px', color: '#e8ecf5', align: 'center', wordWrap: { width: w - 20 }
+    }).setOrigin(0.5).setStroke('#1c2530', 2);
   }
 
   // ---------- pull view ----------
@@ -65,41 +67,39 @@ class SanctuaryScene extends Phaser.Scene {
     this.activeBanner = banner;
     const { width } = this.scale;
 
+    this.add.tileSprite(width / 2, 320, width, 640, 'tile-grass');
+    this.add.rectangle(width / 2, 320, width, 640, 0x12151d, 0.68);
+
     this.add.text(width / 2, 40, `${banner.icon} ${banner.name.toUpperCase()}`, {
       fontFamily: 'monospace', fontSize: '24px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
-    const backText = this.add.text(24, 24, '< Banners', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
-    }).setInteractive({ useHandCursor: true });
-    backText.on('pointerover', () => backText.setColor('#f5f7fa'));
-    backText.on('pointerout', () => backText.setColor('#9aa4b8'));
-    backText.on('pointerdown', () => this.showBannerList());
+    UiKit.makeLink(this, 24, 24, '< Banners', () => this.showBannerList(), { originX: 0, originY: 0 });
 
     this.essenceText = this.add.text(width / 2, 78, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.updateEssenceText();
 
-    this.eggSprite = this.add.rectangle(width / 2, 210, 90, 90, 0x394258).setStrokeStyle(3, 0xf5c94b);
+    this.eggSprite = this.add.image(width / 2, 210, 'panel-egg');
     this.eggLabel = this.add.text(width / 2, 210, '?', {
       fontFamily: 'monospace', fontSize: '36px', color: '#f5c94b', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
 
     this.resultSprite = null;
     this.resultText = this.add.text(width / 2, 310, '', {
       fontFamily: 'monospace', fontSize: '18px', color: '#f5f7fa', align: 'center'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     this.resultSubText = this.add.text(width / 2, 335, '', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8', align: 'center'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '13px', color: '#c8ceda', align: 'center'
+    }).setOrigin(0.5).setStroke('#1c2530', 2);
 
-    this.openBtn = this.makeButton(width / 2, 410, `Open Egg (${EGG_COST} essence)`, () => this.openEgg());
+    this.openBtn = UiKit.makeButton(this, width / 2, 410, `Open Egg (${EGG_COST} essence)`, () => this.openEgg(), { size: 'large' });
     this.refreshOpenBtn();
 
     this.oddsText = this.add.text(width / 2, 470, this.oddsString(banner), {
-      fontFamily: 'monospace', fontSize: '11px', color: '#5a6478', align: 'center'
-    }).setOrigin(0.5);
+      fontFamily: 'monospace', fontSize: '11px', color: '#c8ceda', align: 'center'
+    }).setOrigin(0.5).setStroke('#1c2530', 2);
   }
 
   oddsString(banner) {
@@ -115,8 +115,8 @@ class SanctuaryScene extends Phaser.Scene {
 
   refreshOpenBtn() {
     const affordable = gameState.essence >= EGG_COST;
-    this.openBtn.bg.setFillStyle(affordable ? 0x2a3040 : 0x1c202a);
-    this.openBtn.text.setColor(affordable ? '#f5f7fa' : '#5a6478');
+    this.openBtn.bg.setTint(affordable ? 0xffffff : 0x777777);
+    this.openBtn.text.setColor(affordable ? '#f5f7fa' : '#8a95ab');
   }
 
   openEgg() {
@@ -165,28 +165,8 @@ class SanctuaryScene extends Phaser.Scene {
     }
   }
 
-  makeButton(x, y, label, onClick) {
-    const w = 260, h = 52;
-    const bg = this.add.rectangle(x, y, w, h, 0x2a3040).setStrokeStyle(2, 0x4a5468);
-    const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#f5f7fa'
-    }).setOrigin(0.5);
-
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => bg.setFillStyle(0x394258));
-    bg.on('pointerout', () => this.refreshOpenBtn());
-    bg.on('pointerdown', onClick);
-
-    return { bg, text };
-  }
-
   backBtn(target, onClick) {
     const label = target === 'HubScene' ? '< Hub' : '< Menu';
-    const text = this.add.text(24, 24, label, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
-    }).setInteractive({ useHandCursor: true });
-    text.on('pointerover', () => text.setColor('#f5f7fa'));
-    text.on('pointerout', () => text.setColor('#9aa4b8'));
-    text.on('pointerdown', onClick);
+    UiKit.makeLink(this, 24, 24, label, onClick, { originX: 0, originY: 0 });
   }
 }
