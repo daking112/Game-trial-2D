@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "name": "Retromon Big Packs (Willibab)",
+    "description": "Creature art for Monster Tactics. Source: 'Retromon Big Pack 1-4' by Willibab (https://willibab.itch.io/). Free for personal/commercial use with credit - see LICENSE.txt. The original sheets ship with an opaque near-white background baked into every frame (not real alpha transparency); each frame here was re-exported with a border flood-fill so the background is transparent while enclosed white details (eyes, teeth, highlights) are preserved.",
+    "basePath": "assets/retromon/",
+    "license": "LICENSE.txt (bundled)",
+    "credit": "Willibab - https://willibab.itch.io/"
+  },
+  "sheets": [
+    { "key": "retromon-b1", "path": "big-pack-1.png", "width": 504, "height": 448, "frameWidth": 56, "frameHeight": 56, "columns": 9, "rows": 8, "frameCount": 72, "status": "wired into data/monsters.js" },
+    { "key": "retromon-b2", "path": "big-pack-2.png", "width": 504, "height": 448, "frameWidth": 56, "frameHeight": 56, "columns": 9, "rows": 8, "frameCount": 72, "status": "available, not yet referenced by any species" },
+    { "key": "retromon-b3", "path": "big-pack-3.png", "width": 504, "height": 448, "frameWidth": 56, "frameHeight": 56, "columns": 9, "rows": 8, "frameCount": 72, "status": "available, not yet referenced by any species" },
+    { "key": "retromon-b4", "path": "big-pack-4.png", "width": 504, "height": 448, "frameWidth": 56, "frameHeight": 56, "columns": 9, "rows": 8, "frameCount": 72, "status": "available, not yet referenced by any species" }
+  ],
+  "frameIndexing": "Frame index = row * 9 + col (Phaser's default row-major order for a loaded spritesheet), 0-indexed from the top-left.",
+  "wiredSpecies": {
+    "note": "Current SPECIES/ENEMY_SPECIES entries in data/monsters.js all use sheetKey 'retromon-b1'. Enemy species are the evolved form of the same visual line as the matching player species, so wave 'monsters' are the grown-up version of what you can catch.",
+    "players": [
+      { "id": "rollpup", "frame": 0 }, { "id": "snarlpup", "frame": 3 }, { "id": "hornlet", "frame": 6 },
+      { "id": "puffle", "frame": 27 }, { "id": "snoutling", "frame": 30 }, { "id": "grubcoil", "frame": 49 },
+      { "id": "icewhelp", "frame": 65 }
+    ],
+    "enemies": [
+      { "id": "widow", "frame": 33 }, { "id": "rollodon", "frame": 2 }, { "id": "ragefang", "frame": 5 }, { "id": "tuskram", "frame": 8 }
+    ]
+  },
+  "unusedFrames": "big-pack-1.png has 72 frames total and only 8 are wired up (see wiredSpecies above) - there's a lot of room to add more species from the same sheet before touching big-pack-2/3/4.",
+  "moreMaterialNotYetProcessed": {
+    "location": "../retromon-raw/ (sibling folder, still zipped as .7z)",
+    "contents": [
+      "Retromon Pack 1/2/3/4/5.7z and Retromon_Super_Pack_01/02.7z - these are NOT simple per-cell monster grids like the Big Packs. They're Willibab's palette-recolor reference sheets: multiple color-variant panels of the same creatures plus swatch columns, laid out irregularly. A naive fixed-grid slice (which is what was tried initially) produces garbage - each would need manual per-panel cropping to be useful.",
+      "Willibab_Trainer_Sprites.png / Willibab_Alternative_Back_Sprites.png - player/trainer character walk sprites. Same opaque-background issue as the Big Packs (blue matte this time, not white) - not yet defringed or wired into any scene."
+    ]
+  }
+}
