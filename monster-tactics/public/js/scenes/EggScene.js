@@ -84,9 +84,13 @@ class EggScene extends Phaser.Scene {
     });
 
     const rarity = RARITY[species.rarity];
+    const archetype = COMBAT_ARCHETYPES[species.type];
     this.resultText.setColor(Phaser.Display.Color.IntegerToColor(rarity.color).rgba);
     this.resultText.setText(`${rarity.label}: ${species.name}!`);
-    this.resultSubText.setText(`Type ${species.type}   HP ${species.maxHp} / ATK ${species.attack}   Tower cost ${species.cost}`);
+    this.resultSubText.setText(
+      `Type ${species.type}   HP ${species.maxHp} / ATK ${species.attack}   Tower cost ${species.cost}\n` +
+      `Attack: ${archetype.attackLabel}   Ability: ${archetype.abilityLabel}`
+    );
   }
 
   makeButton(x, y, label, onClick) {

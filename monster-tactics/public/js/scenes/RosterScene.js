@@ -30,7 +30,7 @@ class RosterScene extends Phaser.Scene {
 
     this.cards = [];
     const cols = 4;
-    const cardW = 150, cardH = 130;
+    const cardW = 150, cardH = 160;
     const startX = width / 2 - ((Math.min(cols, gameState.roster.length) - 1) * cardW) / 2;
     const startY = 180;
 
@@ -51,17 +51,24 @@ class RosterScene extends Phaser.Scene {
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
-    const bg = this.add.rectangle(x, y, 130, 120, 0x2a3040).setStrokeStyle(2, rarity.color);
-    const sprite = this.add.sprite(x, y - 30, species.sheetKey, species.frame).setScale(1.1);
-    const name = this.add.text(x, y + 8, species.name, {
+    const archetype = COMBAT_ARCHETYPES[species.type];
+    const bg = this.add.rectangle(x, y, 130, 150, 0x2a3040).setStrokeStyle(2, rarity.color);
+    const sprite = this.add.sprite(x, y - 40, species.sheetKey, species.frame).setScale(1.1);
+    const name = this.add.text(x, y - 3, species.name, {
       fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa'
     }).setOrigin(0.5);
-    const stats = this.add.text(x, y + 27, `HP ${species.maxHp} / ATK ${species.attack}`, {
+    const stats = this.add.text(x, y + 15, `HP ${species.maxHp} / ATK ${species.attack}`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#9aa4b8'
+    }).setOrigin(0.5);
+    const atkLabel = this.add.text(x, y + 32, `ATK: ${archetype.attackLabel}`, {
+      fontFamily: 'monospace', fontSize: '9px', color: '#c8ceda'
+    }).setOrigin(0.5);
+    const ablLabel = this.add.text(x, y + 45, `ABL: ${archetype.abilityLabel}`, {
+      fontFamily: 'monospace', fontSize: '9px', color: '#f5c94b'
     }).setOrigin(0.5);
 
     bg.setInteractive({ useHandCursor: true });
-    const card = { bg, sprite, name, stats, uid: entry.uid, rarityColor: rarity.color };
+    const card = { bg, sprite, name, stats, atkLabel, ablLabel, uid: entry.uid, rarityColor: rarity.color };
     this.cards.push(card);
     this.refreshCard(card);
 

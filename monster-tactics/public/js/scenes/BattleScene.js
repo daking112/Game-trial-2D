@@ -255,7 +255,7 @@ class BattleScene extends Phaser.Scene {
     const ally = {
       uid: entry.uid, species, col, row,
       hp: species.maxHp, maxHp: species.maxHp,
-      nextAttackTime: 0, sprite,
+      nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite,
       hpBg: this.add.rectangle(x, y - 26, 40, 5, 0x1c202a),
       hpFill: this.add.rectangle(x - 20, y - 26, 40, 5, 0x4caf50).setOrigin(0, 0.5)
     };
@@ -304,7 +304,7 @@ class BattleScene extends Phaser.Scene {
     const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.0);
     const enemy = {
       species: es, x: spawn.x, y: spawn.y, waypointIndex: 0,
-      hp: es.maxHp, maxHp: es.maxHp,
+      hp: es.maxHp, maxHp: es.maxHp, statusEffects: {},
       sprite,
       hpBg: this.add.rectangle(spawn.x, spawn.y - 26, 40, 5, 0x1c202a),
       hpFill: this.add.rectangle(spawn.x - 20, spawn.y - 26, 40, 5, 0xe0562f).setOrigin(0, 0.5)
@@ -325,6 +325,13 @@ class BattleScene extends Phaser.Scene {
       }
     }
 
+    // status effects (burn/poison ticks, slow expiry) before movement so a
+    // fresh slow affects this frame's step and a fatal DoT tick is caught by
+    // the dead-enemy sweep later in this same frame.
+    for (const enemy of this.enemies) {
+      this.processStatusEffects(enemy, time);
+    }
+
     // enemy movement along the path
     const escaped = [];
     for (const enemy of this.enemies) {
@@ -333,7 +340,7 @@ class BattleScene extends Phaser.Scene {
 
       const dx = target.x - enemy.x, dy = target.y - enemy.y;
       const dist = Math.hypot(dx, dy);
-      const step = enemy.species.speed * (delta / 1000);
+      const step = enemy.species.speed * this.enemySpeedMultiplier(enemy) * (delta / 1000);
 
       if (dist <= step) {
         enemy.x = target.x; enemy.y = target.y;
@@ -357,21 +364,34 @@ class BattleScene extends Phaser.Scene {
       this.enemies = this.enemies.filter(e => !escaped.includes(e));
     }
 
-    // ally attacks
+    // passive auras (Normal-type towers buffing nearby allies) before attacks
+    // so a freshly-buffed attack speed applies this frame.
+    this.applyAuras(time);
+
+    // ally attacks + abilities
     for (const ally of this.allies) {
-      if (time < ally.nextAttackTime) continue;
-      const center = this.cellToPixel(ally.col, ally.row);
-      const rangePx = ally.species.range * CELL;
-      let target = null;
-      let bestDist = Infinity;
-      for (const enemy of this.enemies) {
-        const d = Phaser.Math.Distance.Between(center.x, center.y, enemy.x, enemy.y);
-        if (d <= rangePx && d < bestDist) { bestDist = d; target = enemy; }
+      const archetype = COMBAT_ARCHETYPES[ally.species.type];
+
+      if (time >= ally.nextAttackTime) {
+        const center = this.cellToPixel(ally.col, ally.row);
+        const rangePx = ally.species.range * CELL;
+        let target = null;
+        let bestDist = Infinity;
+        for (const enemy of this.enemies) {
+          const d = Phaser.Math.Distance.Between(center.x, center.y, enemy.x, enemy.y);
+          if (d <= rangePx && d < bestDist) { bestDist = d; target = enemy; }
+        }
+        if (target) {
+          this.dealDamage(target, ally.species.attack);
+          this.playHitSpark(target.x, target.y, TYPE_COLORS[ally.species.type]);
+          this.applyAttackSecondaryEffect(ally, target, time);
+          const speedMult = this.currentAttackSpeedMultiplier(ally, time);
+          ally.nextAttackTime = time + ally.species.attackIntervalMs / speedMult;
+        }
       }
-      if (target) {
-        this.dealDamage(target, ally.species.attack);
-        this.playHitSpark(target.x, target.y);
-        ally.nextAttackTime = time + ally.species.attackIntervalMs;
+
+      if (archetype.abilityCooldownMs && time >= ally.nextAbilityTime) {
+        this.applyArchetypeAbility(ally, time);
       }
     }
 
@@ -409,10 +429,140 @@ class BattleScene extends Phaser.Scene {
     enemy.hpFill.destroy();
   }
 
-  playHitSpark(x, y) {
-    const fx = this.add.sprite(x, y, 'hit-spark').setScale(0.9);
+  playHitSpark(x, y, tint, scale) {
+    const fx = this.add.sprite(x, y, 'hit-spark').setScale(scale || 0.9);
+    if (tint !== undefined) fx.setTint(tint);
     fx.play('hit-spark-anim');
     fx.once('animationcomplete', () => fx.destroy());
+  }
+
+  // ---------- combat archetypes ----------
+
+  findEnemiesInRange(x, y, rangePx) {
+    return this.enemies.filter(e => Phaser.Math.Distance.Between(x, y, e.x, e.y) <= rangePx);
+  }
+
+  applyDotToEnemy(enemy, cfg, time) {
+    enemy.statusEffects.dot = {
+      color: cfg.color, damagePerTick: cfg.damagePerTick,
+      ticksRemaining: cfg.ticks, tickIntervalMs: cfg.tickIntervalMs,
+      nextTickTime: time + cfg.tickIntervalMs
+    };
+  }
+
+  applySlowToEnemy(enemy, cfg, time) {
+    enemy.statusEffects.slow = { multiplier: cfg.multiplier, expiresAt: time + cfg.durationMs };
+  }
+
+  processStatusEffects(enemy, time) {
+    const dot = enemy.statusEffects.dot;
+    if (dot && time >= dot.nextTickTime) {
+      this.dealDamage(enemy, dot.damagePerTick);
+      this.playHitSpark(enemy.x, enemy.y, dot.color, 0.5);
+      dot.ticksRemaining -= 1;
+      dot.nextTickTime = time + dot.tickIntervalMs;
+      if (dot.ticksRemaining <= 0) delete enemy.statusEffects.dot;
+    }
+    const slow = enemy.statusEffects.slow;
+    if (slow && time >= slow.expiresAt) delete enemy.statusEffects.slow;
+  }
+
+  enemySpeedMultiplier(enemy) {
+    const slow = enemy.statusEffects.slow;
+    return slow ? slow.multiplier : 1;
+  }
+
+  addBuff(ally, key, multiplier, expiresAt) {
+    ally.buffs = ally.buffs.filter(b => b.key !== key);
+    ally.buffs.push({ key, multiplier, expiresAt });
+  }
+
+  currentAttackSpeedMultiplier(ally, time) {
+    ally.buffs = ally.buffs.filter(b => b.expiresAt > time);
+    if (ally.buffs.length === 0) return 1;
+    return Math.max(...ally.buffs.map(b => b.multiplier));
+  }
+
+  applyAuras(time) {
+    for (const source of this.allies) {
+      const archetype = COMBAT_ARCHETYPES[source.species.type];
+      if (!archetype.aura) continue;
+      const center = this.cellToPixel(source.col, source.row);
+      const rangePx = source.species.range * CELL;
+      for (const other of this.allies) {
+        if (other === source) continue;
+        const p = this.cellToPixel(other.col, other.row);
+        if (Phaser.Math.Distance.Between(center.x, center.y, p.x, p.y) <= rangePx) {
+          this.addBuff(other, 'aura', archetype.aura.attackSpeedMultiplier, time + 600);
+        }
+      }
+    }
+  }
+
+  applyChain(startTarget, cfg, baseDamage, tint, includeStartDamage) {
+    const hit = new Set();
+    let current = startTarget;
+    if (includeStartDamage) {
+      this.dealDamage(current, baseDamage);
+      this.playHitSpark(current.x, current.y, tint);
+    }
+    hit.add(current);
+    for (let i = 0; i < cfg.jumps; i++) {
+      const next = this.findEnemiesInRange(current.x, current.y, cfg.jumpRangePx).find(e => !hit.has(e));
+      if (!next) break;
+      this.dealDamage(next, Math.round(baseDamage * cfg.falloff[i]));
+      this.playHitSpark(next.x, next.y, tint);
+      hit.add(next);
+      current = next;
+    }
+  }
+
+  applyAttackSecondaryEffect(ally, target, time) {
+    const archetype = COMBAT_ARCHETYPES[ally.species.type];
+    const effect = archetype.attackEffect(ally.species.attack);
+    if (!effect) return;
+    const tint = TYPE_COLORS[ally.species.type];
+
+    if (effect.kind === 'dot') this.applyDotToEnemy(target, effect, time);
+    else if (effect.kind === 'slow') this.applySlowToEnemy(target, effect, time);
+    else if (effect.kind === 'splash') {
+      this.findEnemiesInRange(target.x, target.y, effect.radiusPx)
+        .filter(e => e !== target)
+        .forEach(e => { this.dealDamage(e, effect.damage); this.playHitSpark(e.x, e.y, tint); });
+    } else if (effect.kind === 'chain') {
+      this.applyChain(target, effect, ally.species.attack, tint, false);
+    }
+  }
+
+  applyArchetypeAbility(ally, time) {
+    const archetype = COMBAT_ARCHETYPES[ally.species.type];
+    const tint = TYPE_COLORS[ally.species.type];
+
+    if (archetype.abilityKind === 'team-buff') {
+      const cfg = archetype.abilityEffect();
+      this.allies.forEach(a => this.addBuff(a, 'rally', cfg.attackSpeedMultiplier, time + cfg.durationMs));
+      ally.nextAbilityTime = time + archetype.abilityCooldownMs;
+      return;
+    }
+
+    const center = this.cellToPixel(ally.col, ally.row);
+    const rangePx = ally.species.range * CELL;
+    const targets = this.findEnemiesInRange(center.x, center.y, rangePx);
+    if (targets.length === 0) return; // don't burn the cooldown swinging at nothing
+
+    const cfg = archetype.abilityEffect(ally.species.attack);
+    if (cfg.kind === 'chain') {
+      this.applyChain(targets[0], cfg, ally.species.attack, tint, true);
+    } else {
+      targets.forEach(e => {
+        if (cfg.splashDamage) this.dealDamage(e, cfg.splashDamage);
+        if (cfg.dot) this.applyDotToEnemy(e, cfg.dot, time);
+        if (cfg.slow) this.applySlowToEnemy(e, cfg.slow, time);
+        this.playHitSpark(e.x, e.y, tint);
+      });
+    }
+
+    ally.nextAbilityTime = time + archetype.abilityCooldownMs;
   }
 
   onWaveComplete() {

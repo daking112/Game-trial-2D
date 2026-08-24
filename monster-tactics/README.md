@@ -25,6 +25,27 @@ folder with any static file server.
    costs you lives. Clear a wave to earn essence and move to the next,
    harder one. Waves are endless - see how far you get.
 
+## Monsters are the towers, not reskinned dart-throwers
+
+A monster's **type** determines a genuinely different combat kit, not just a
+palette swap - see `public/js/data/archetypes.js`:
+
+| Type | Attack | Ability (own cooldown) |
+|---|---|---|
+| FIRE | Burning Strike - applies a burn DoT | Ember Nova - burns everything in range |
+| WATER | Chilling Shot - slows the target | Frost Pulse - slows + damages everything in range |
+| GRASS | Venom Bite - applies a poison DoT | Toxic Cloud - poisons everything in range |
+| EARTH | Crushing Blow - splash damage around the target | Seismic Slam - bigger burst on everything in range |
+| ELECTRIC | Spark Jolt - chains to 2 nearby enemies | Chain Overload - bigger chain, 4 jumps |
+| NORMAL | Steady Strike - plain damage, plus a passive aura that speeds up nearby allies | Rally Pulse - temporary attack-speed buff for the whole team |
+
+Every basic Attack fires on its own cooldown; the Ability is a separate,
+longer-cooldown effect layered on top (skips its cooldown reset if nothing's
+in range, so it doesn't get wasted swinging at nothing). This is "Attack +
+Ability" only - a third "Ultimate" tier is intentionally not built yet, but
+`archetypes.js` has a documented, unused shape for one so it can be added
+later without restructuring the combat loop.
+
 ## Structure
 
 ```
@@ -32,6 +53,7 @@ public/
   index.html
   js/
     data/monsters.js       species stats, rarity tiers, gacha roll logic
+    data/archetypes.js     per-type combat kit: Attack + Ability
     state/GameState.js     roster/team/coins/essence/battle progress
     scenes/PreloadScene.js loads art, builds the one generated UI texture
     scenes/MenuScene.js
@@ -75,3 +97,15 @@ drawn at runtime with Phaser Graphics - no art dependency.
   are extracted and ready to use for more species (see the asset index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -
   there's no overworld/exploration scene, just menu -> egg shop/battle.
+
+## Bigger design not built yet
+
+The long-term pitch is larger than this pass - a "Monster Sanctuary" meta
+game where duplicate pulls become Essence spent on stat upgrades and
+essence-gated evolutions that *change a monster's Attack/Ability kit*, plus
+capture cores/tickets, elemental discovery banners, bosses, and eventual
+co-op. None of that is built yet - this pass is deliberately scoped to just
+the combat-identity foundation (Attack + Ability per type) everything else
+depends on. Co-op specifically needs backend infrastructure (matchmaking,
+real-time state sync) this project doesn't have and was explicitly deferred
+rather than half-built.
