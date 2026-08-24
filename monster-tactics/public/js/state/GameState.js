@@ -14,6 +14,9 @@ const MAX_TEAM_SIZE = 5;
 const STARTING_COINS = 120;
 const STARTER_ESSENCE = 80;
 const EGG_COST = 40;
+const RUN_TARGET_STAGES = 5;
+const WAVES_PER_STAGE = 3;
+const STAGE_CLEAR_LIVES_BONUS = 2;
 
 class GameState {
   constructor() {
@@ -22,9 +25,21 @@ class GameState {
     this.team = [];
     this.lives = 20;
     this.maxLives = 20;
-    this.wave = 1;
+    this.wave = 1; // wave within the current stage, 1..WAVES_PER_STAGE
     this.score = 0;
     this.coins = STARTING_COINS;
+
+    // Run/stage progression. A run is a sequence of RUN_TARGET_STAGES
+    // stages; lives and score persist across stages within one run (only
+    // coins and the wave counter refill per stage) so a rough early stage
+    // has real consequences later, roguelike-style. runActive is the
+    // context flag SanctuaryScene/RosterScene use to route their back
+    // button to the Hub instead of the main menu while a run is in
+    // progress - MenuScene.create() always clears it, since reaching the
+    // menu inherently means no run is active.
+    this.runActive = false;
+    this.stageInRun = 0;
+    this.currentStageId = null;
 
     // A brand-new player has no monsters and no essence to pull one - that's
     // a hard lock, not just rough onboarding (Team Select says "go pull",
@@ -184,11 +199,40 @@ class GameState {
     return true;
   }
 
-  resetBattle() {
+  // Starts a brand-new run: full lives, zero score/stage progress. Does NOT
+  // pick a stage - call startStage() right after with the run's first stage.
+  resetRun() {
+    this.runActive = true;
+    this.stageInRun = 0;
+    this.currentStageId = null;
     this.lives = this.maxLives;
     this.wave = 1;
     this.score = 0;
     this.coins = STARTING_COINS;
+  }
+
+  // Enters a stage within the current run: refills coins and the
+  // within-stage wave counter, but deliberately leaves lives/score alone -
+  // those are the run's stakes, not the stage's.
+  startStage(stageId) {
+    this.stageInRun += 1;
+    this.currentStageId = stageId;
+    this.wave = 1;
+    this.coins = STARTING_COINS;
+  }
+
+  // Monotonic wave index across the whole run (stage 2's wave 1 is harder
+  // than stage 1's wave 1) - what BattleScene scales enemy counts against.
+  globalWaveNumber() {
+    return (this.stageInRun - 1) * WAVES_PER_STAGE + this.wave;
+  }
+
+  isRunComplete() {
+    return this.stageInRun >= RUN_TARGET_STAGES;
+  }
+
+  onStageCleared() {
+    this.lives = Math.min(this.maxLives, this.lives + STAGE_CLEAR_LIVES_BONUS);
   }
 }
 

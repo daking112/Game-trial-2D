@@ -27,7 +27,8 @@ class SanctuaryScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b'
     }).setOrigin(0.5);
 
-    this.backBtn(() => this.scene.start('MenuScene'));
+    const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
+    this.backBtn(backTarget, () => this.scene.start(backTarget));
 
     const cols = 3, cardW = 220, cardH = 130;
     const startX = width / 2 - cardW;
@@ -179,8 +180,9 @@ class SanctuaryScene extends Phaser.Scene {
     return { bg, text };
   }
 
-  backBtn(onClick) {
-    const text = this.add.text(24, 24, '< Menu', {
+  backBtn(target, onClick) {
+    const label = target === 'HubScene' ? '< Hub' : '< Menu';
+    const text = this.add.text(24, 24, label, {
       fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
     }).setInteractive({ useHandCursor: true });
     text.on('pointerover', () => text.setColor('#f5f7fa'));

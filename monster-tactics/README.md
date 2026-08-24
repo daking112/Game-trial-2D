@@ -34,19 +34,34 @@ lock, not just rough onboarding.
    evolve instead, given enough Monster Essence (150) - evolving changes
    the monster's *kit*, not just its numbers: Rollpup (GRASS, poison-DoT)
    evolves into Rollodon (EARTH, splash), a genuinely different tower.
-3. **Battle** - a winding path crosses the grid from a spawn edge to your
-   base. Placement is only allowed on cells the path doesn't cross, and
-   hovering a cell with a bench monster selected previews its actual range
-   circle before you commit - placed towers keep a faint persistent one too,
-   so coverage is always visible, never guessed at. Placing a monster costs
-   **coins** (session-only currency, resets each battle, earned by defeating
-   enemies); picking one back up refunds half its cost. Towers target
-   whichever enemy in range has traveled furthest along the path (BTD6's
-   default "First" priority), not whichever happens to be nearest. Start a
-   wave once you're happy with your layout - enemies spawn and follow the
-   path's turns exactly, and any enemy that reaches the end costs you lives.
-   Clear a wave to earn essence and move to the next, harder one. Waves are
-   endless - see how far you get.
+3. **Battle** - a run is 5 stages (`RUN_TARGET_STAGES`), each 3 waves
+   (`WAVES_PER_STAGE`), for 15 waves total; a fixed winding path (one of
+   4 distinct layouts, see `data/stages.js`) crosses the grid from a spawn
+   edge to your base. Placement is only allowed on cells the path doesn't
+   cross, and hovering a cell with a bench monster selected previews its
+   actual range circle before you commit - placed towers keep a faint
+   persistent one too, so coverage is always visible, never guessed at.
+   Placing a monster costs **coins** (resets to the starting amount each
+   stage, earned by defeating enemies); picking one back up refunds half
+   its cost. Towers target whichever enemy in range has traveled furthest
+   along the path (BTD6's default "First" priority), not whichever happens
+   to be nearest. Start a wave once you're happy with your layout - enemies
+   spawn and follow the path's turns exactly, and any enemy that reaches
+   the end costs you lives (lives and score persist across the whole run,
+   not just one stage). Clearing a wave earns essence and moves to the
+   next, harder one (difficulty scales off the run-wide wave count, not
+   the per-stage one, so stage 2 picks up where stage 1 left off).
+4. **Hub** - clearing a stage's 3rd wave drops you here instead of straight
+   into the next stage: a small bonus to lives, a choice between 2 of the
+   remaining stage layouts (a single-player stand-in for "vote on the next
+   map" - real voting needs a second player, which this project doesn't
+   have), quick links back into the Sanctuary/Team Select to spend essence
+   or adjust your team, and a 20-second auto-advance countdown with a
+   Ready button to skip it. Clearing the 5th stage instead sends you to a
+   **Victory** screen with your final run stats; running out of lives at
+   any point ends the run early on a game-over screen with the same stats.
+   Either way, "Start New Run" resets lives/score/coins and puts you back
+   at stage 1.
 
 ## Monsters are the towers, not reskinned dart-throwers
 
@@ -86,12 +101,15 @@ public/
     data/monsters.js       species stats, rarity/leveling, gacha roll logic
     data/archetypes.js     per-type combat kit: Attack + Ability
     data/banners.js        Monster Sanctuary discovery banners (type pools)
-    state/GameState.js     roster/team/coins/essence/battle progress
+    data/stages.js         the 4 path layouts, run-length constants, stage-choice logic
+    state/GameState.js     roster/team/coins/essence/run+stage progress
     scenes/PreloadScene.js loads art, builds the one generated UI texture
     scenes/MenuScene.js
     scenes/SanctuaryScene.js  banner select + gacha pull screen
     scenes/RosterScene.js     team selection, level/essence/upgrade UI
     scenes/BattleScene.js     the path, range preview, placement, waves, combat
+    scenes/HubScene.js        between-stage hub: stage choice, countdown, Ready
+    scenes/VictoryScene.js    run-complete stats screen
     vendor/phaser.min.js   Phaser 3.70.0, vendored (no CDN dependency)
   assets/
     retromon/               curated, game-ready monster art (see below)
@@ -120,8 +138,10 @@ placeholder shapes drawn at runtime with Phaser Graphics - no art dependency.
 
 - Enemies don't fight back - placed monsters are invincible during a wave,
   they only ever attack.
-- The path is a single fixed layout hardcoded in `BattleScene.js`
-  (`PATH_CELLS`) - no per-wave or per-map path variety yet.
+- Only 4 path layouts exist (`data/stages.js`) but a run is 5 stages, so
+  one layout necessarily repeats every run (`pickStageChoices` avoids
+  repeating the stage just cleared, but can't avoid repeats across the
+  whole run with a pool this small).
 - Leveling scales stats (+12%/level, cap level 5); evolution (kit-changing,
   see `data/monsters.js` EVOLUTION_MAP) only covers the 3 starter species so
   far - everything else just stays maxed. Ability upgrades and alternate
@@ -131,7 +151,8 @@ placeholder shapes drawn at runtime with Phaser Graphics - no art dependency.
 - The Team Select roster grid doesn't scroll - a very large collection
   (beyond what fits in ~3 rows) will overflow past the Start Battle button.
   Not a problem yet at 14 total species, but noted before it becomes one.
-- Waves are endless with simple linear scaling, no explicit "win" state.
+- Stage choice in the Hub is a single-player stand-in for "vote on the next
+  map" - it always offers 2 options and never involves a second player.
 - Only `retromon-b1` (Big Pack 1) is wired into species data; Big Packs 2-4
   are extracted and ready to use for more species (see the asset index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -

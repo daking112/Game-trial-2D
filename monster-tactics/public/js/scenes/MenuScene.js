@@ -6,6 +6,11 @@ class MenuScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
+    // Reaching the menu inherently means no run is in progress - clears the
+    // context flag SanctuaryScene/RosterScene use to route their back
+    // button to the Hub instead of here.
+    gameState.runActive = false;
+
     this.add.text(width / 2, 120, 'MONSTER TACTICS', {
       fontFamily: 'monospace', fontSize: '48px', color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5);

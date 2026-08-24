@@ -10,7 +10,8 @@ class RosterScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '28px', color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.backBtn(() => this.scene.start('MenuScene'));
+    const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
+    this.backBtn(backTarget, () => this.scene.start(backTarget));
 
     // Team selection is scoped to monsters still actually in the roster.
     gameState.team = gameState.team.filter(id => gameState.roster[id]);
@@ -43,10 +44,23 @@ class RosterScene extends Phaser.Scene {
       this.buildCard(entry, x, y);
     });
 
-    this.startBtn = this.makeButton(width / 2, 610, 'Start Battle', () => {
-      if (gameState.team.length > 0) this.scene.start('BattleScene');
-    });
-    this.refreshStartBtn();
+    if (gameState.runActive) {
+      // Mid-run, this screen is purely for adjusting the team/upgrades -
+      // the Hub is the only place that actually commits to the next stage
+      // (it's what picked gameState.pendingStageId), so send the player
+      // back there rather than duplicating that decision here.
+      this.add.text(width / 2, 610, "Head back to the Hub when you're ready", {
+        fontFamily: 'monospace', fontSize: '13px', color: '#5a6478'
+      }).setOrigin(0.5);
+    } else {
+      this.startBtn = this.makeButton(width / 2, 610, 'Start Run', () => {
+        if (gameState.team.length === 0) return;
+        gameState.resetRun();
+        gameState.startStage(FIRST_STAGE_ID);
+        this.scene.start('BattleScene');
+      });
+      this.refreshStartBtn();
+    }
   }
 
   buildCard(entry, x, y) {
@@ -149,6 +163,7 @@ class RosterScene extends Phaser.Scene {
   }
 
   refreshStartBtn() {
+    if (!this.startBtn) return; // no Start Run button mid-run - see create()
     const ready = gameState.team.length > 0;
     this.startBtn.bg.setFillStyle(ready ? 0x2a3040 : 0x1c202a);
     this.startBtn.text.setColor(ready ? '#f5f7fa' : '#5a6478');
@@ -174,8 +189,9 @@ class RosterScene extends Phaser.Scene {
     bg.setFillStyle(ready ? 0x2a3040 : 0x1c202a);
   }
 
-  backBtn(onClick) {
-    const text = this.add.text(24, 24, '< Menu', {
+  backBtn(target, onClick) {
+    const label = target === 'HubScene' ? '< Hub' : '< Menu';
+    const text = this.add.text(24, 24, label, {
       fontFamily: 'monospace', fontSize: '16px', color: '#9aa4b8'
     }).setInteractive({ useHandCursor: true });
     text.on('pointerover', () => text.setColor('#f5f7fa'));

@@ -4,25 +4,18 @@ const CELL = 64;
 const GRID_X = 160;
 const GRID_Y = 130;
 
-// Waypoints the enemy path bends through, in grid cells. Enemies spawn off
-// the right edge, follow these in order, then exit off the left edge and
-// damage the base. Cells the path crosses are blocked for tower placement.
-const PATH_CELLS = [
-  { col: 9, row: 1 },
-  { col: 6, row: 1 },
-  { col: 6, row: 4 },
-  { col: 3, row: 4 },
-  { col: 3, row: 1 },
-  { col: 0, row: 1 }
-];
-
 class BattleScene extends Phaser.Scene {
   constructor() {
     super('BattleScene');
   }
 
   create() {
-    gameState.resetBattle();
+    // gameState.currentStageId is set by whoever navigated here (RosterScene
+    // starting a fresh run, or HubScene's Ready/countdown) via
+    // gameState.startStage() - this scene doesn't touch run/stage progress
+    // itself, it just renders whatever stage is already current.
+    this.stage = getStage(gameState.currentStageId) || getStage(FIRST_STAGE_ID);
+    this.pathCells = this.stage.pathCells;
 
     this.phase = 'placement'; // 'placement' | 'wave' | 'waveComplete' | 'gameOver'
     this.pathWaypoints = this.buildPathWaypoints();
@@ -55,19 +48,19 @@ class BattleScene extends Phaser.Scene {
   // ---------- path ----------
 
   buildPathWaypoints() {
-    const entry = this.cellToPixel(PATH_CELLS[0].col, PATH_CELLS[0].row);
-    const exit = this.cellToPixel(PATH_CELLS[PATH_CELLS.length - 1].col, PATH_CELLS[PATH_CELLS.length - 1].row);
+    const entry = this.cellToPixel(this.pathCells[0].col, this.pathCells[0].row);
+    const exit = this.cellToPixel(this.pathCells[this.pathCells.length - 1].col, this.pathCells[this.pathCells.length - 1].row);
     const spawn = { x: GRID_X + GRID_COLS * CELL + 30, y: entry.y };
     const base = { x: GRID_X - 30, y: exit.y };
-    const onGrid = PATH_CELLS.map(c => this.cellToPixel(c.col, c.row));
+    const onGrid = this.pathCells.map(c => this.cellToPixel(c.col, c.row));
     return [spawn, ...onGrid, base];
   }
 
   buildPathBlockedCells() {
     const blocked = new Set();
     const mark = (c, r) => blocked.add(r + ',' + c);
-    for (let i = 0; i < PATH_CELLS.length - 1; i++) {
-      const a = PATH_CELLS[i], b = PATH_CELLS[i + 1];
+    for (let i = 0; i < this.pathCells.length - 1; i++) {
+      const a = this.pathCells[i], b = this.pathCells[i + 1];
       if (a.row === b.row) {
         const [from, to] = a.col < b.col ? [a.col, b.col] : [b.col, a.col];
         for (let c = from; c <= to; c++) mark(c, a.row);
@@ -107,8 +100,8 @@ class BattleScene extends Phaser.Scene {
     }
 
     // Spawn edge and base edge markers.
-    const entryRow = PATH_CELLS[0].row;
-    const exitRow = PATH_CELLS[PATH_CELLS.length - 1].row;
+    const entryRow = this.pathCells[0].row;
+    const exitRow = this.pathCells[this.pathCells.length - 1].row;
     g.lineStyle(4, 0xe0562f, 0.7);
     g.lineBetween(GRID_X + GRID_COLS * CELL, GRID_Y + entryRow * CELL, GRID_X + GRID_COLS * CELL, GRID_Y + (entryRow + 1) * CELL);
     g.lineStyle(4, 0x4caf50, 1);
@@ -197,7 +190,6 @@ class BattleScene extends Phaser.Scene {
 
     this.overlayPrimaryBtn = this.makeButton(width / 2, height / 2 + 50, '', () => {});
     this.overlaySecondaryBtn = this.makeButton(width / 2, height / 2 + 115, 'Return to Menu', () => {
-      gameState.resetBattle();
       this.scene.start('MenuScene');
     });
     this.setOverlayVisible(false);
@@ -320,7 +312,10 @@ class BattleScene extends Phaser.Scene {
   startWave() {
     this.phase = 'wave';
     this.spawnedCount = 0;
-    this.waveEnemyCount = Math.min(4 + (gameState.wave - 1) * 2, 24);
+    // Scales off the run-wide wave count, not the within-stage one, so
+    // stage 2's first wave is harder than stage 1's - a fresh coin refill
+    // per stage shouldn't also mean a fresh (easy) difficulty curve.
+    this.waveEnemyCount = Math.min(4 + (gameState.globalWaveNumber() - 1) * 2, 30);
     this.spawnTimerMs = 0;
     this.refreshStartButton();
   }
@@ -610,17 +605,35 @@ class BattleScene extends Phaser.Scene {
     const essenceReward = 10;
     gameState.earnEssence(essenceReward);
     this.setOverlayVisible(true);
-    this.overlayTitle.setText(`Wave ${gameState.wave} Cleared!`);
-    this.overlaySub.setText(
-      `Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
-    );
-    this.overlayPrimaryBtn.text.setText('Next Wave');
     this.overlayPrimaryBtn.bg.off('pointerdown');
+
+    const stageComplete = gameState.wave >= WAVES_PER_STAGE;
+
+    if (!stageComplete) {
+      this.overlayTitle.setText(`Wave ${gameState.wave} Cleared!`);
+      this.overlaySub.setText(
+        `Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
+      );
+      this.overlayPrimaryBtn.text.setText('Next Wave');
+      this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+        gameState.wave += 1;
+        this.phase = 'placement';
+        this.setOverlayVisible(false);
+        this.refreshStartButton();
+      });
+      return;
+    }
+
+    gameState.onStageCleared();
+    const runComplete = gameState.isRunComplete();
+    this.overlayTitle.setText(runComplete ? 'RUN COMPLETE!' : `${this.stage.name} Cleared!`);
+    this.overlaySub.setText(
+      `Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
+    );
+    this.overlayPrimaryBtn.text.setText(runComplete ? 'Claim Victory' : 'Continue');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
-      gameState.wave += 1;
-      this.phase = 'placement';
       this.setOverlayVisible(false);
-      this.refreshStartButton();
+      this.scene.start(runComplete ? 'VictoryScene' : 'HubScene');
     });
   }
 
@@ -628,17 +641,23 @@ class BattleScene extends Phaser.Scene {
     this.phase = 'gameOver';
     this.setOverlayVisible(true);
     this.overlayTitle.setText('Base Overrun');
-    this.overlaySub.setText(`You survived to wave ${gameState.wave}   Final Score: ${gameState.score}`);
-    this.overlayPrimaryBtn.text.setText('Try Again');
+    this.overlaySub.setText(
+      `Run ended on stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}, wave ${gameState.wave}   Final Score: ${gameState.score}`
+    );
+    this.overlayPrimaryBtn.text.setText('Start New Run');
     this.overlayPrimaryBtn.bg.off('pointerdown');
-    this.overlayPrimaryBtn.bg.once('pointerdown', () => this.scene.restart());
+    this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+      gameState.runActive = false; // team select treats this as "not mid-run"
+      this.scene.start('RosterScene');
+    });
   }
 
   // ---------- helpers ----------
 
   updateHud() {
     this.hudText.setText(
-      `Wave ${gameState.wave}   Lives ${gameState.lives}/${gameState.maxLives}   Coins ${gameState.coins}   Score ${gameState.score}   ` +
+      `${this.stage.name}   Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Wave ${gameState.wave}/${WAVES_PER_STAGE}   ` +
+      `Lives ${gameState.lives}/${gameState.maxLives}   Coins ${gameState.coins}   Score ${gameState.score}   ` +
       `Bench ${this.bench.length}   Placed ${this.allies.length}`
     );
   }
