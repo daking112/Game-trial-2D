@@ -19,6 +19,14 @@ class PreloadScene extends Phaser.Scene {
       frameHeight: 56
     });
 
+    // Retromon Big Pack 2 - same author/license/grid as Big Pack 1 above,
+    // opened to add ELECTRIC/WATER/NORMAL variety (see RETROMON2_SHEET's
+    // comment in data/monsters.js).
+    this.load.spritesheet(RETROMON2_SHEET, 'assets/retromon/big-pack-2.png', {
+      frameWidth: 56,
+      frameHeight: 56
+    });
+
     // Hand-authored seamless ground tiles (see scripts note in README.md -
     // procedurally generated, not sourced from any asset pack).
     this.load.image('tile-grass', 'assets/tiles/grass.png');

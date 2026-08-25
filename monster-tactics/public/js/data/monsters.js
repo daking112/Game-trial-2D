@@ -11,6 +11,12 @@
 // attacking your base.
 
 const RETROMON_SHEET = 'retromon-b1';
+// Retromon Big Pack 2, same license/author/grid as Big Pack 1 (see
+// assets/retromon/index.json) - opened specifically to shore up ELECTRIC,
+// which had exactly one catchable species (goldwasp, LEGENDARY-only) before
+// this, meaning "Storm Discovery" (see data/banners.js) was a banner with a
+// single guaranteed outcome rather than a real weighted pull.
+const RETROMON2_SHEET = 'retromon-b2';
 
 const TYPE_COLORS = {
   FIRE: 0xe0562f,
@@ -46,11 +52,15 @@ const SPECIES = [
   { id: 'snarlpup', name: 'Snarlpup', type: 'FIRE', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 3, maxHp: 22, attack: 10, range: 1.6, attackIntervalMs: 650, cost: 20 },
   { id: 'hornlet', name: 'Hornlet', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 6, maxHp: 30, attack: 6, range: 1.6, attackIntervalMs: 850, cost: 20 },
   { id: 'snoutling', name: 'Snoutling', type: 'EARTH', rarity: 'COMMON', sheetKey: RETROMON_SHEET, frame: 30, maxHp: 26, attack: 8, range: 1.6, attackIntervalMs: 750, cost: 20 },
+  { id: 'boltbee', name: 'Boltbee', type: 'ELECTRIC', rarity: 'COMMON', sheetKey: RETROMON2_SHEET, frame: 9, maxHp: 18, attack: 9, range: 1.6, attackIntervalMs: 600, cost: 20 },
+  { id: 'shellcrab', name: 'Shellcrab', type: 'WATER', rarity: 'COMMON', sheetKey: RETROMON2_SHEET, frame: 2, maxHp: 28, attack: 6, range: 1.6, attackIntervalMs: 800, cost: 20 },
   // -- Rare --
   { id: 'puffle', name: 'Puffle', type: 'NORMAL', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 27, maxHp: 38, attack: 5, range: 2.2, attackIntervalMs: 900, cost: 35 },
   { id: 'grubcoil', name: 'Grubcoil', type: 'GRASS', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 49, maxHp: 20, attack: 9, range: 2.2, attackIntervalMs: 700, cost: 35 },
   { id: 'icewhelp', name: 'Icewhelp', type: 'WATER', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 65, maxHp: 22, attack: 6, range: 2.2, attackIntervalMs: 800, cost: 35 },
   { id: 'pincer', name: 'Pincer', type: 'EARTH', rarity: 'RARE', sheetKey: RETROMON_SHEET, frame: 34, maxHp: 32, attack: 8, range: 2.2, attackIntervalMs: 800, cost: 35 },
+  { id: 'calfrage', name: 'Calfrage', type: 'NORMAL', rarity: 'RARE', sheetKey: RETROMON2_SHEET, frame: 11, maxHp: 36, attack: 7, range: 2.2, attackIntervalMs: 800, cost: 35 },
+  { id: 'tidewisp', name: 'Tidewisp', type: 'WATER', rarity: 'RARE', sheetKey: RETROMON2_SHEET, frame: 16, maxHp: 24, attack: 8, range: 2.2, attackIntervalMs: 700, cost: 35 },
   // -- Epic --
   { id: 'molecap', name: 'Molecap', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 41, maxHp: 55, attack: 12, range: 2.6, attackIntervalMs: 850, cost: 55 },
   { id: 'tigrub', name: 'Tigrub', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 51, maxHp: 42, attack: 14, range: 2.6, attackIntervalMs: 650, cost: 55 },
@@ -102,7 +112,17 @@ const EVOLVED_SPECIES = [
   { id: 'geodronarch_evo', name: 'Geodronarch', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 22, maxHp: 100, attack: 18, range: 3.6, attackIntervalMs: 820, cost: 130 },
   { id: 'glacimaw_evo', name: 'Glacimaw', type: 'WATER', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 25, maxHp: 115, attack: 30, range: 4.0, attackIntervalMs: 620, cost: 190 },
   { id: 'thundasp_evo', name: 'Thundasp', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 28, maxHp: 90, attack: 36, range: 4.0, attackIntervalMs: 480, cost: 190 },
-  { id: 'oggmonarch_evo', name: 'Oggmonarch', type: 'GRASS', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 31, maxHp: 108, attack: 33, range: 4.0, attackIntervalMs: 580, cost: 190 }
+  { id: 'oggmonarch_evo', name: 'Oggmonarch', type: 'GRASS', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 31, maxHp: 108, attack: 33, range: 4.0, attackIntervalMs: 580, cost: 190 },
+
+  // Retromon Big Pack 2 (RETROMON2_SHEET) - see the comment by its
+  // definition above. Frames verified by eye against the actual sheet
+  // (public/assets/retromon/big-pack-2.png), each evolved frame chosen as
+  // the visually larger/more developed sibling immediately next to its
+  // base species' frame.
+  { id: 'boltswarm_evo', name: 'Boltswarm', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: RETROMON2_SHEET, frame: 10, maxHp: 44, attack: 17, range: 2.0, attackIntervalMs: 500, cost: 60 },
+  { id: 'shellclaw_evo', name: 'Shellclaw', type: 'WATER', rarity: 'EPIC', sheetKey: RETROMON2_SHEET, frame: 3, maxHp: 62, attack: 12, range: 2.0, attackIntervalMs: 780, cost: 60 },
+  { id: 'bisonlord_evo', name: 'Bisonlord', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON2_SHEET, frame: 12, maxHp: 66, attack: 15, range: 2.6, attackIntervalMs: 780, cost: 90 },
+  { id: 'tidewraith_evo', name: 'Tidewraith', type: 'WATER', rarity: 'EPIC', sheetKey: RETROMON2_SHEET, frame: 17, maxHp: 50, attack: 18, range: 2.8, attackIntervalMs: 680, cost: 90 }
 ];
 
 // speciesId (base) -> speciesId (evolved). Only species listed here can
@@ -123,7 +143,11 @@ const EVOLUTION_MAP = {
   geodrone: 'geodronarch_evo',
   frostmaw: 'glacimaw_evo',
   goldwasp: 'thundasp_evo',
-  ogglord: 'oggmonarch_evo'
+  ogglord: 'oggmonarch_evo',
+  boltbee: 'boltswarm_evo',
+  shellcrab: 'shellclaw_evo',
+  calfrage: 'bisonlord_evo',
+  tidewisp: 'tidewraith_evo'
 };
 
 // Monster Essence needed (on top of being at MAX_MONSTER_LEVEL) to evolve.

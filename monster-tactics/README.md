@@ -166,6 +166,35 @@ boss is always unmistakable. Not yet: a boss-specific attack/ability beyond
 stats (they still just walk and hit like any other enemy), or scaling boss
 difficulty within a single run beyond the normal per-wave curve.
 
+## New species from Big Pack 2
+
+Every catchable species used to come from a single sheet (`retromon-b1`),
+and ELECTRIC specifically had exactly one - Goldwasp, LEGENDARY-only - which
+meant "Storm Discovery" (see `data/banners.js`) was a banner with a single
+guaranteed outcome rather than a real weighted pull; any player choosing it
+already knew exactly what they'd get every time. `retromon-b2` (Big Pack 2,
+same author/license/56x56 9x8 grid as Big Pack 1 - see
+`assets/retromon/index.json`) is now wired in for 4 new evolution lines,
+picked by eye off the actual sheet for clear, unambiguous baby->evolved
+pairs (verified visually via a roster screenshot with all 8 new
+species/forms rendered side by side, and programmatically for id/frame
+uniqueness against the rest of the roster):
+
+- **Boltbee -> Boltswarm** (ELECTRIC, Common -> Epic) - the one this was
+  really for: Storm Discovery now has a real Common option instead of only
+  ever resolving to Goldwasp.
+- **Shellcrab -> Shellclaw** (WATER, Common -> Epic)
+- **Calfrage -> Bisonlord** (NORMAL, Rare -> Epic)
+- **Tidewisp -> Tidewraith** (WATER, Rare -> Epic)
+
+All 4 slot into the existing `EVOLUTION_MAP`/`BANNERS` machinery exactly
+like every other species - no new banner, currency, or scene needed, since
+banners already filter the shared `SPECIES` list by type rather than by art
+source. Stats follow the existing common/rare tier conventions (see the
+comment above `SPECIES` in `data/monsters.js`) rather than being tuned
+independently. Big Packs 3-4 are extracted and still available for more of
+the same treatment (see "Known limitations" below).
+
 ## Meta-progression (Mastery)
 
 Every other reward in this game resets to nothing but roster/essence between
@@ -609,8 +638,10 @@ banner; reconnecting again after that showed nothing further.
   Not a problem yet at 14 total species, but noted before it becomes one.
 - Stage choice in the Hub is a single-player stand-in for "vote on the next
   map" - it always offers 2 options and never involves a second player.
-- Only `retromon-b1` (Big Pack 1) is wired into species data; Big Packs 2-4
-  are extracted and ready to use for more species (see the asset index.json).
+- `retromon-b1` (Big Pack 1) and now `retromon-b2` (Big Pack 2, see "New
+  species from Big Pack 2" below) are wired into species data; Big Packs 3-4
+  are still extracted and ready to use for more species (see the asset
+  index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -
   the Multiplayer World's avatars are plain colored circles + name labels,
   not a sprite.
