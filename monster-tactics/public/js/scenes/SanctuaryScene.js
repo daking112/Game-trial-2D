@@ -153,9 +153,12 @@ class SanctuaryScene extends Phaser.Scene {
 
     if (result.isNew) {
       this.resultText.setText(`New! ${rarity.label}: ${species.name}`);
+      const ultimateLine = archetype.ultimateLabel
+        ? `\nUltimate: ${archetype.ultimateLabel} (charges on ${archetype.ultimateChargeHits} hits)`
+        : '';
       this.resultSubText.setText(
         `Type ${species.type}   HP ${species.maxHp} / ATK ${species.attack}\n` +
-        `Attack: ${archetype.attackLabel}   Ability: ${archetype.abilityLabel}`
+        `Attack: ${archetype.attackLabel}   Ability: ${archetype.abilityLabel}${ultimateLine}`
       );
     } else {
       this.resultText.setText(`Duplicate: ${species.name}`);

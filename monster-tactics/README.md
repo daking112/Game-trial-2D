@@ -89,21 +89,27 @@ lock, not just rough onboarding.
 A monster's **type** determines a genuinely different combat kit, not just a
 palette swap - see `public/js/data/archetypes.js`:
 
-| Type | Attack | Ability (own cooldown) |
-|---|---|---|
-| FIRE | Burning Strike - applies a burn DoT | Ember Nova - burns everything in range |
-| WATER | Chilling Shot - slows the target | Frost Pulse - slows + damages everything in range |
-| GRASS | Venom Bite - applies a poison DoT | Toxic Cloud - poisons everything in range |
-| EARTH | Crushing Blow - splash damage around the target | Seismic Slam - bigger burst on everything in range |
-| ELECTRIC | Spark Jolt - chains to 2 nearby enemies | Chain Overload - bigger chain, 4 jumps |
-| NORMAL | Steady Strike - plain damage, plus a passive aura that speeds up nearby allies | Rally Pulse - temporary attack-speed buff for the whole team |
+| Type | Attack | Ability (own cooldown) | Ultimate (charge-gated) |
+|---|---|---|---|
+| FIRE | Burning Strike - applies a burn DoT | Ember Nova - burns everything in range | Wildfire - a big burst + heavy burn in a wide radius |
+| WATER | Chilling Shot - slows the target | Frost Pulse - slows + damages everything in range | Absolute Zero - near-total freeze + a big hit, wide radius |
+| GRASS | Venom Bite - applies a poison DoT | Toxic Cloud - poisons everything in range | Bloom of Decay - a heavy, long poison in a wide radius |
+| EARTH | Crushing Blow - splash damage around the target | Seismic Slam - bigger burst on everything in range | Cataclysm - a massive burst, wide radius |
+| ELECTRIC | Spark Jolt - chains to 2 nearby enemies | Chain Overload - bigger chain, 4 jumps | Overload Surge - chains to 8 |
+| NORMAL | Steady Strike - plain damage, plus a passive aura that speeds up nearby allies | Rally Pulse - temporary attack-speed buff for the whole team | Unstoppable - a bigger, longer team-wide attack-speed buff |
 
 Every basic Attack fires on its own cooldown; the Ability is a separate,
 longer-cooldown effect layered on top (skips its cooldown reset if nothing's
-in range, so it doesn't get wasted swinging at nothing). This is "Attack +
-Ability" only - a third "Ultimate" tier is intentionally not built yet, but
-`archetypes.js` has a documented, unused shape for one so it can be added
-later without restructuring the combat loop.
+in range, so it doesn't get wasted swinging at nothing). The Ultimate is a
+third tier, gated by *charge* rather than a cooldown timer - a thin gold bar
+under a placed ally's HP bar fills by 1/20th on every basic attack that
+actually lands, and fires automatically at full charge (BattleScene
+`chargeUltimate`/`applyArchetypeUltimate`). That's a deliberately different
+trigger from the Ability, not just a bigger version of it: a tower's own
+attack speed - its species base, a Normal-type aura, a Rally Pulse/
+Unstoppable buff - directly controls how often its Ultimate fires, so
+investing in attack speed compounds instead of only mattering for the basic
+Attack.
 
 Range is deliberately not a round number of grid cells (1.6/2.2/2.6/3.2/3.6,
 not 1/2/3/4). A tower placed adjacent to a straight path segment sits exactly
@@ -420,9 +426,10 @@ balance) and ~~meta-progression~~ (see "Meta-progression (Mastery)" above -
 and any Mastery sink beyond the talent tree). Also shipped since then: every
 species now has an evolution, not just the 3 starters (see "Current loop"
 above) - kit-changing evolution specifically (a different Attack/Ability,
-not just bigger numbers) is still only those original 3, though. Still on
-the list: an Ultimate combat tier (`archetypes.js` has a documented, unused
-shape for it), and differentiated pull currencies.
+not just bigger numbers) is still only those original 3, though. The
+Ultimate combat tier mentioned here previously is also now built (see
+"Monsters are the towers" above). Still on the list: differentiated pull
+currencies, and kit-changing evolution/Ultimate variety beyond what's above.
 
 Longer-term, the stated direction is a multiplayer .io-style game (think
 Roblox tycoon-tower-defense) - a shared world players build/defend in

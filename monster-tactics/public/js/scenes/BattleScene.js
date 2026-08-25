@@ -14,6 +14,12 @@ const CAMERA_PAN_SPEED = 900; // px/sec, keyboard pan
 const HP_BAR_W = 60;
 const HP_BAR_H = 8;
 const HP_BAR_Y_OFFSET = -42;
+// A thin gold bar under an ally's HP bar tracking Ultimate charge (see
+// archetypes.js) - basic attacks landed, not time, so it fills faster on a
+// buffed/fast-attacking tower.
+const ULT_BAR_W = HP_BAR_W;
+const ULT_BAR_H = 5;
+const ULT_BAR_Y_OFFSET = HP_BAR_Y_OFFSET + 11;
 const BOSS_BAR_W = HP_BAR_W * 2.2;
 // Every 5th wave counting across the whole run (not per-stage - see
 // gameState.globalWaveNumber) spawns one boss as the last enemy of that
@@ -423,12 +429,20 @@ class BattleScene extends Phaser.Scene {
     const rangeCircle = this.add.circle(x, y, species.range * CELL, TYPE_COLORS[species.type], 0.05)
       .setStrokeStyle(1, TYPE_COLORS[species.type], 0.25).setDepth(-5);
 
+    const hasUltimate = !!COMBAT_ARCHETYPES[species.type].ultimateChargeHits;
+    const ultBarFill = hasUltimate
+      ? this.add.rectangle(x - ULT_BAR_W / 2, y + ULT_BAR_Y_OFFSET, ULT_BAR_W, ULT_BAR_H, 0xf5c94b).setOrigin(0, 0.5)
+      : null;
+    if (ultBarFill) ultBarFill.scaleX = 0; // starts uncharged
+
     const ally = {
       speciesId: entry.speciesId, species, level: entry.level, col, row,
       attack: effective.attack, hp: effective.maxHp, maxHp: effective.maxHp,
-      nextAttackTime: 0, nextAbilityTime: 0, buffs: [], sprite, rangeCircle,
+      nextAttackTime: 0, nextAbilityTime: 0, ultimateCharge: 0, buffs: [], sprite, rangeCircle,
       hpBg: this.add.rectangle(x, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x1c202a),
-      hpFill: this.add.rectangle(x - HP_BAR_W / 2, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x4caf50).setOrigin(0, 0.5)
+      hpFill: this.add.rectangle(x - HP_BAR_W / 2, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x4caf50).setOrigin(0, 0.5),
+      ultBarBg: hasUltimate ? this.add.rectangle(x, y + ULT_BAR_Y_OFFSET, ULT_BAR_W, ULT_BAR_H, 0x1c202a) : null,
+      ultBarFill
     };
     sprite.on('pointerdown', () => this.onCellClicked(col, row));
 
@@ -446,6 +460,8 @@ class BattleScene extends Phaser.Scene {
     ally.rangeCircle.destroy();
     ally.hpBg.destroy();
     ally.hpFill.destroy();
+    if (ally.ultBarBg) ally.ultBarBg.destroy();
+    if (ally.ultBarFill) ally.ultBarFill.destroy();
     gameState.earnCoins(Math.floor(ally.species.cost * 0.5));
     this.bench.push(gameState.roster[ally.speciesId]);
     this.layoutBench();
@@ -655,6 +671,7 @@ class BattleScene extends Phaser.Scene {
           Sfx.hit();
           this.playHitSpark(target.x, target.y, TYPE_COLORS[ally.species.type]);
           this.applyAttackSecondaryEffect(ally, target, time);
+          this.chargeUltimate(ally, time);
           const speedMult = this.currentAttackSpeedMultiplier(ally, time);
           ally.nextAttackTime = time + ally.species.attackIntervalMs / speedMult;
         }
@@ -871,6 +888,62 @@ class BattleScene extends Phaser.Scene {
     }
 
     ally.nextAbilityTime = time + archetype.abilityCooldownMs;
+  }
+
+  // Charge-gated, not cooldown-gated (see archetypes.js) - every basic hit
+  // that actually lands advances it, so an ally's own attack speed controls
+  // how often its Ultimate fires. Types without one (none currently, but
+  // COMBAT_ARCHETYPES doesn't guarantee every future type will) just no-op.
+  chargeUltimate(ally, time) {
+    const archetype = COMBAT_ARCHETYPES[ally.species.type];
+    if (!archetype.ultimateChargeHits) return;
+
+    ally.ultimateCharge++;
+    if (ally.ultBarFill) ally.ultBarFill.scaleX = Math.min(1, ally.ultimateCharge / archetype.ultimateChargeHits);
+
+    if (ally.ultimateCharge >= archetype.ultimateChargeHits) {
+      this.applyArchetypeUltimate(ally, time);
+      ally.ultimateCharge = 0;
+      if (ally.ultBarFill) ally.ultBarFill.scaleX = 0;
+    }
+  }
+
+  applyArchetypeUltimate(ally, time) {
+    const archetype = COMBAT_ARCHETYPES[ally.species.type];
+    const tint = TYPE_COLORS[ally.species.type];
+
+    if (archetype.ultimateKind === 'team-buff') {
+      const cfg = archetype.ultimateEffect();
+      this.allies.forEach(a => this.addBuff(a, 'ultimate', cfg.attackSpeedMultiplier, time + cfg.durationMs));
+      this.announceUltimate(ally, archetype.ultimateLabel);
+      return;
+    }
+
+    const center = this.cellToPixel(ally.col, ally.row);
+    const rangePx = ally.species.range * CELL * (archetype.ultimateRangeMultiplier || 1.5);
+    const targets = this.findEnemiesInRange(center.x, center.y, rangePx);
+    if (targets.length === 0) return; // don't burn a rare charge swinging at nothing
+
+    this.announceUltimate(ally, archetype.ultimateLabel);
+    const cfg = archetype.ultimateEffect(ally.attack);
+    if (cfg.kind === 'chain') {
+      this.applyChain(targets[0], cfg, ally.attack, tint, true);
+    } else {
+      targets.forEach(e => {
+        if (cfg.splashDamage) this.dealDamage(e, cfg.splashDamage);
+        if (cfg.dot) this.applyDotToEnemy(e, cfg.dot, time);
+        if (cfg.slow) this.applySlowToEnemy(e, cfg.slow, time);
+        this.playHitSpark(e.x, e.y, tint, 1.8);
+      });
+    }
+  }
+
+  announceUltimate(ally, label) {
+    const text = this.add.text(ally.sprite.x, ally.sprite.y - 60, label.toUpperCase() + '!', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(55);
+    this.tweens.add({ targets: text, y: text.y - 40, duration: 700, ease: 'Cubic.Out' });
+    this.tweens.add({ targets: text, alpha: 0, delay: 400, duration: 300, ease: 'Linear', onComplete: () => text.destroy() });
   }
 
   onWaveComplete() {
