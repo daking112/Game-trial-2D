@@ -15,6 +15,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { URL } = require('url');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
@@ -210,19 +211,44 @@ function broadcast(msg, exceptId) {
   }
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, request) => {
   const id = nextPlayerId++;
   const name = `Tamer${id}`;
+  // Persistent per-browser id the client generates once and saves to
+  // localStorage (see NetClient.loadOrCreateClientId), sent as a query
+  // param since a WebSocket handshake has no body. This - NOT the `id`
+  // above - is what plot ownership is tracked by: `id` is fresh on every
+  // single connection, so a plot claimed under it would look "not yours"
+  // the moment a player's browser reconnects for any reason (refresh, a
+  // network blip, the laptop sleeping) even though the plot is still
+  // sitting there with their name on it. Falls back to the ephemeral `id`
+  // for a client that somehow connects without one, so it never crashes -
+  // that connection just gets the old (reconnect-fragile) behavior.
+  let clientId = `fallback-${id}`;
+  try {
+    const parsed = new URL(request.url, 'http://localhost');
+    clientId = parsed.searchParams.get('clientId') || clientId;
+  } catch (e) {
+    // malformed request URL - keep the fallback
+  }
+
   // Open ground below the plot grid (last row bottoms out around y=1640,
   // see plotPosition) rather than the map's literal center, which sits
   // right on top of a middle plot - a new player's very first frame
   // shouldn't already be standing inside someone's claimed base.
   const player = {
-    id, name, ws,
+    id, clientId, name, ws,
     x: WORLD_WIDTH / 2 + (Math.random() - 0.5) * 400,
     y: WORLD_HEIGHT - 150 + (Math.random() - 0.5) * 100
   };
   players.set(id, player);
+
+  // A returning player (same clientId, new connection id) should see their
+  // still-standing base labeled with whatever display name this connection
+  // got, not whichever name was current when they last connected.
+  for (const plot of plots) {
+    if (plot.ownerId === clientId) plot.ownerName = player.name;
+  }
 
   send(ws, { type: 'welcome', ...snapshotFor(id, name) });
   broadcast({ type: 'playerJoined', player: publicPlayer(player) }, id);
@@ -245,19 +271,22 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      // Plot ownership is checked/stored by clientId (persistent per-browser,
+      // survives a reconnect) everywhere below, never the ephemeral
+      // connection `id` - see the comment above player.clientId's assignment.
       case 'claimPlot': {
         const plot = plots[msg.plotId];
         if (plot && !plot.ownerId) {
-          plot.ownerId = id;
+          plot.ownerId = clientId;
           plot.ownerName = player.name;
-          broadcast({ type: 'plotClaimed', plotId: plot.id, ownerId: id, ownerName: player.name });
+          broadcast({ type: 'plotClaimed', plotId: plot.id, ownerId: clientId, ownerName: player.name });
         }
         break;
       }
 
       case 'plotLayout': {
         const plot = plots[msg.plotId];
-        if (plot && plot.ownerId === id && Array.isArray(msg.layout)) {
+        if (plot && plot.ownerId === clientId && Array.isArray(msg.layout)) {
           plot.layout = msg.layout.slice(0, MAX_LAYOUT_CELLS).map(c => ({
             col: Number(c.col) || 0, row: Number(c.row) || 0, color: Number(c.color) || 0xffffff
           }));
@@ -268,7 +297,7 @@ wss.on('connection', (ws) => {
 
       case 'waveResult': {
         const plot = plots[msg.plotId];
-        if (plot && plot.ownerId === id && Number.isInteger(msg.wave)) {
+        if (plot && plot.ownerId === clientId && Number.isInteger(msg.wave)) {
           plot.wave = msg.wave;
           broadcast({ type: 'plotWaveUpdated', plotId: plot.id, wave: plot.wave });
         }

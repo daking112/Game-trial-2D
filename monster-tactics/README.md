@@ -370,10 +370,19 @@ There's no separate multiplayer account system.
 - One shared room for everyone connected, capped at 12 plots total - no
   matchmaking, sharding into multiple rooms, or a lobby list. Fine for a
   handful of concurrent players, not for real scale.
-- No accounts/auth - `Tamer<N>` display names are assigned per-connection,
-  there's nothing tying a person to the same identity across sessions.
-- No reconnect handling - a dropped WebSocket just shows a "Disconnected"
-  message; refreshing starts a brand new connection/avatar.
+- No real accounts/auth - `Tamer<N>` display names are still assigned fresh
+  per-connection. There IS a persistent identity under the hood now though
+  (`NetClient.clientId`, a random id saved to that browser's localStorage) -
+  originally plot ownership was tracked by the ephemeral per-connection id
+  the server hands out, so any reconnect (a refresh, a network blip, a
+  laptop sleeping) silently orphaned your own base: still there, still
+  labeled with your name, but the game no longer recognized it as yours to
+  enter. Fixed by tracking ownership by clientId instead - but it's still
+  just "this browser," not a real login; a different browser/device is a
+  new identity with no way to reclaim an existing base.
+- No reconnect handling beyond that - a dropped WebSocket still shows a
+  "Disconnected" message with no auto-retry; refreshing (same clientId, see
+  above) starts a new connection/avatar but at least recognizes your plots.
 - Only one World Boss species/difficulty exists - no variety or scaling by
   however many players happen to be online when it spawns.
 - No visiting/co-op on a *plot* specifically (walking into someone else's

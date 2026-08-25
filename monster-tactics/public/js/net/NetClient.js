@@ -6,18 +6,46 @@
 // whatever connection is already open. A plain event-emitter (on/off/emit)
 // rather than exposing the raw WebSocket, so scenes never touch JSON
 // parsing directly.
+const CLIENT_ID_STORAGE_KEY = 'monster-tactics:clientId';
+
 const NetClient = {
   ws: null,
-  id: null,
+  id: null, // ephemeral per-connection id from the server - changes on every reconnect, fine for avatar/position tracking
+  clientId: null, // persistent per-browser id - see loadOrCreateClientId; this is what plot ownership is tracked by
   name: null,
   connected: false,
   lastSnapshot: null,
   handlers: {},
   connectPromise: null,
 
+  // A random id saved to localStorage the first time this browser connects,
+  // reused on every future connection - this is what lets "press E to enter
+  // your base" keep recognizing a plot as yours across a reconnect (a page
+  // refresh, a brief network drop, a laptop sleeping). Before this existed,
+  // plot ownership was tracked by the ephemeral per-connection `id` the
+  // server hands out fresh on every connection, so any reconnect silently
+  // orphaned your own base - it was still there, still labeled with your
+  // name, but the game no longer recognized it as yours to enter.
+  loadOrCreateClientId() {
+    try {
+      let id = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        localStorage.setItem(CLIENT_ID_STORAGE_KEY, id);
+      }
+      return id;
+    } catch (e) {
+      // localStorage unavailable (private mode, etc) - falls back to a
+      // fresh id every connection, same orphaning risk as before for this
+      // one browser, but never throws.
+      return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+  },
+
   wsUrl() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}/ws`;
+    if (!this.clientId) this.clientId = this.loadOrCreateClientId();
+    return `${proto}//${location.host}/ws?clientId=${encodeURIComponent(this.clientId)}`;
   },
 
   // Resolves with the server's initial snapshot. Safe to call repeatedly -

@@ -153,7 +153,7 @@ class WorldScene extends Phaser.Scene {
       panel.ownerName = p.ownerName;
       panel.layout = p.layout;
       panel.wave = p.wave;
-      if (p.ownerId === NetClient.id) this.myPlotId = p.id;
+      if (p.ownerId === NetClient.clientId) this.myPlotId = p.id;
       this.refreshPlotPanel(panel);
     });
   }
@@ -223,13 +223,13 @@ class WorldScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '15px', color: '#9aa4b8'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    if (p.ownerId === NetClient.id) this.myPlotId = p.id;
+    if (p.ownerId === NetClient.clientId) this.myPlotId = p.id;
     this.plots.set(p.id, panel);
     this.refreshPlotPanel(panel);
   }
 
   refreshPlotPanel(panel) {
-    const mine = panel.ownerId === NetClient.id;
+    const mine = panel.ownerId === NetClient.clientId;
     const unclaimed = panel.ownerId == null;
     panel.title.setText(
       unclaimed ? `Plot ${panel.id + 1} - unclaimed` :
@@ -262,7 +262,7 @@ class WorldScene extends Phaser.Scene {
     if (!panel) return;
     panel.ownerId = msg.ownerId;
     panel.ownerName = msg.ownerName;
-    if (msg.ownerId === NetClient.id) this.myPlotId = msg.plotId;
+    if (msg.ownerId === NetClient.clientId) this.myPlotId = msg.plotId;
     this.refreshPlotPanel(panel);
   }
 
@@ -491,7 +491,7 @@ class WorldScene extends Phaser.Scene {
     for (const panel of this.plots.values()) {
       const inside = Math.abs(this.myX - panel.x) < PLOT_W / 2 && Math.abs(this.myY - panel.y) < PLOT_H / 2;
       if (!inside) continue;
-      if (panel.ownerId === NetClient.id) nearOwnedByMe = panel;
+      if (panel.ownerId === NetClient.clientId) nearOwnedByMe = panel;
       else if (panel.ownerId == null && this.myPlotId == null) nearUnclaimed = panel;
     }
 
