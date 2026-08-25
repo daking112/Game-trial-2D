@@ -533,11 +533,13 @@ class BattleScene extends Phaser.Scene {
 
   spawnEnemy() {
     // The boss slot (see startWave/BOSS_WAVE_INTERVAL) is always the last
-    // enemy of a boss wave; every other spawn - boss wave or not - rolls
-    // from the normal spawnable pool (excludes split-only/boss-only entries
-    // like wormlet/kingcrab, see SPAWNABLE_ENEMY_SPECIES).
+    // enemy of a boss wave, picked at random among every boss:true species
+    // (see BOSS_ENEMY_SPECIES) so it's not the same fight every 5th wave;
+    // every other spawn - boss wave or not - rolls from the normal
+    // spawnable pool (excludes split/summon-only and boss-only entries,
+    // see SPAWNABLE_ENEMY_SPECIES).
     const isBossSpawn = this.isBossWave && this.spawnedCount === this.waveEnemyCount - 1;
-    const es = isBossSpawn ? getEnemySpecies('kingcrab')
+    const es = isBossSpawn ? BOSS_ENEMY_SPECIES[Math.floor(Math.random() * BOSS_ENEMY_SPECIES.length)]
       : SPAWNABLE_ENEMY_SPECIES[Math.floor(Math.random() * SPAWNABLE_ENEMY_SPECIES.length)];
     this.spawnEnemyOfSpecies(es, this.pathWaypoints[0], 0, 0);
   }
@@ -602,6 +604,7 @@ class BattleScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       this.processStatusEffects(enemy, time);
       this.processRegen(enemy, delta);
+      this.processSummon(enemy, time);
     }
 
     // enemy movement along the path
@@ -777,6 +780,27 @@ class BattleScene extends Phaser.Scene {
     if (regen <= 0 || enemy.hp <= 0) return;
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + regen * (delta / 1000));
     enemy.hpFill.scaleX = enemy.hp / enemy.maxHp;
+  }
+
+  // Trickles reinforcements on an interval for as long the source is alive
+  // (see monsters.js summonIntervalMs) - unlike spawnSplitChildren, this
+  // isn't a one-time burst on death, so the wave can't end just from
+  // clearing the source itself while its adds are still up.
+  processSummon(enemy, time) {
+    const interval = enemy.species.summonIntervalMs;
+    if (!interval || enemy.hp <= 0) return;
+    if (enemy.nextSummonTime == null) enemy.nextSummonTime = time + interval;
+    if (time < enemy.nextSummonTime) return;
+
+    enemy.nextSummonTime = time + interval;
+    const childSpecies = getEnemySpecies(enemy.species.summonSpeciesId);
+    const count = enemy.species.summonCount || 1;
+    for (let i = 0; i < count; i++) {
+      const offsetX = (i - (count - 1) / 2) * 18;
+      this.spawnEnemyOfSpecies(
+        childSpecies, { x: enemy.x + offsetX, y: enemy.y }, enemy.waypointIndex, enemy.progress
+      );
+    }
   }
 
   processStatusEffects(enemy, time) {

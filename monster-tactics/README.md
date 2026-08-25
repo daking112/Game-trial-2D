@@ -130,18 +130,32 @@ species with genuine counterplay:
 |---|---|---|
 | `armor` | Ironshell | Flat damage reduction per hit (min 1 still lands) - rewards a few big hits over many small ones; DoT/chip damage struggles against it. |
 | `regenPerSecond` | Mossback | Heals back over time - rewards burst damage, punishes leaving it half-dead and moving on. |
-| `slowImmune` | the boss | Can't be slowed - the counter to just kiting it with WATER towers forever. |
+| `slowImmune` | Kingcrab | Can't be slowed - the counter to just kiting it with WATER towers forever. |
 | `splitInto`/`splitCount` | Splitworm -> 2x Wormlet | Killing it spawns weaker copies that pick up its exact path progress - splash/AoE towers matter more than single-target ones against it. |
+| `summonIntervalMs`/`summonSpeciesId`/`summonCount` | Broodmother -> Wormlets | Trickles reinforcements on a timer for as long as it's alive, not a one-time burst on death like split - the wave can't end from killing just it while its adds are still up. |
 
 **Boss waves:** every 5th wave counting across the whole run
 (`BOSS_WAVE_INTERVAL` in `BattleScene.js`, not per-stage - matches how
 regular difficulty already scales) spawns one boss as the last enemy of that
 wave, after the normal ramp - a "BOSS INCOMING" banner announces it when the
-wave starts. Currently one boss species (Kingcrab: huge HP, armored, immune
-to slow, regenerating) at 2.4x scale with a wider HP bar and a name label so
-it's unmistakable, worth double the essence on clear. Not yet: multiple
-distinct boss species, a boss-specific attack/ability beyond stats, or
-scaling boss difficulty within a single run beyond the normal per-wave curve.
+wave starts, and it's worth double essence on clear. 3 boss species now
+exist, picked at random per boss wave (`BOSS_ENEMY_SPECIES`) so it's not the
+same fight every time:
+
+- **Kingcrab** (EARTH) - huge HP, armored, immune to slow, regenerating.
+  Tanky and immobile - a straightforward "your DPS vs its wall" check.
+- **Zephyrus** (ELECTRIC) - much less HP, no armor, hits hard if it reaches
+  the end, but *can* be slowed (unlike Kingcrab) and is very fast - the
+  actual counter is landing a slow, not just stacking damage.
+- **Broodmother** (GRASS) - moderate HP, lightly armored, slow-moving, but
+  spawns 2 Wormlets every 3 seconds for as long as it's alive - splash/AoE
+  towers matter far more than single-target ones, and clearing the boss
+  itself doesn't end the wave until its adds are cleared too.
+
+All 3 render at a bigger scale with a wider HP bar and a name label so a
+boss is always unmistakable. Not yet: a boss-specific attack/ability beyond
+stats (they still just walk and hit like any other enemy), or scaling boss
+difficulty within a single run beyond the normal per-wave curve.
 
 ## Meta-progression (Mastery)
 

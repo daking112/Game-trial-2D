@@ -149,7 +149,14 @@ const EVOLUTION_ESSENCE_COST = 150;
 //                    never picked by the normal random spawn roll
 //                    (see SPAWNABLE_ENEMY_SPECIES below).
 //   boss             true = eligible for BattleScene's periodic boss-wave
-//                    slot (BOSS_WAVE_INTERVAL), not the regular roll either.
+//                    slot (BOSS_WAVE_INTERVAL), picked at random among all
+//                    boss:true entries - not the regular roll either.
+//   summonIntervalMs/  while alive, spawns summonCount copies of a (weaker,
+//   summonSpeciesId/   spawnable:false) species every summonIntervalMs,
+//   summonCount        picking up its current path progress - a different
+//                       kind of pressure than splitInto (constant trickle
+//                       instead of a one-time burst on death), and the wave
+//                       can't end until every summoned add is also cleared.
 const ENEMY_SPECIES = [
   { id: 'widow', name: 'Widow', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 33, maxHp: 14, attack: 1, speed: 58, reward: 4 },
   { id: 'rollodon', name: 'Rollodon', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 2, maxHp: 40, attack: 2, speed: 26, reward: 10 },
@@ -165,11 +172,24 @@ const ENEMY_SPECIES = [
   { id: 'splitworm', name: 'Splitworm', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 18, maxHp: 36, attack: 2, speed: 34, reward: 11, splitInto: 'wormlet', splitCount: 2 },
   { id: 'wormlet', name: 'Wormlet', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 21, maxHp: 10, attack: 1, speed: 46, reward: 3, spawnable: false },
 
-  // -- boss (see BattleScene.BOSS_WAVE_INTERVAL) --
-  { id: 'kingcrab', name: 'Kingcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 24, maxHp: 400, attack: 6, speed: 20, reward: 60, armor: 5, slowImmune: true, regenPerSecond: 4, boss: true, spawnable: false }
+  // -- bosses (see BattleScene.BOSS_WAVE_INTERVAL) - 3 genuinely different
+  // fights, not 3 reskins of the same "big numbers" boss:
+  //   Kingcrab    tanky/immobile - armor + can't be slowed + regen, so it's
+  //               a straightforward "your DPS vs its wall" check.
+  //   Zephyrus    fast/fragile - no armor, no slow immunity (WATER towers
+  //               matter a lot here), but hits hard if it reaches the end -
+  //               the counter is actually landing slows, not brute HP.
+  //   Broodmother slow and unarmored on its own, but trickles Wormlets the
+  //               whole fight - splash/AoE towers matter far more than
+  //               single-target ones, and the wave won't end from clearing
+  //               just the boss.
+  { id: 'kingcrab', name: 'Kingcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 24, maxHp: 400, attack: 6, speed: 20, reward: 60, armor: 5, slowImmune: true, regenPerSecond: 4, boss: true, spawnable: false },
+  { id: 'zephyrus', name: 'Zephyrus', type: 'ELECTRIC', sheetKey: RETROMON_SHEET, frame: 37, maxHp: 260, attack: 10, speed: 55, reward: 55, regenPerSecond: 2, boss: true, spawnable: false },
+  { id: 'broodmother', name: 'Broodmother', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 40, maxHp: 340, attack: 5, speed: 18, reward: 55, armor: 2, summonIntervalMs: 3000, summonSpeciesId: 'wormlet', summonCount: 2, boss: true, spawnable: false }
 ];
 
 const SPAWNABLE_ENEMY_SPECIES = ENEMY_SPECIES.filter(e => e.spawnable !== false);
+const BOSS_ENEMY_SPECIES = ENEMY_SPECIES.filter(e => e.boss);
 
 function getSpecies(id) {
   return SPECIES.find(s => s.id === id) || EVOLVED_SPECIES.find(s => s.id === id);
