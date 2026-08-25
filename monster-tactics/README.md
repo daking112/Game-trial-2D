@@ -134,6 +134,30 @@ it's unmistakable, worth double the essence on clear. Not yet: multiple
 distinct boss species, a boss-specific attack/ability beyond stats, or
 scaling boss difficulty within a single run beyond the normal per-wave curve.
 
+## Meta-progression (Mastery)
+
+Every other reward in this game resets to nothing but roster/essence between
+runs - lives, coins, score, and stage progress all start over on a new run
+(`GameState.resetRun`). **Mastery** (`data/talents.js`, `MasteryScene.js`) is
+the one currency that doesn't: it's awarded once when a run ends, whether it
+ends in victory or a game over (`GameState.masteryForRunEnd` -
+`stageInRun * 5 + floor(score / 20)`, so even a rough early loss still
+banks something), and it never resets. Spend it on `MasteryScene` (a
+"Mastery" button on the main menu, plus a quick link from the Hub) on 3
+permanent talents, each 5 levels deep, cost scaling per level:
+
+| Talent | Effect | Applies |
+|---|---|---|
+| Vitality | +2 max lives per level, per run | Start of a run (`resetRun`) |
+| Fortune | +15 starting coins per level, each stage | Start of a stage (`startStage`) |
+| Insight | +10% essence earned per level | Live, every `earnEssence` call |
+
+Vitality/Fortune only take effect at the start of a run/stage they're read
+at, so upgrading mid-run changes your *next* run, not the one in progress -
+Insight has no such delay since there's no equivalent moment for it to wait
+for. Not built yet: more talents beyond these 3, a respec/refund option, and
+any Mastery sink beyond the talent tree (e.g. cosmetic unlocks).
+
 ## Structure
 
 ```
@@ -144,6 +168,7 @@ public/
     data/archetypes.js     per-type combat kit: Attack + Ability
     data/banners.js        Monster Sanctuary discovery banners (type pools)
     data/stages.js         the 5 path layouts, run-length constants, stage-choice logic
+    data/talents.js        Mastery talent tree - see "Meta-progression" below
     state/GameState.js     roster/team/coins/essence/run+stage progress
     scenes/PreloadScene.js loads every sprite/tile/UI texture, registers anims
     scenes/MenuScene.js
@@ -153,6 +178,7 @@ public/
     scenes/HubScene.js        between-stage hub: stage choice, countdown, Ready
     scenes/VictoryScene.js    run-complete stats screen
     scenes/WorldScene.js     shared multiplayer overworld - see "Multiplayer World" below
+    scenes/MasteryScene.js   spend Mastery on permanent talents - see "Meta-progression" below
     audio/Sfx.js            procedural Web Audio sound effects - see "Audio" below
     net/NetClient.js        WebSocket client wrapper for WorldScene/BattleScene
     ui/UiKit.js             shared button/panel/link factory - see "Art" below
@@ -333,18 +359,18 @@ There's no separate multiplayer account system.
 
 ## Bigger design not built yet
 
-The long-term pitch is larger than what's here. Immediate next targets, in
-priority order per direction from the project owner: ~~enemy variety~~ (see
-"Enemy variety & bosses" above - armor/regen/split/slow-immune traits plus
-periodic boss waves now exist; still to add: a flying trait that only
-certain tower types can hit, more boss species, and further balance pass now
-that real variety exists to balance) and **meta-progression** (a talent tree
-or other permanent-upgrade track unlocked by completed runs, on top of the
-per-run gacha/leveling loop that currently resets to nothing but
-roster/essence between runs - next up). Also on the list: evolution for the
-other 11 species (only the 3 starters have one
-defined right now), an Ultimate combat tier (`archetypes.js` has a
-documented, unused shape for it), and differentiated pull currencies.
+The long-term pitch is larger than what's here. The two immediate next
+targets per direction from the project owner both now have a first version
+built: ~~enemy variety~~ (see "Enemy variety & bosses" above -
+armor/regen/split/slow-immune traits plus periodic boss waves now exist;
+still to add: a flying trait that only certain tower types can hit, more
+boss species, and a further balance pass now that real variety exists to
+balance) and ~~meta-progression~~ (see "Meta-progression (Mastery)" above -
+3 permanent talents now exist; still to add: more talents, a respec option,
+and any Mastery sink beyond the talent tree). Also on the list: evolution
+for the other 11 species (only the 3 starters have one defined right now),
+an Ultimate combat tier (`archetypes.js` has a documented, unused shape for
+it), and differentiated pull currencies.
 
 Longer-term, the stated direction is a multiplayer .io-style game (think
 Roblox tycoon-tower-defense) - a shared world players build/defend in

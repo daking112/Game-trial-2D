@@ -18,12 +18,18 @@ class VictoryScene extends Phaser.Scene {
     this.add.text(width / 2, height / 2 - 15, `Final Score: ${gameState.score}   Lives remaining: ${gameState.lives}/${gameState.maxLives}`, {
       fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.add.text(width / 2, height / 2 + 25, `+${gameState.lastMasteryEarned || 0} Mastery earned (${gameState.mastery} total) - spend it on permanent upgrades`, {
+      fontFamily: 'monospace', fontSize: '19px', color: '#f5c94b'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    UiKit.makeButton(this, width / 2, height / 2 + 90, 'Start New Run', () => {
+    UiKit.makeButton(this, width / 2, height / 2 + 100, 'Start New Run', () => {
       gameState.runActive = false;
       this.scene.start('RosterScene');
     }, { size: 'large' });
-    UiKit.makeButton(this, width / 2, height / 2 + 190, 'Return to Menu', () => {
+    UiKit.makeButton(this, width / 2, height / 2 + 200, 'Spend Mastery', () => {
+      this.scene.start('MasteryScene');
+    }, { size: 'large', tint: 0xf5c94b });
+    UiKit.makeButton(this, width / 2, height / 2 + 300, 'Return to Menu', () => {
       this.scene.start('MenuScene');
     }, { size: 'large' });
   }

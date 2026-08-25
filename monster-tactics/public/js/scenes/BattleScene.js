@@ -912,9 +912,16 @@ class BattleScene extends Phaser.Scene {
 
     gameState.onStageCleared();
     const runComplete = gameState.isRunComplete();
+    let masteryLine = '';
+    if (runComplete) {
+      const masteryEarned = gameState.masteryForRunEnd();
+      gameState.awardMastery(masteryEarned);
+      gameState.lastMasteryEarned = masteryEarned; // read once by VictoryScene
+      masteryLine = `   +${masteryEarned} Mastery`;
+    }
     this.overlayTitle.setText(runComplete ? 'RUN COMPLETE!' : `${this.stage.name} Cleared!`);
     this.overlaySub.setText(
-      `Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
+      `Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence${masteryLine}`
     );
     this.overlayPrimaryBtn.text.setText(runComplete ? 'Claim Victory' : 'Continue');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
@@ -943,8 +950,11 @@ class BattleScene extends Phaser.Scene {
       return;
     }
 
+    const masteryEarned = gameState.masteryForRunEnd();
+    gameState.awardMastery(masteryEarned);
     this.overlaySub.setText(
-      `Run ended on stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}, wave ${gameState.wave}   Final Score: ${gameState.score}`
+      `Run ended on stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}, wave ${gameState.wave}   ` +
+      `Final Score: ${gameState.score}   +${masteryEarned} Mastery`
     );
     this.overlayPrimaryBtn.text.setText('Start New Run');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {

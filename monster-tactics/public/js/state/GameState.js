@@ -10,6 +10,8 @@
 const ROSTER_STORAGE_KEY = 'monster-tactics:roster';
 const ESSENCE_STORAGE_KEY = 'monster-tactics:essence';
 const STARTER_GRANTED_KEY = 'monster-tactics:starterGranted';
+const MASTERY_STORAGE_KEY = 'monster-tactics:mastery';
+const TALENTS_STORAGE_KEY = 'monster-tactics:talents';
 const MAX_TEAM_SIZE = 5;
 const STARTING_COINS = 120;
 const STARTER_ESSENCE = 80;
@@ -22,12 +24,17 @@ class GameState {
   constructor() {
     this.roster = this.loadRoster();
     this.essence = this.loadEssence();
+    // Mastery/talents load before lives/coins below, since their starting
+    // values depend on the vitality/fortune talent levels - see
+    // effectiveMaxLives/effectiveStartingCoins.
+    this.mastery = this.loadMastery();
+    this.talents = this.loadTalents();
     this.team = [];
-    this.lives = 20;
-    this.maxLives = 20;
+    this.lives = this.effectiveMaxLives();
+    this.maxLives = this.effectiveMaxLives();
     this.wave = 1; // wave within the current stage, 1..WAVES_PER_STAGE
     this.score = 0;
-    this.coins = STARTING_COINS;
+    this.coins = this.effectiveStartingCoins();
 
     // Run/stage progression. A run is a sequence of RUN_TARGET_STAGES
     // stages; lives and score persist across stages within one run (only
@@ -121,6 +128,48 @@ class GameState {
     }
   }
 
+  loadMastery() {
+    try {
+      const raw = localStorage.getItem(MASTERY_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  saveMastery() {
+    try {
+      localStorage.setItem(MASTERY_STORAGE_KEY, JSON.stringify(this.mastery));
+    } catch (e) {
+      // localStorage unavailable - mastery just won't persist
+    }
+  }
+
+  // Keyed by talent id -> level. Rebuilt against TALENTS (data/talents.js)
+  // every load rather than trusting the saved object's keys directly, so a
+  // talent added after a player's save file exists still shows up at level 0
+  // instead of being missing from gameState.talents entirely.
+  loadTalents() {
+    let saved = {};
+    try {
+      const raw = localStorage.getItem(TALENTS_STORAGE_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) {
+      saved = {};
+    }
+    const talents = {};
+    TALENTS.forEach(t => { talents[t.id] = saved[t.id] || 0; });
+    return talents;
+  }
+
+  saveTalents() {
+    try {
+      localStorage.setItem(TALENTS_STORAGE_KEY, JSON.stringify(this.talents));
+    } catch (e) {
+      // localStorage unavailable - talents just won't persist
+    }
+  }
+
   // Returns { isNew, essenceGained } so the caller (SanctuaryScene) can show
   // a different reveal for "new monster" vs "duplicate -> essence".
   addToRoster(speciesId) {
@@ -172,8 +221,12 @@ class GameState {
     return targetId;
   }
 
+  // Insight applies live (no "start of run" moment to wait for, unlike
+  // vitality/fortune below) - every essence gain, in or out of battle, is
+  // boosted by whatever level it's currently at.
   earnEssence(amount) {
-    this.essence += amount;
+    const insightLevel = this.talents.insight || 0;
+    this.essence += Math.round(amount * (1 + insightLevel * 0.10));
     this.saveEssence();
   }
 
@@ -213,10 +266,11 @@ class GameState {
     this.runActive = true;
     this.stageInRun = 0;
     this.currentStageId = null;
+    this.maxLives = this.effectiveMaxLives();
     this.lives = this.maxLives;
     this.wave = 1;
     this.score = 0;
-    this.coins = STARTING_COINS;
+    this.coins = this.effectiveStartingCoins();
   }
 
   // Enters a stage within the current run: refills coins and the
@@ -226,7 +280,43 @@ class GameState {
     this.stageInRun += 1;
     this.currentStageId = stageId;
     this.wave = 1;
-    this.coins = STARTING_COINS;
+    this.coins = this.effectiveStartingCoins();
+  }
+
+  // ---------- meta-progression (Mastery/talents, see data/talents.js) ----------
+
+  effectiveMaxLives() {
+    return 20 + (this.talents.vitality || 0) * 2;
+  }
+
+  effectiveStartingCoins() {
+    return STARTING_COINS + (this.talents.fortune || 0) * 15;
+  }
+
+  // Called once when a run ends, win or lose (see BattleScene.onWaveComplete
+  // / onGameOver) - Mastery is the one thing a run always leaves behind even
+  // on a loss, unlike essence which only comes from waves actually cleared.
+  masteryForRunEnd() {
+    return this.stageInRun * 5 + Math.floor(this.score / 20);
+  }
+
+  awardMastery(amount) {
+    this.mastery += amount;
+    this.saveMastery();
+  }
+
+  upgradeTalent(id) {
+    const talent = getTalent(id);
+    if (!talent) return false;
+    const level = this.talents[id] || 0;
+    if (level >= talent.maxLevel) return false;
+    const cost = talentCostForLevel(talent, level);
+    if (this.mastery < cost) return false;
+    this.mastery -= cost;
+    this.talents[id] = level + 1;
+    this.saveMastery();
+    this.saveTalents();
+    return true;
   }
 
   // Monotonic wave index across the whole run (stage 2's wave 1 is harder

@@ -32,11 +32,15 @@ class MenuScene extends Phaser.Scene {
     UiKit.iconLabel(this, width / 2, 484, 'icon-essence', `Essence: ${gameState.essence}`, {
       fontFamily: 'monospace', fontSize: '22px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
     }, 24);
+    this.add.text(width / 2, 518, `Mastery: ${gameState.mastery}`, {
+      fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b8'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
 
-    UiKit.makeButton(this, width / 2, 590, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
-    UiKit.makeButton(this, width / 2, 700, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 610, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 710, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 810, 'Mastery', () => this.scene.start('MasteryScene'), { size: 'large', tint: 0xf5c94b });
 
-    UiKit.makeButton(this, width / 2, 810, 'Multiplayer World (Beta)', () => {
+    UiKit.makeButton(this, width / 2, 920, 'Multiplayer World (Beta)', () => {
       gameState.inMultiplayerWorld = true;
       this.scene.start('WorldScene');
     }, { size: 'large', tint: 0xbfe8ff });

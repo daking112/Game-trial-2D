@@ -39,6 +39,7 @@ class HubScene extends Phaser.Scene {
 
     UiKit.makeButton(this, width / 2, 560, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
     UiKit.makeButton(this, width / 2, 660, 'Team & Upgrades', () => this.scene.start('RosterScene'), { size: 'large' });
+    UiKit.makeLink(this, width / 2, 715, `Mastery: ${gameState.mastery} - spend it >`, () => this.scene.start('MasteryScene'), { fontSize: '17px' });
 
     this.readyBtn = UiKit.makeButton(this, width / 2, 790, 'Ready!', () => this.proceed(), { tint: 0x8fdc8f, size: 'large' });
 
