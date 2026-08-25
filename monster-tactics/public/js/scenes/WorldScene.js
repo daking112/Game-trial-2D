@@ -64,6 +64,7 @@ class WorldScene extends Phaser.Scene {
       ['plotLayoutUpdated', (msg) => this.onPlotLayoutUpdated(msg)],
       ['plotWaveUpdated', (msg) => this.onPlotWaveUpdated(msg)],
       ['worldWaveTick', (msg) => this.onWorldWaveTick(msg)],
+      ['leaderboard', (msg) => this.onLeaderboardUpdate(msg.leaderboard)],
       ['disconnected', () => this.onDisconnected()]
     ];
     this.netHandlers.forEach(([type, fn]) => NetClient.on(type, fn));
@@ -83,6 +84,7 @@ class WorldScene extends Phaser.Scene {
       this.worldWaveDeadline = snapshot.worldWaveDeadline;
       this.syncPlayers(snapshot.players);
       this.syncPlots(snapshot.plots);
+      this.onLeaderboardUpdate(snapshot.leaderboard || []);
       return;
     }
 
@@ -108,6 +110,8 @@ class WorldScene extends Phaser.Scene {
 
     this.buildHud();
     this.buildControls();
+    this.buildLeaderboardPanel();
+    this.onLeaderboardUpdate(snapshot.leaderboard || []);
   }
 
   syncPlayers(players) {
@@ -305,6 +309,46 @@ class WorldScene extends Phaser.Scene {
     this.claimHintText = this.add.text(width / 2, this.scale.height - 40, 'Press E to claim this plot as your base', {
       fontFamily: 'monospace', fontSize: '19px', color: '#f5c94b'
     }).setOrigin(0.5).setStroke('#1c2530', 4).setScrollFactor(0).setVisible(false);
+  }
+
+  // A compact live top-5, pinned to the corner - the full sortable list
+  // with stage/wave/result detail lives on LeaderboardScene (also
+  // reachable without ever entering the world, from the main menu).
+  buildLeaderboardPanel() {
+    const { width } = this.scale;
+    const panelX = width - 190, panelTop = 100;
+    this.add.rectangle(panelX, panelTop + 110, 320, 230, 0x0b0d12, 0.75).setScrollFactor(0).setStrokeStyle(2, 0x394258);
+    this.add.text(panelX, panelTop, 'TOP RUNS', {
+      fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0);
+    UiKit.makeLink(this, panelX, panelTop + 205, 'Full Leaderboard >', () => this.scene.start('LeaderboardScene'), {
+      fontSize: '13px'
+    }).setScrollFactor(0);
+    this.leaderboardRows = [];
+    this.leaderboardPanelX = panelX;
+    this.leaderboardPanelTop = panelTop;
+  }
+
+  onLeaderboardUpdate(entries) {
+    if (!this.leaderboardRows) return; // panel not built yet - applyState builds it before calling this
+    this.leaderboardRows.forEach(r => r.destroy());
+    this.leaderboardRows = [];
+
+    const top = (entries || []).slice(0, 5);
+    const x = this.leaderboardPanelX - 145, startY = this.leaderboardPanelTop + 35;
+    if (top.length === 0) {
+      const t = this.add.text(this.leaderboardPanelX, startY + 40, 'No runs yet - be the first!', {
+        fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
+      }).setOrigin(0.5).setScrollFactor(0);
+      this.leaderboardRows.push(t);
+      return;
+    }
+    top.forEach((e, i) => {
+      const t = this.add.text(x, startY + i * 22, `#${i + 1} ${(e.name || '?').slice(0, 10)}  ${e.score}`, {
+        fontFamily: 'monospace', fontSize: '14px', color: i === 0 ? '#f5c94b' : '#e8ecf5'
+      }).setOrigin(0, 0.5).setScrollFactor(0);
+      this.leaderboardRows.push(t);
+    });
   }
 
   buildControls() {

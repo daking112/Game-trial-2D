@@ -88,6 +88,28 @@ let nextPlayerId = 1;
 let worldWave = 1;
 let worldWaveDeadline = Date.now() + WORLD_WAVE_INTERVAL_MS;
 
+// All-time top runs, across every connected player, single-player and
+// multiplayer-plot alike - the one piece of cross-player visibility this
+// game had none of before. In-memory only (see README) - resets if the
+// server process restarts, same as the shared-world state above.
+const LEADERBOARD_MAX = 25;
+let leaderboard = [];
+
+function submitScore(playerName, entry) {
+  leaderboard.push({
+    name: playerName,
+    score: Math.max(0, Math.floor(Number(entry.score) || 0)),
+    stageReached: Math.max(0, Math.floor(Number(entry.stageReached) || 0)),
+    wave: Math.max(0, Math.floor(Number(entry.wave) || 0)),
+    mode: entry.mode === 'plot' ? 'plot' : 'run',
+    outcome: entry.outcome === 'victory' ? 'victory' : 'ended',
+    at: Date.now()
+  });
+  leaderboard.sort((a, b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, LEADERBOARD_MAX);
+  broadcast({ type: 'leaderboard', leaderboard });
+}
+
 function publicPlayer(p) {
   return { id: p.id, name: p.name, x: p.x, y: p.y };
 }
@@ -105,7 +127,8 @@ function snapshotFor(playerId, name) {
     worldWidth: WORLD_WIDTH,
     worldHeight: WORLD_HEIGHT,
     worldWave,
-    worldWaveDeadline
+    worldWaveDeadline,
+    leaderboard
   };
 }
 
@@ -185,6 +208,16 @@ wss.on('connection', (ws) => {
         }
         break;
       }
+
+      // Sent by both single-player run-ends (best-effort - see NetClient
+      // usage in BattleScene, single-player itself never requires a
+      // connection) and multiplayer plot wave-clears. No account system to
+      // check identity against, so this just trusts the client-reported
+      // score - same "trust the client for combat" tradeoff the rest of
+      // this server already makes (see README).
+      case 'submitScore':
+        submitScore(player.name, msg);
+        break;
 
       default:
         break;

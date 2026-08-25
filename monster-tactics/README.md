@@ -158,6 +158,36 @@ Insight has no such delay since there's no equivalent moment for it to wait
 for. Not built yet: more talents beyond these 3, a respec/refund option, and
 any Mastery sink beyond the talent tree (e.g. cosmetic unlocks).
 
+## Leaderboard
+
+The one piece of cross-player visibility this game had none of before -
+".io games" live and die on being able to see how you stack up against
+real strangers, and until now nothing here showed a player anyone else's
+result, ever. `server/server.js` keeps an in-memory, all-time top-25 list
+(`leaderboard`), sorted by score, fed from two places:
+
+- **Single-player run-ends** (both a win and a loss - `BattleScene`'s
+  `submitScoreBestEffort`) - best-effort only: it tries to connect to the
+  multiplayer server and silently gives up if nothing answers, so
+  single-player genuinely still needs no server (see top of this README).
+  Opening `index.html` directly, or serving it with a plain static file
+  server, plays exactly as before; run it via `npm start` and those same
+  runs start feeding the leaderboard for free.
+- **Multiplayer plot wave-clears** - already connected by definition, so
+  every wave cleared reports the plot's running score under `mode: 'plot'`.
+
+Viewable two ways: a full sortable `LeaderboardScene` (name/score/stage/
+wave/result columns, reachable from the main menu) and a live top-5 panel
+pinned in the corner of `WorldScene` while you're in the shared world,
+updated in real time as anyone - including players you've never
+interacted with - submits a new score. No accounts: entries are trusted
+client-reported data tagged with whatever `Tamer<N>` name the server
+handed out that session (same "trust the client" tradeoff the rest of the
+multiplayer server already makes - see "Multiplayer World" above). Not
+built yet: persisting the leaderboard across a server restart (it's
+in-memory only, same as the rest of the shared-world state), per-player
+identity across sessions, and any filtering (e.g. "this week" / by mode).
+
 ## Structure
 
 ```
@@ -179,8 +209,9 @@ public/
     scenes/VictoryScene.js    run-complete stats screen
     scenes/WorldScene.js     shared multiplayer overworld - see "Multiplayer World" below
     scenes/MasteryScene.js   spend Mastery on permanent talents - see "Meta-progression" below
+    scenes/LeaderboardScene.js  all-time top runs - see "Leaderboard" below
     audio/Sfx.js            procedural Web Audio sound effects - see "Audio" below
-    net/NetClient.js        WebSocket client wrapper for WorldScene/BattleScene
+    net/NetClient.js        WebSocket client wrapper for WorldScene/BattleScene/LeaderboardScene
     ui/UiKit.js             shared button/panel/link factory - see "Art" below
     vendor/phaser.min.js   Phaser 3.70.0, vendored (no CDN dependency)
   assets/

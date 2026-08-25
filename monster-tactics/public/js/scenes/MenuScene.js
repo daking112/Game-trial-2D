@@ -44,5 +44,7 @@ class MenuScene extends Phaser.Scene {
       gameState.inMultiplayerWorld = true;
       this.scene.start('WorldScene');
     }, { size: 'large', tint: 0xbfe8ff });
+
+    UiKit.makeLink(this, width / 2, 985, 'Leaderboard', () => this.scene.start('LeaderboardScene'), { fontSize: '19px' });
   }
 }

@@ -459,6 +459,16 @@ class BattleScene extends Phaser.Scene {
   // a live mini-preview of this plot without needing this scene/tab to be
   // running at all - it's just a snapshot of occupied cells and each one's
   // type color, not a live simulation feed.
+  // Best-effort - single-player never requires the multiplayer server (see
+  // README), so this tries to connect only when there's a score worth
+  // reporting, and silently gives up if nothing answers (opening
+  // index.html directly, or a static-only file server with no /ws). A
+  // multiplayer plot is already connected by the time this can run, so
+  // that path just resolves immediately and sends.
+  submitScoreBestEffort(payload) {
+    NetClient.connect().then(() => NetClient.send('submitScore', payload)).catch(() => {});
+  }
+
   reportPlotLayout() {
     const layout = [];
     for (let r = 0; r < GRID_ROWS; r++) {
@@ -877,6 +887,7 @@ class BattleScene extends Phaser.Scene {
     // stage-progress logic runs.
     if (this.multiplayerPlotId != null) {
       NetClient.send('waveResult', { plotId: this.multiplayerPlotId, wave: gameState.wave });
+      this.submitScoreBestEffort({ score: gameState.score, stageReached: 0, wave: gameState.wave, mode: 'plot', outcome: 'ended' });
       this.overlayTitle.setText(`Wave ${gameState.wave} Cleared!`);
       this.overlaySub.setText(
         `Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
@@ -918,6 +929,10 @@ class BattleScene extends Phaser.Scene {
       gameState.awardMastery(masteryEarned);
       gameState.lastMasteryEarned = masteryEarned; // read once by VictoryScene
       masteryLine = `   +${masteryEarned} Mastery`;
+      this.submitScoreBestEffort({
+        score: gameState.score, stageReached: gameState.stageInRun, wave: gameState.wave,
+        mode: 'run', outcome: 'victory'
+      });
     }
     this.overlayTitle.setText(runComplete ? 'RUN COMPLETE!' : `${this.stage.name} Cleared!`);
     this.overlaySub.setText(
@@ -939,6 +954,7 @@ class BattleScene extends Phaser.Scene {
     this.overlayPrimaryBtn.bg.off('pointerdown');
 
     if (this.multiplayerPlotId != null) {
+      this.submitScoreBestEffort({ score: gameState.score, stageReached: 0, wave: gameState.wave, mode: 'plot', outcome: 'ended' });
       this.overlaySub.setText(`Your base fell on wave ${gameState.wave}   Final Score: ${gameState.score}`);
       this.overlayPrimaryBtn.text.setText('Rebuild Base');
       this.overlayPrimaryBtn.bg.once('pointerdown', () => {
@@ -952,6 +968,10 @@ class BattleScene extends Phaser.Scene {
 
     const masteryEarned = gameState.masteryForRunEnd();
     gameState.awardMastery(masteryEarned);
+    this.submitScoreBestEffort({
+      score: gameState.score, stageReached: gameState.stageInRun, wave: gameState.wave,
+      mode: 'run', outcome: 'ended'
+    });
     this.overlaySub.setText(
       `Run ended on stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}, wave ${gameState.wave}   ` +
       `Final Score: ${gameState.score}   +${masteryEarned} Mastery`
