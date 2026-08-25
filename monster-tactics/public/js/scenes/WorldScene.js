@@ -70,8 +70,10 @@ class WorldScene extends Phaser.Scene {
       ['worldWaveTick', (msg) => this.onWorldWaveTick(msg)],
       ['leaderboard', (msg) => this.onLeaderboardUpdate(msg.leaderboard)],
       ['worldBossSpawned', (msg) => this.onWorldBossSpawned(msg)],
+      ['worldBossMoved', (msg) => this.onWorldBossMoved(msg)],
       ['worldBossHit', (msg) => this.onWorldBossHit(msg)],
       ['worldBossDefeated', (msg) => this.onWorldBossDefeated()],
+      ['worldBossEscaped', () => this.onWorldBossEscaped()],
       ['worldBossReward', (msg) => this.onWorldBossReward(msg)],
       ['disconnected', () => this.onDisconnected()]
     ];
@@ -308,7 +310,7 @@ class WorldScene extends Phaser.Scene {
     this.bossHpBg = this.add.rectangle(state.x, state.y - 100, 260, 16, 0x1c202a).setStrokeStyle(2, 0x394258);
     this.bossHpFill = this.add.rectangle(state.x - 130, state.y - 100, 260, 16, 0xe0562f).setOrigin(0, 0.5);
     this.bossHpFill.scaleX = Math.max(0, state.hp / state.maxHp);
-    this.bossHint = this.add.text(state.x, state.y + 90, 'Click it, or walk up and press SPACE!', {
+    this.bossHint = this.add.text(state.x, state.y + 90, 'It\'s on the move - click it, or catch up and press SPACE!', {
       fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
 
@@ -318,6 +320,29 @@ class WorldScene extends Phaser.Scene {
   destroyBossVisual() {
     [this.bossSprite, this.bossNameLabel, this.bossHpBg, this.bossHpFill, this.bossHint].forEach(o => o && o.destroy());
     this.bossSprite = null;
+  }
+
+  // Repositions every piece of the boss's visual together - called on every
+  // movement tick from the server (see server.js advanceWorldBoss), so it's
+  // walking a real path rather than sitting in one spot. Snaps rather than
+  // tweens between ticks: WORLD_BOSS_TICK_MS (150ms) is frequent enough that
+  // a snap reads as smooth motion, and staying snapped to the server's
+  // authoritative position (not a locally-predicted one) means the visible
+  // position always matches what attackWorldBoss is actually range-checking
+  // against server-side.
+  moveBossVisualTo(x, y) {
+    if (!this.bossSprite) return;
+    this.bossX = x;
+    this.bossY = y;
+    this.bossSprite.setPosition(x, y);
+    this.bossNameLabel.setPosition(x, y - 130);
+    this.bossHpBg.setPosition(x, y - 100);
+    this.bossHpFill.setPosition(x - 130, y - 100);
+    this.bossHint.setPosition(x, y + 90);
+  }
+
+  onWorldBossMoved(msg) {
+    this.moveBossVisualTo(msg.x, msg.y);
   }
 
   onWorldBossHit(msg) {
@@ -333,6 +358,14 @@ class WorldScene extends Phaser.Scene {
     this.destroyBossVisual();
   }
 
+  // Reached the far end of its path without dying - it escapes, nobody gets
+  // a reward. Distinct from onWorldBossDefeated so the outcome actually
+  // reads differently (no green victory banner for letting it through).
+  onWorldBossEscaped() {
+    this.announceBossBanner('WORLD BOSS ESCAPED!', '#e0562f');
+    this.destroyBossVisual();
+  }
+
   // Only sent to players who actually landed a hit (see server.js
   // attackWorldBoss) - essence split by each contributor's damage share.
   onWorldBossReward(msg) {
@@ -343,7 +376,11 @@ class WorldScene extends Phaser.Scene {
   syncWorldBoss(state) {
     if (!state) return;
     if (state.active && !this.bossSprite) { this.onWorldBossSpawned(state); return; }
-    if (state.active && this.bossSprite) { this.bossHpFill.scaleX = Math.max(0, state.hp / state.maxHp); return; }
+    if (state.active && this.bossSprite) {
+      this.bossHpFill.scaleX = Math.max(0, state.hp / state.maxHp);
+      this.moveBossVisualTo(state.x, state.y); // catches up a reconnecting client to wherever it's walked to
+      return;
+    }
     if (!state.active && this.bossSprite) this.destroyBossVisual();
   }
 

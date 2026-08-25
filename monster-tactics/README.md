@@ -358,17 +358,32 @@ to be: it's the one piece of gameplay here that's genuinely *shared* rather
 than one player's own combat rendered for others to watch, so its HP can't
 live on any one client or two players' clients would each think they landed
 the finishing blow. Every World Wave tick (`WORLD_WAVE_INTERVAL_MS`, 45s)
-spawns one if the last isn't still standing, in a dedicated open arena above
-the plot grid. Click it, or walk up and press **SPACE** - each hit is a
-flat, server-decided amount (`WORLD_BOSS_ATTACK_DAMAGE`) on a per-player
-cooldown, not a client-reported number, specifically so a client can't just
-lie about its damage the way it can everywhere else on this server. HP is
-one shared number, broadcast to everyone on every hit; when it dies, essence
-is split among every contributor by their share of the total damage and
-sent only to them (`worldBossReward`) - verified this whole loop directly
-with 8 concurrent connections hammering it at once: damage summed to
-exactly its max HP, HP only ever decreased, and reward messages went only to
-the 8 who actually landed a hit, none of the bystanders.
+spawns one if the last isn't still standing - and it walks: a straight path
+through the open band between plot row 0 and row 1 (`WORLD_BOSS_PATH`,
+stepped server-side every `WORLD_BOSS_TICK_MS` the same way BattleScene
+steps enemies along a stage's path, just driven by a timer instead of a
+render frame), not a fixed point in its own arena. Whoever built defensively
+near that route becomes a strongpoint everyone passing through benefits
+from - real spatial payoff for base placement, not just a shared click
+target. Reaching the far end without dying lets it escape with no rewards
+for anyone, for actual time pressure.
+
+Click it, or walk up and press **SPACE** - each hit is a flat, server-
+decided amount (`WORLD_BOSS_ATTACK_DAMAGE`) on a per-player cooldown, not a
+client-reported number, specifically so a client can't just lie about its
+damage the way it can everywhere else on this server, and the range check
+is against its *current* server-tracked position every time, not wherever
+it was when you last looked. HP is one shared number, broadcast to everyone
+on every hit; when it dies, essence is split among every contributor by
+their share of the total damage and sent only to them (`worldBossReward`) -
+verified this whole loop directly with 8 concurrent connections hammering
+a stationary-era version of it at once (damage summed to exactly its max
+HP, HP only ever decreased, reward messages went only to the 8 who actually
+landed a hit), and separately verified the path version's movement math
+(exact `speed * tick` steps, clean reset to the path start on respawn),
+its escape-without-reward behavior, and that attacks from a stale
+remembered position are rejected while attacks from its current
+broadcasted position land.
 
 Progression (roster/essence/coins/lives) is exactly the same
 `GameState`/localStorage as single-player - entering a plot just calls the
@@ -399,6 +414,15 @@ There's no separate multiplayer account system.
   above) starts a new connection/avatar but at least recognizes your plots.
 - Only one World Boss species/difficulty exists - no variety or scaling by
   however many players happen to be online when it spawns.
+- Its path is one straight leg across a single open band, not a real
+  winding route through the plot grid the way a stage's path winds for
+  single-player - the project owner's pitch was closer to the whole
+  overworld playing like one continuous shared tower-defense board, with
+  plots *as* the tower spots along a real path. This is a first step
+  toward that (a moving shared target with spatial stakes), not the full
+  thing - a true multi-turn path, and towers actually auto-engaging it
+  from nearby plots rather than needing a player to walk up and click, are
+  both still open.
 - No visiting/co-op on a *plot* specifically (walking into someone else's
   live battle to help defend) or chat - the World Boss is the only actually
   shared combat right now.

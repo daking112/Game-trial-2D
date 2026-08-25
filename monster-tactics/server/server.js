@@ -110,31 +110,86 @@ let leaderboard = [];
 // Kept deliberately simple: a flat, server-decided damage-per-click (not
 // trusting a client-reported amount) with a per-player cooldown, rather
 // than simulating each player's actual team/stats server-side.
+//
+// It walks a path through the middle of the plot grid - not a fixed point -
+// so where a player builds their base has real spatial meaning: a base near
+// the road is a strongpoint everyone passing through benefits from, the
+// same way tower placement matters in a normal battle. Reaching the far end
+// without dying lets it escape with no rewards for anyone, for real time
+// pressure. This is deliberately still not a full merge of plot combat into
+// one shared simulation (that would mean moving combat authority for every
+// player's own towers server-side too) - just this one shared threat given
+// a route instead of a room.
 const WORLD_BOSS_MAX_HP = 6000;
 const WORLD_BOSS_ATTACK_DAMAGE = 15;
 const WORLD_BOSS_ATTACK_COOLDOWN_MS = 500;
 const WORLD_BOSS_HIT_RANGE = 140;
-const WORLD_BOSS_X = WORLD_WIDTH / 2;
-const WORLD_BOSS_Y = 280; // the dedicated arena band above the plot grid (see WORLD_HEIGHT)
 const WORLD_BOSS_ESSENCE_POOL = 200; // split across contributors by damage share
+const WORLD_BOSS_SPEED = 55; // px/sec
+const WORLD_BOSS_TICK_MS = 150;
+// Straight across, in the open band between plot row 0 and row 1 (see
+// PLOT_ORIGIN_Y/PLOT_SPACING_Y) rather than a separate arena off to the
+// side - it visibly threads between bases as it crosses the map. A single
+// straight leg is v1; a real winding path (like a stage's pathCells on the
+// client) is future work, noted in README.
+const WORLD_BOSS_PATH = [
+  { x: 100, y: PLOT_ORIGIN_Y + PLOT_SPACING_Y / 2 },
+  { x: WORLD_WIDTH - 100, y: PLOT_ORIGIN_Y + PLOT_SPACING_Y / 2 }
+];
 
-let worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
+let worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, x: 0, y: 0, waypointIndex: 0, contributions: new Map() };
 const lastBossAttackAt = new Map(); // playerId -> timestamp, for the per-player cooldown
 
 function spawnWorldBoss() {
-  worldBoss = { active: true, hp: WORLD_BOSS_MAX_HP, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
-  broadcast({ type: 'worldBossSpawned', hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: WORLD_BOSS_X, y: WORLD_BOSS_Y });
+  const start = WORLD_BOSS_PATH[0];
+  worldBoss = {
+    active: true, hp: WORLD_BOSS_MAX_HP, maxHp: WORLD_BOSS_MAX_HP,
+    x: start.x, y: start.y, waypointIndex: 0, contributions: new Map()
+  };
+  broadcast({ type: 'worldBossSpawned', hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: worldBoss.x, y: worldBoss.y });
 }
 
 function publicWorldBoss() {
   return worldBoss.active
-    ? { active: true, hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: WORLD_BOSS_X, y: WORLD_BOSS_Y }
+    ? { active: true, hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: worldBoss.x, y: worldBoss.y }
     : { active: false };
+}
+
+// Advances the boss one tick along WORLD_BOSS_PATH - mirrors the waypoint-
+// stepping shape BattleScene already uses for enemies client-side, just run
+// server-side on a timer instead of per render frame, since this has to
+// keep moving for every connected player regardless of which of them (if
+// any) currently has it on screen.
+function advanceWorldBoss() {
+  if (!worldBoss.active) return;
+  const target = WORLD_BOSS_PATH[worldBoss.waypointIndex + 1];
+  if (!target) return; // shouldn't happen - escape is handled the tick it's reached
+
+  const dx = target.x - worldBoss.x, dy = target.y - worldBoss.y;
+  const dist = Math.hypot(dx, dy);
+  const step = WORLD_BOSS_SPEED * (WORLD_BOSS_TICK_MS / 1000);
+
+  if (dist <= step) {
+    worldBoss.x = target.x;
+    worldBoss.y = target.y;
+    worldBoss.waypointIndex += 1;
+    if (!WORLD_BOSS_PATH[worldBoss.waypointIndex + 1]) {
+      // Reached the end of the road without dying - it escapes, no rewards.
+      broadcast({ type: 'worldBossEscaped' });
+      worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, x: 0, y: 0, waypointIndex: 0, contributions: new Map() };
+      return;
+    }
+  } else {
+    worldBoss.x += (dx / dist) * step;
+    worldBoss.y += (dy / dist) * step;
+  }
+
+  broadcast({ type: 'worldBossMoved', x: worldBoss.x, y: worldBoss.y });
 }
 
 function attackWorldBoss(attackerId, attackerPlayer) {
   if (!worldBoss.active) return;
-  const dx = attackerPlayer.x - WORLD_BOSS_X, dy = attackerPlayer.y - WORLD_BOSS_Y;
+  const dx = attackerPlayer.x - worldBoss.x, dy = attackerPlayer.y - worldBoss.y;
   if (Math.hypot(dx, dy) > WORLD_BOSS_HIT_RANGE) return;
 
   const now = Date.now();
@@ -157,7 +212,7 @@ function attackWorldBoss(attackerId, attackerPlayer) {
       rewards.push({ name: contributor.name, damageDealt });
     }
     broadcast({ type: 'worldBossDefeated', rewards });
-    worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
+    worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, x: 0, y: 0, waypointIndex: 0, contributions: new Map() };
   }
 }
 
@@ -341,6 +396,9 @@ setInterval(() => {
   broadcast({ type: 'worldWaveTick', worldWave, worldWaveDeadline });
   if (!worldBoss.active) spawnWorldBoss();
 }, 1000);
+
+// Walks the boss along WORLD_BOSS_PATH - see advanceWorldBoss.
+setInterval(advanceWorldBoss, WORLD_BOSS_TICK_MS);
 
 httpServer.listen(PORT, () => {
   console.log(`Monster Tactics multiplayer server listening on http://localhost:${PORT}`);
