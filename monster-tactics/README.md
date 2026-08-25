@@ -41,10 +41,13 @@ lock, not just rough onboarding.
    card shows its level, level-scaled stats, and an Upgrade button (once
    there's enough Monster Essence for that species) that boosts its stats -
    the payoff for pulling something you already own. Once a monster hits
-   max level, species in `EVOLUTION_MAP` (currently the 3 starters) can
-   evolve instead, given enough Monster Essence (150) - evolving changes
-   the monster's *kit*, not just its numbers: Rollpup (GRASS, poison-DoT)
-   evolves into Rollodon (EARTH, splash), a genuinely different tower.
+   max level, it can evolve instead (every species has one now, via
+   `EVOLUTION_MAP`), given enough Monster Essence (150) - a real jump in
+   power/range, not just a level-up. The 3 starters go further and change
+   *kit*, not just numbers: Rollpup (GRASS, poison-DoT) evolves into
+   Rollodon (EARTH, splash), a genuinely different tower - the other 11
+   keep their base type/kit on evolving (still stronger, just not a
+   different Attack/Ability).
 3. **Battle** - a run is 5 stages (`RUN_TARGET_STAGES`), each 3 waves
    (`WAVES_PER_STAGE`), for 15 waves total; a fixed winding path (one of
    5 distinct layouts, see `data/stages.js`) crosses a 28x16 grid from a
@@ -380,10 +383,12 @@ There's no separate multiplayer account system.
 - 5 path layouts exist (`data/stages.js`) for a 5-stage run, but
   `pickStageChoices` only avoids repeating the stage just cleared, not every
   stage played earlier in the run - a layout can still resurface mid-run.
-- Leveling scales stats (+12%/level, cap level 5); evolution (kit-changing,
-  see `data/monsters.js` EVOLUTION_MAP) only covers the 3 starter species so
-  far - everything else just stays maxed. Ability upgrades and alternate
-  forms (distinct from evolution) are not built.
+- Leveling scales stats (+12%/level, cap level 5); every species now has an
+  evolution (`data/monsters.js` EVOLUTION_MAP), but kit-changing evolution
+  (a genuinely different Attack/Ability, not just bigger numbers) is still
+  only the 3 starters - the other 11 keep their base type on evolving, just
+  stronger. Ability upgrades and alternate forms (distinct from evolution)
+  are not built.
 - All banners share one currency and one pull cost (40 essence). Capture
   Cores / tickets as a differentiated pull currency are not built.
 - The Team Select roster grid doesn't scroll - a very large collection
@@ -412,10 +417,12 @@ still to add: a flying trait that only certain tower types can hit, more
 boss species, and a further balance pass now that real variety exists to
 balance) and ~~meta-progression~~ (see "Meta-progression (Mastery)" above -
 3 permanent talents now exist; still to add: more talents, a respec option,
-and any Mastery sink beyond the talent tree). Also on the list: evolution
-for the other 11 species (only the 3 starters have one defined right now),
-an Ultimate combat tier (`archetypes.js` has a documented, unused shape for
-it), and differentiated pull currencies.
+and any Mastery sink beyond the talent tree). Also shipped since then: every
+species now has an evolution, not just the 3 starters (see "Current loop"
+above) - kit-changing evolution specifically (a different Attack/Ability,
+not just bigger numbers) is still only those original 3, though. Still on
+the list: an Ultimate combat tier (`archetypes.js` has a documented, unused
+shape for it), and differentiated pull currencies.
 
 Longer-term, the stated direction is a multiplayer .io-style game (think
 Roblox tycoon-tower-defense) - a shared world players build/defend in

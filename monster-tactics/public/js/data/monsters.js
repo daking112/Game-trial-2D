@@ -81,18 +81,49 @@ const STARTER_SPECIES_IDS = ['rollpup', 'snarlpup', 'hornlet'];
 // same one. Ragefang/Tuskram keep their base type for this first pass
 // (still a real jump in power/range) - shifting every evolution's kit is
 // future work, not required to prove the mechanic.
+// The other 11 base species keep their type/kit on evolving (the Ragefang/
+// Tuskram pattern above, not Rollodon's kit-changing one) - a real jump in
+// power/range same as those two, just not a new Attack/Ability. Frames are
+// fresh, unused ones (no enemy of a matching name/line exists to reuse the
+// way the 3 above do) - see the frame-collision list this was checked
+// against in git history if adding more.
 const EVOLVED_SPECIES = [
   { id: 'rollodon_evo', name: 'Rollodon', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 2, maxHp: 60, attack: 14, range: 2.4, attackIntervalMs: 800, cost: 60 },
   { id: 'ragefang_evo', name: 'Ragefang', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 5, maxHp: 42, attack: 20, range: 1.8, attackIntervalMs: 550, cost: 60 },
-  { id: 'tuskram_evo', name: 'Tuskram', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 8, maxHp: 68, attack: 13, range: 1.8, attackIntervalMs: 750, cost: 60 }
+  { id: 'tuskram_evo', name: 'Tuskram', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 8, maxHp: 68, attack: 13, range: 1.8, attackIntervalMs: 750, cost: 60 },
+
+  { id: 'snoutzar_evo', name: 'Snoutzar', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 1, maxHp: 46, attack: 15, range: 2.0, attackIntervalMs: 700, cost: 55 },
+  { id: 'pufflord_evo', name: 'Pufflord', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 4, maxHp: 68, attack: 9, range: 2.8, attackIntervalMs: 850, cost: 90 },
+  { id: 'grubcoilus_evo', name: 'Grubcoilus', type: 'GRASS', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 7, maxHp: 36, attack: 16, range: 2.6, attackIntervalMs: 620, cost: 90 },
+  { id: 'icewyrm_evo', name: 'Icewyrm', type: 'WATER', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 10, maxHp: 40, attack: 11, range: 2.8, attackIntervalMs: 720, cost: 90 },
+  { id: 'pincerlord_evo', name: 'Pincerlord', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 13, maxHp: 58, attack: 14, range: 2.6, attackIntervalMs: 720, cost: 90 },
+  { id: 'molecrusher_evo', name: 'Molecrusher', type: 'EARTH', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 16, maxHp: 95, attack: 20, range: 3.0, attackIntervalMs: 780, cost: 130 },
+  { id: 'tigrubex_evo', name: 'Tigrubex', type: 'FIRE', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 19, maxHp: 72, attack: 24, range: 3.0, attackIntervalMs: 580, cost: 130 },
+  { id: 'geodronarch_evo', name: 'Geodronarch', type: 'NORMAL', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 22, maxHp: 100, attack: 18, range: 3.6, attackIntervalMs: 820, cost: 130 },
+  { id: 'glacimaw_evo', name: 'Glacimaw', type: 'WATER', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 25, maxHp: 115, attack: 30, range: 4.0, attackIntervalMs: 620, cost: 190 },
+  { id: 'thundasp_evo', name: 'Thundasp', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 28, maxHp: 90, attack: 36, range: 4.0, attackIntervalMs: 480, cost: 190 },
+  { id: 'oggmonarch_evo', name: 'Oggmonarch', type: 'GRASS', rarity: 'EPIC', sheetKey: RETROMON_SHEET, frame: 31, maxHp: 108, attack: 33, range: 4.0, attackIntervalMs: 580, cost: 190 }
 ];
 
 // speciesId (base) -> speciesId (evolved). Only species listed here can
-// evolve; everything else stays as-is once maxed (see RosterScene).
+// evolve; everything else stays as-is once maxed (see RosterScene). Every
+// species in SPECIES now has one - previously only the 3 starters did,
+// leaving the other 11 with nothing to work toward once maxed.
 const EVOLUTION_MAP = {
   rollpup: 'rollodon_evo',
   snarlpup: 'ragefang_evo',
-  hornlet: 'tuskram_evo'
+  hornlet: 'tuskram_evo',
+  snoutling: 'snoutzar_evo',
+  puffle: 'pufflord_evo',
+  grubcoil: 'grubcoilus_evo',
+  icewhelp: 'icewyrm_evo',
+  pincer: 'pincerlord_evo',
+  molecap: 'molecrusher_evo',
+  tigrub: 'tigrubex_evo',
+  geodrone: 'geodronarch_evo',
+  frostmaw: 'glacimaw_evo',
+  goldwasp: 'thundasp_evo',
+  ogglord: 'oggmonarch_evo'
 };
 
 // Monster Essence needed (on top of being at MAX_MONSTER_LEVEL) to evolve.
