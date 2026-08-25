@@ -240,6 +240,7 @@ public/
     scenes/HubScene.js        between-stage hub: stage choice, countdown, Ready
     scenes/VictoryScene.js    run-complete stats screen
     scenes/WorldScene.js     shared multiplayer overworld - see "Multiplayer World" below
+    scenes/RaidScene.js      squad-vs-squad base raids - see "Squad Skirmish Raids" below
     scenes/MasteryScene.js   spend Mastery on permanent talents - see "Meta-progression" below
     scenes/LeaderboardScene.js  all-time top runs - see "Leaderboard" below
     audio/Sfx.js            procedural Web Audio sound effects - see "Audio" below
@@ -449,10 +450,100 @@ There's no separate multiplayer account system.
 - Needs real hosting to be reachable by anyone but localhost - this only
   runs as long as `npm start`'s process does, on whatever host runs it.
 
+## Squad Skirmish Raids
+
+Claiming a base and reporting a layout used to be the entire multiplayer
+stake - nobody could actually threaten another player's plot. The project
+owner explicitly rejected a passive "base is vulnerable after N minutes
+idle" version of that (the first design pitched here) in favor of a real
+interaction: walk up to someone else's claimed plot in `WorldScene`, and if
+it isn't on cooldown and has at least one standing defender, a hint appears
+and pressing **R** opens `RaidScene` - pick up to `RAID_SQUAD_SIZE` (3)
+monsters from your *full* roster (not just your active team), and it plays
+out as a live squad-vs-squad skirmish against the defender's actual
+last-reported layout, reusing the exact same `COMBAT_ARCHETYPES` Attack/
+Ability/Ultimate kits `BattleScene` uses for grid combat - just adapted to
+two sides with no path/range: both squads auto-attack, always finishing off
+whichever living enemy has the least HP left.
+
+Real risk and reward on both sides, not an all-or-nothing loss condition:
+whichever specific combatants actually die in that skirmish pay for it,
+independent of who wins overall - a defending squad that narrowly turns
+back a raid can still lose a member, same as an attacker can lose monsters
+in a raid they otherwise win. A dead defending cell is marked
+`faintedUntil` a few minutes out (`RAID_FAINT_MS`) and excluded from
+defending again until then, or until its owner reinforces their base at all
+(a full layout replace clears every fainted marker - "rebuilding" is the
+active way to recover, on top of just waiting it out). A dead attacking
+monster gets a much shorter, client-side-only, session-only "recovering"
+cooldown (`RAID_ATTACKER_FAINT_MS`, `gameState.raidFainted`) blocking it
+from the squad picker for a bit - not persisted, not server-enforced, just
+a soft nudge against always sending the same three. Winning awards a flat
+essence reward (`RAID_REWARD_ESSENCE`) from a shared pool, never stolen
+from the defender. A raid never transfers base ownership either way - that
+was an explicit constraint from the start, not just an unbuilt feature.
+
+The server's job here is narrow and mirrors everything else on this
+project: it does **not** simulate the fight - that happens entirely in the
+attacker's browser, exactly like a plot's own combat already does - it only
+relays the self-reported outcome (`raid` message: target plot, who won,
+which specific defender cells died) and remembers the lasting world-visible
+consequences (the per-plot cooldown via `raidedUntil`, so one base can't be
+piled on repeatedly, and each fainted cell). That is a materially bigger
+trust exposure than everything the server already trusted the client for
+(`plotLayout`, `submitScore`): those are all self-reported data about the
+reporting player's *own* stuff, where lying only hurts themselves or looks
+wrong on a leaderboard. A raid outcome is one client's self-report about a
+fight that affects a **third party** - a modified client could claim a win
+it didn't earn and mark someone else's defenders fainted, or claim
+`attackerWon: false` to always dodge the shorter attacker-side cooldown.
+Accepted for now, consistent with this whole layer's "trust the client,
+hardened later if the concept proves out, and say so plainly" approach -
+there's no account system yet to build real anti-cheat against. The server
+does still enforce what it actually can: the per-plot cooldown itself can't
+be bypassed by resending a `raid` message early (verified directly - a
+forged bypass attempt while a plot was on cooldown left `raidedUntil`
+unchanged), and you can't raid an unclaimed plot or your own base.
+
+Verified end-to-end with real multi-context Playwright sessions against the
+unmodified server (not a sped-up test copy - raid timings aren't
+speed-sensitive the way the World Boss's movement was): proximity/hint
+detection, squad selection, a full live battle resolving to either outcome,
+essence awarded only on a win, the attacker's own losing monsters getting
+client-side-fainted, the server marking only the defender cells that
+actually died, a genuine third party (a raw `ws` client, not a participant)
+observing the same fainted/cooldown state via its own snapshot, and the
+defender's own local roster/progress being completely untouched by someone
+else raiding them. Also found and fixed in the process: a message-handler
+crash (`ReferenceError` in the `raid` case from a variable name typo) that
+would have taken the *entire shared server* down for every connected player
+on the first raid attempt - the WebSocket message handler had no top-level
+error boundary at all, so any one bad/malformed message could crash the
+whole process. Now wrapped so a bad message just drops that one message
+instead.
+
+**Not built yet:**
+- No visible "raid me" signal beyond walking up and seeing the hint - no
+  raid log, no notification for a defender who's off doing something else
+  entirely (they do get a banner if they happen to be in `WorldScene` when
+  it happens, via the same `plotRaided` broadcast everyone else's preview
+  updates from, but nothing if they're mid-`BattleScene` or off the page).
+- No retreat/flee mid-raid - once launched, the skirmish auto-resolves to
+  completion or a 45s timeout tiebreak on total remaining HP.
+- No raid history, no leaderboard for raid wins, no cosmetic distinction
+  for a battle-tested base.
+- The server-side trust gap above (a modified client could misreport a raid
+  outcome) - the honest next step if this needs to be harder to cheat is
+  the server-authoritative combat rework already called out as the bigger,
+  not-yet-done alternative to client-trusted combat throughout this file.
+
 ## Known limitations (v1)
 
 - Enemies don't fight back - placed monsters are invincible during a wave,
-  they only ever attack.
+  they only ever attack. Still true for ordinary single-player/multiplayer
+  waves; a monster's `hp`/`maxHp` stat is only actually at risk in a Squad
+  Skirmish raid (see "Squad Skirmish Raids" above), the one place towers can
+  currently take damage at all.
 - 5 path layouts exist (`data/stages.js`) for a 5-stage run, but
   `pickStageChoices` only avoids repeating the stage just cleared, not every
   stage played earlier in the run - a layout can still resurface mid-run.
@@ -505,7 +596,11 @@ together rather than solo runs. A first slice of that now exists (see
 walkable map, claimable plots with live cross-player previews, and a shared
 wave clock - client-trusted combat rather than server-authoritative, and a
 single fixed-size room rather than real matchmaking, both called out above
-as the next things to harden if the concept proves out. It's also why the
+as the next things to harden if the concept proves out. Real player-vs-
+player stakes now exist too (see "Squad Skirmish Raids" above) - explicit
+direction from the project owner that raiding needed genuine interactive
+combat with risk and reward on both sides, not just a passive vulnerability
+timer. It's also why the
 single-player battle grid was built with a camera scrolling a world bigger
 than one screen instead of just a bigger fixed viewport - a shared world
 needs to be navigable, not just large, and that camera work carried over

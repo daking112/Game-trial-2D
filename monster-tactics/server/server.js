@@ -87,8 +87,23 @@ const PLOT_SPACING_Y = 520;
 const WORLD_WAVE_INTERVAL_MS = 45000;
 // Layout snapshots are player-reported "here's what my grid looks like"
 // data, not simulated here - cap defensively so one client can't send an
-// arbitrarily large payload to broadcast to the whole room.
+// arbitrarily large payload to broadcast to the whole room. Each cell now
+// carries real speciesId/level (not just a cosmetic color) so a raid (see
+// below) has actual stats to fight with - the preview color everyone else
+// sees is derived client-side from the species' type instead.
 const MAX_LAYOUT_CELLS = 200;
+
+// Squad Skirmish raids: walk up to someone else's base, send up to
+// RAID_SQUAD_SIZE monsters from your roster, and it plays out as a real
+// mini-battle client-side (same trust boundary as everything else on this
+// server - see README) using the defender's actual reported layout. This
+// server's only jobs are relaying the outcome and remembering the
+// consequences: which of the defender's cells are temporarily "fainted"
+// (excluded from defending again for a while), and a per-plot cooldown so
+// one base can't be piled on repeatedly.
+const RAID_SQUAD_SIZE = 3;
+const RAID_COOLDOWN_MS = 3 * 60 * 1000;
+const RAID_FAINT_MS = 3 * 60 * 1000;
 
 function plotPosition(index) {
   const col = index % PLOT_COLS;
@@ -248,7 +263,7 @@ function publicPlayer(p) {
 }
 
 function publicPlot(p) {
-  return { id: p.id, ownerId: p.ownerId, ownerName: p.ownerName, layout: p.layout, wave: p.wave, x: p.x, y: p.y };
+  return { id: p.id, ownerId: p.ownerId, ownerName: p.ownerName, layout: p.layout, wave: p.wave, x: p.x, y: p.y, raidedUntil: p.raidedUntil || 0 };
 }
 
 function snapshotFor(playerId, name) {
@@ -325,6 +340,19 @@ wss.on('connection', (ws, request) => {
     try { msg = JSON.parse(raw); } catch (e) { return; }
     if (!msg || typeof msg.type !== 'string') return;
 
+    // A bug or a malformed/malicious message in any one case below used to
+    // be able to crash the whole process (an uncaught exception inside a
+    // 'message' listener kills the Node process, taking every connected
+    // player's shared world down with it) - caught here now so a bad
+    // message just drops that one message instead.
+    try {
+      handleMessage(msg);
+    } catch (e) {
+      console.error('Error handling message type', msg.type, e);
+    }
+  });
+
+  function handleMessage(msg) {
     switch (msg.type) {
       case 'requestState':
         send(ws, { type: 'state', ...snapshotFor(id, name) });
@@ -354,8 +382,15 @@ wss.on('connection', (ws, request) => {
       case 'plotLayout': {
         const plot = plots[msg.plotId];
         if (plot && plot.ownerId === clientId && Array.isArray(msg.layout)) {
+          // A full replace, not a merge - any previous faintedUntil markers
+          // are naturally cleared the moment the owner changes anything
+          // about their layout at all. That's deliberate: reinforcing your
+          // base (placing or moving even one tower) is how you recover from
+          // a raid, on top of just waiting out RAID_FAINT_MS.
           plot.layout = msg.layout.slice(0, MAX_LAYOUT_CELLS).map(c => ({
-            col: Number(c.col) || 0, row: Number(c.row) || 0, color: Number(c.color) || 0xffffff
+            col: Number(c.col) || 0, row: Number(c.row) || 0,
+            speciesId: String(c.speciesId || '').slice(0, 40),
+            level: Math.max(1, Math.min(10, Number(c.level) || 1))
           }));
           broadcast({ type: 'plotLayoutUpdated', plotId: plot.id, layout: plot.layout });
         }
@@ -368,6 +403,44 @@ wss.on('connection', (ws, request) => {
           plot.wave = msg.wave;
           broadcast({ type: 'plotWaveUpdated', plotId: plot.id, wave: plot.wave });
         }
+        break;
+      }
+
+      // The raid itself already happened client-side by the time this
+      // arrives (RaidScene simulated it using the defender's last-known
+      // reported layout - same trust boundary as submitScore below). This
+      // just applies the lasting, world-visible consequences: a cooldown so
+      // the same base can't be piled on repeatedly, and marking whichever
+      // specific defending cells actually died in that skirmish as fainted
+      // for a while - independent of who won overall, so a defender that
+      // barely turns back a raid can still have lost a squad member, same
+      // as the attacker risks losing whichever of their own monsters die
+      // (tracked client-side only - see RaidScene). Real risk on both sides,
+      // not just an all-or-nothing loss condition.
+      case 'raid': {
+        const plot = plots[msg.targetPlotId];
+        if (!plot || !plot.ownerId || plot.ownerId === clientId) break; // no raiding an unclaimed plot or your own base
+        const now = Date.now();
+        if (plot.raidedUntil && now > plot.raidedUntil) {
+          // stale marker from a raid whose cooldown already expired - fine to overwrite
+        } else if (plot.raidedUntil && now < plot.raidedUntil) {
+          break; // still on cooldown - ignore, don't let a client bypass it by resending
+        }
+        plot.raidedUntil = now + RAID_COOLDOWN_MS;
+
+        const faintedCells = [];
+        if (Array.isArray(msg.deadDefenderCells)) {
+          const faintedUntil = now + RAID_FAINT_MS;
+          msg.deadDefenderCells.slice(0, RAID_SQUAD_SIZE).forEach(fc => {
+            const cell = plot.layout.find(c => c.col === Number(fc.col) && c.row === Number(fc.row));
+            if (cell) { cell.faintedUntil = faintedUntil; faintedCells.push({ col: cell.col, row: cell.row, faintedUntil }); }
+          });
+        }
+
+        broadcast({
+          type: 'plotRaided', plotId: plot.id, attackerName: player.name,
+          attackerWon: !!msg.attackerWon, faintedCells, raidedUntil: plot.raidedUntil
+        });
         break;
       }
 
@@ -388,7 +461,7 @@ wss.on('connection', (ws, request) => {
       default:
         break;
     }
-  });
+  }
 
   ws.on('close', () => {
     players.delete(id);

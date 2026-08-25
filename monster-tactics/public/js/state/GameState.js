@@ -56,6 +56,18 @@ class GameState {
     this.inMultiplayerWorld = false;
     this.multiplayerPlotId = null;
 
+    // Squad Skirmish raids (see scenes/RaidScene.js) - raidTarget* is set by
+    // WorldScene.startRaid() right before switching scenes, just a handoff
+    // of which plot/layout to fight. raidFainted is a client-side-only,
+    // session-only cost for an attacker's OWN roster monsters that die in a
+    // raid (deliberately not persisted to localStorage or reported to the
+    // server - the real, server-remembered consequence lives on the
+    // defender's plot instead, see server.js's 'raid' handler).
+    this.raidTargetPlotId = null;
+    this.raidTargetName = null;
+    this.raidTargetLayout = null;
+    this.raidFainted = {};
+
     // A brand-new player has no monsters and no essence to pull one - that's
     // a hard lock, not just rough onboarding (Team Select says "go pull",
     // the Sanctuary says "can't afford it"). Grant a starter kit exactly
@@ -239,6 +251,15 @@ class GameState {
 
   earnCoins(amount) {
     this.coins += amount;
+  }
+
+  raidFaint(speciesId, ms) {
+    this.raidFainted[speciesId] = Date.now() + ms;
+  }
+
+  isRaidFainted(speciesId) {
+    const until = this.raidFainted[speciesId];
+    return !!until && until > Date.now();
   }
 
   spendCoins(amount) {

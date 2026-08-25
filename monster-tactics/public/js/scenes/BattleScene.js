@@ -473,8 +473,12 @@ class BattleScene extends Phaser.Scene {
   // Sends "here's what my grid looks like" to the shared-world server (see
   // server/server.js) so every other connected player's WorldScene can draw
   // a live mini-preview of this plot without needing this scene/tab to be
-  // running at all - it's just a snapshot of occupied cells and each one's
-  // type color, not a live simulation feed.
+  // running at all, AND so the server has real squad data to hand a raider
+  // for a Squad Skirmish (see server.js's 'raid' handler) - it's a snapshot
+  // of occupied cells and each one's species/level, not a live simulation
+  // feed. Sending the full layout also clears any prior faintedUntil raid
+  // markers server-side (a fresh placement means you've reinforced/rebuilt,
+  // which is the intended way to shake off raid damage).
   // Best-effort - single-player never requires the multiplayer server (see
   // README), so this tries to connect only when there's a score worth
   // reporting, and silently gives up if nothing answers (opening
@@ -490,7 +494,7 @@ class BattleScene extends Phaser.Scene {
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         const ally = this.grid[r][c];
-        if (ally) layout.push({ col: c, row: r, color: TYPE_COLORS[ally.species.type] });
+        if (ally) layout.push({ col: c, row: r, speciesId: ally.speciesId, level: ally.level });
       }
     }
     NetClient.send('plotLayout', { plotId: this.multiplayerPlotId, layout });

@@ -75,6 +75,7 @@ class WorldScene extends Phaser.Scene {
       ['worldBossDefeated', (msg) => this.onWorldBossDefeated()],
       ['worldBossEscaped', () => this.onWorldBossEscaped()],
       ['worldBossReward', (msg) => this.onWorldBossReward(msg)],
+      ['plotRaided', (msg) => this.onPlotRaided(msg)],
       ['disconnected', () => this.onDisconnected()]
     ];
     this.netHandlers.forEach(([type, fn]) => NetClient.on(type, fn));
@@ -155,6 +156,7 @@ class WorldScene extends Phaser.Scene {
       panel.ownerName = p.ownerName;
       panel.layout = p.layout;
       panel.wave = p.wave;
+      panel.raidedUntil = p.raidedUntil || 0;
       if (p.ownerId === NetClient.clientId) this.myPlotId = p.id;
       this.refreshPlotPanel(panel);
     });
@@ -214,7 +216,7 @@ class WorldScene extends Phaser.Scene {
     const panel = {
       id: p.id, x: p.x, y: p.y,
       ownerId: p.ownerId, ownerName: p.ownerName,
-      layout: p.layout || [], wave: p.wave || 0
+      layout: p.layout || [], wave: p.wave || 0, raidedUntil: p.raidedUntil || 0
     };
     panel.border = this.add.rectangle(p.x, p.y, PLOT_W, PLOT_H, 0x1c2530, 0.35).setStrokeStyle(3, 0x394258);
     panel.title = this.add.text(p.x, p.y - PLOT_H / 2 + 22, '', {
@@ -250,8 +252,17 @@ class WorldScene extends Phaser.Scene {
     const cellH = (PLOT_H - 70) / GRID_ROWS;
     const originX = panel.x - PLOT_W / 2 + 20;
     const originY = panel.y - PLOT_H / 2 + 44;
+    const now = Date.now();
     panel.layout.forEach(cell => {
-      panel.previewGfx.fillStyle(cell.color, 0.9);
+      // Layout cells carry real species/level (see BattleScene.reportPlotLayout)
+      // rather than a stored color, so a raid outcome (server.js 'raid'
+      // handler) can mark specific cells faintedUntil without the client
+      // needing to know anything about combat - a fainted cell just renders
+      // dim here until its cooldown passes.
+      const species = getSpecies(cell.speciesId);
+      if (!species) return;
+      const fainted = cell.faintedUntil && cell.faintedUntil > now;
+      panel.previewGfx.fillStyle(TYPE_COLORS[species.type], fainted ? 0.25 : 0.9);
       panel.previewGfx.fillRect(
         originX + cell.col * cellW, originY + cell.row * cellH,
         Math.max(2, cellW - 1), Math.max(2, cellH - 1)
@@ -273,6 +284,27 @@ class WorldScene extends Phaser.Scene {
     if (!panel) return;
     panel.layout = msg.layout;
     this.drawPlotPreview(panel);
+  }
+
+  // Broadcast to everyone (see server.js 'raid' handler) so every client's
+  // preview reflects fainted defenders immediately, not just the two
+  // participants - and so the actual defender gets a heads-up even if they
+  // were off doing something else in the world when it happened.
+  onPlotRaided(msg) {
+    const panel = this.plots.get(msg.plotId);
+    if (!panel) return;
+    panel.raidedUntil = msg.raidedUntil;
+    msg.faintedCells.forEach(fc => {
+      const cell = panel.layout.find(c => c.col === fc.col && c.row === fc.row);
+      if (cell) cell.faintedUntil = fc.faintedUntil;
+    });
+    this.drawPlotPreview(panel);
+    if (panel.ownerId === NetClient.clientId) {
+      this.announceBossBanner(
+        msg.attackerWon ? `${msg.attackerName} raided your base and won!` : `${msg.attackerName} raided your base and lost!`,
+        msg.attackerWon ? '#e0562f' : '#4caf50'
+      );
+    }
   }
 
   onPlotWaveUpdated(msg) {
@@ -441,6 +473,10 @@ class WorldScene extends Phaser.Scene {
     this.claimHintText = this.add.text(width / 2, this.scale.height - 40, 'Press E to claim this plot as your base', {
       fontFamily: 'monospace', fontSize: '19px', color: '#f5c94b'
     }).setOrigin(0.5).setStroke('#1c2530', 4).setScrollFactor(0).setVisible(false);
+
+    this.raidHintText = this.add.text(width / 2, this.scale.height - 40, '', {
+      fontFamily: 'monospace', fontSize: '19px', color: '#e0562f'
+    }).setOrigin(0.5).setStroke('#1c2530', 4).setScrollFactor(0).setVisible(false);
   }
 
   // A compact live top-5, pinned to the corner - the full sortable list
@@ -487,6 +523,7 @@ class WorldScene extends Phaser.Scene {
     this.moveKeys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
     this.enterKey = this.input.keyboard.addKey('E');
     this.attackKey = this.input.keyboard.addKey('SPACE');
+    this.raidKey = this.input.keyboard.addKey('R');
   }
 
   updateWorldWaveHud() {
@@ -525,19 +562,40 @@ class WorldScene extends Phaser.Scene {
   checkPlotProximity() {
     let nearOwnedByMe = null;
     let nearUnclaimed = null;
+    let nearRaidable = null;
+    const now = Date.now();
     for (const panel of this.plots.values()) {
       const inside = Math.abs(this.myX - panel.x) < PLOT_W / 2 && Math.abs(this.myY - panel.y) < PLOT_H / 2;
       if (!inside) continue;
       if (panel.ownerId === NetClient.clientId) nearOwnedByMe = panel;
       else if (panel.ownerId == null && this.myPlotId == null) nearUnclaimed = panel;
+      else if (panel.ownerId != null) {
+        // Raidable: someone else's base, not on cooldown, and has at least
+        // one non-fainted defender - an empty or fully-fainted base has
+        // nothing for a Squad Skirmish to actually fight (see RaidScene).
+        const onCooldown = panel.raidedUntil && panel.raidedUntil > now;
+        const hasDefenders = (panel.layout || []).some(c => !c.faintedUntil || c.faintedUntil <= now);
+        if (!onCooldown && hasDefenders) nearRaidable = panel;
+      }
     }
 
     this.nearOwnPlot = nearOwnedByMe;
     this.nearUnclaimedPlot = nearUnclaimed;
+    this.nearRaidablePlot = nearRaidable;
     const hasTeam = gameState.team.length > 0;
     this.enterHintText.setVisible(!!nearOwnedByMe && hasTeam);
     this.needTeamText.setVisible(!!nearOwnedByMe && !hasTeam);
     this.claimHintText.setVisible(!!nearUnclaimed);
+    this.raidHintText.setVisible(!!nearRaidable && hasTeam);
+    if (nearRaidable) this.raidHintText.setText(`Press R to raid ${nearRaidable.ownerName}'s base!`);
+  }
+
+  startRaid(panel) {
+    if (gameState.team.length === 0) return;
+    gameState.raidTargetPlotId = panel.id;
+    gameState.raidTargetName = panel.ownerName;
+    gameState.raidTargetLayout = panel.layout;
+    this.scene.start('RaidScene');
   }
 
   claimPlot(panel) {
@@ -566,6 +624,7 @@ class WorldScene extends Phaser.Scene {
       if (this.nearOwnPlot) this.enterPlot(this.nearOwnPlot);
       else if (this.nearUnclaimedPlot) this.claimPlot(this.nearUnclaimedPlot);
     }
+    if (Phaser.Input.Keyboard.JustDown(this.raidKey) && this.nearRaidablePlot) this.startRaid(this.nearRaidablePlot);
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) this.attemptBossAttack();
   }
 }
