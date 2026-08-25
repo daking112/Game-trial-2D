@@ -87,25 +87,53 @@ class MenuScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     const DEPTH = 100;
+    const cy = height / 2;
+    const destroyables = [];
     // Interactive with no handler, purely so it intercepts clicks - without
     // this, Quick Play/Monster Sanctuary sit interactive right underneath
     // this panel and a click "through" the modal would trigger them.
-    const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(DEPTH).setInteractive();
-    const panel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(DEPTH);
-    const title = this.add.text(width / 2, height / 2 - 140, 'DAILY LOGIN!', {
-      fontFamily: 'monospace', fontSize: '44px', color: '#f5c94b', fontStyle: 'bold'
+    const bg = this.add.rectangle(width / 2, cy, width, height, 0x000000, 0.7).setDepth(DEPTH).setInteractive();
+    const panel = this.add.image(width / 2, cy, 'panel-overlay').setDepth(DEPTH);
+    const title = this.add.text(width / 2, cy - 170, 'DAILY LOGIN!', {
+      fontFamily: 'monospace', fontSize: '40px', color: '#f5c94b', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 6).setDepth(DEPTH);
-    const streakText = this.add.text(width / 2, height / 2 - 70, `Day ${reward.day} - ${reward.streak} day streak`, {
-      fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
+    const streakText = this.add.text(width / 2, cy - 118, `Day ${reward.day} - ${reward.streak} day streak`, {
+      fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(DEPTH);
-    const rewardLabel = UiKit.iconLabel(this, width / 2, height / 2 - 10, 'icon-essence', `+${reward.essence} essence`, {
-      fontFamily: 'monospace', fontSize: '26px', color: '#f5f7fa', stroke: '#1c2530', strokeThickness: 4
-    }, 24);
+    destroyables.push(bg, panel, title, streakText);
+
+    // Reward-track preview - what today's claim looks like next to the rest
+    // of the 7-day cycle, so a player can see day 7's payoff coming instead
+    // of only ever finding out one day at a time.
+    const cycleLen = DAILY_LOGIN_CYCLE_ESSENCE.length;
+    const boxW = 104, boxGap = 8;
+    const trackStartX = width / 2 - ((cycleLen - 1) * (boxW + boxGap)) / 2;
+    const trackY = cy - 58;
+    for (let i = 0; i < cycleLen; i++) {
+      const day = i + 1;
+      const isToday = day === reward.day;
+      const x = trackStartX + i * (boxW + boxGap);
+      const box = this.add.rectangle(x, trackY, boxW, 68, isToday ? 0x2f4a34 : 0x1c202a)
+        .setStrokeStyle(isToday ? 3 : 2, isToday ? 0x4caf50 : 0x394258).setDepth(DEPTH);
+      const dayLabel = this.add.text(x, trackY - 18, `Day ${day}`, {
+        fontFamily: 'monospace', fontSize: '13px', color: isToday ? '#4caf50' : '#8a95ab'
+      }).setOrigin(0.5).setDepth(DEPTH);
+      const amountLabel = this.add.text(x, trackY + 12, `+${DAILY_LOGIN_CYCLE_ESSENCE[i]}`, {
+        fontFamily: 'monospace', fontSize: '15px', color: isToday ? '#f5f7fa' : '#c8ceda', fontStyle: isToday ? 'bold' : 'normal'
+      }).setOrigin(0.5).setDepth(DEPTH);
+      destroyables.push(box, dayLabel, amountLabel);
+    }
+
+    const rewardLabel = UiKit.iconLabel(this, width / 2, cy + 8, 'icon-essence', `+${reward.essence} essence claimed`, {
+      fontFamily: 'monospace', fontSize: '24px', color: '#f5f7fa', stroke: '#1c2530', strokeThickness: 4
+    }, 22);
     rewardLabel.icon.setDepth(DEPTH);
     rewardLabel.text.setDepth(DEPTH);
+    destroyables.push(rewardLabel.icon, rewardLabel.text);
 
-    const claimBtn = UiKit.makeButton(this, width / 2, height / 2 + 90, 'Claim', () => {
-      [bg, panel, title, streakText, rewardLabel.icon, rewardLabel.text, claimBtn.container].forEach(o => o.destroy());
+    const claimBtn = UiKit.makeButton(this, width / 2, cy + 90, 'Claim', () => {
+      destroyables.forEach(o => o.destroy());
+      claimBtn.container.destroy();
     }, { size: 'large', tint: 0xf5c94b });
     claimBtn.container.setDepth(DEPTH);
   }

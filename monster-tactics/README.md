@@ -230,8 +230,10 @@ tracks a `lastDate`/`streak` pair (`monster-tactics:dailyLogin`,
 localStorage, single-player-only - no server involved), checked once per
 page load from `MenuScene.create()`. First visit of a UTC calendar day
 grants essence from a 7-day reward cycle (`DAILY_LOGIN_CYCLE_ESSENCE` -
-20/25/30/40/50/60/100, then repeats) and shows a claim modal; visiting
-again the same day is a no-op. Missing a day entirely resets the streak to
+20/25/30/40/50/60/100, then repeats) and shows a claim modal - including a
+7-day track preview across the top of it, today's day highlighted, so a
+player can see day 7's payoff coming instead of only ever finding out one
+day at a time. Visiting again the same day is a no-op. Missing a day entirely resets the streak to
 1 rather than partially decaying it, so it stays a clean daily-habit signal
 instead of a fuzzy recency score.
 
@@ -251,8 +253,6 @@ the modal and restores normal clicks.
 - Day boundary is UTC midnight, not the player's local midnight - a player
   near the international date line could see their "day" flip at an odd
   local time.
-- No visual reward-track preview (what day 5, 6, 7 actually pay out) before
-  you're on them - only the day you're currently claiming is shown.
 - No catch-up/grace mechanic (e.g. a streak freeze item) for an otherwise
   strong streak broken by one missed day - a skip is a hard reset, matching
   the "clean daily-habit signal" reasoning above, but worth revisiting if it
