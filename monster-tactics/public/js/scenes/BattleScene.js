@@ -14,6 +14,11 @@ const CAMERA_PAN_SPEED = 900; // px/sec, keyboard pan
 const HP_BAR_W = 60;
 const HP_BAR_H = 8;
 const HP_BAR_Y_OFFSET = -42;
+const BOSS_BAR_W = HP_BAR_W * 2.2;
+// Every 5th wave counting across the whole run (not per-stage - see
+// gameState.globalWaveNumber) spawns one boss as the last enemy of that
+// wave, on top of the normal spawn count.
+const BOSS_WAVE_INTERVAL = 5;
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -46,6 +51,7 @@ class BattleScene extends Phaser.Scene {
     this.selectedBenchSpeciesId = null;
     this.spawnedCount = 0;
     this.waveEnemyCount = 0;
+    this.isBossWave = false;
     this.spawnTimerMs = 0;
     this.spawnIntervalMs = 700;
 
@@ -482,23 +488,71 @@ class BattleScene extends Phaser.Scene {
     // stage 2's first wave is harder than stage 1's - a fresh coin refill
     // per stage shouldn't also mean a fresh (easy) difficulty curve.
     this.waveEnemyCount = Math.min(4 + (gameState.globalWaveNumber() - 1) * 2, 30);
+    this.isBossWave = gameState.globalWaveNumber() % BOSS_WAVE_INTERVAL === 0;
+    // The boss spawns as one extra enemy on top of the normal count, and
+    // last (see spawnEnemy) - the wave still opens with its regular ramp so
+    // the boss reads as a capstone, not just "wave got bigger again".
+    if (this.isBossWave) this.waveEnemyCount += 1;
     this.spawnTimerMs = 0;
     this.refreshStartButton();
+    if (this.isBossWave) this.announceBoss();
+  }
+
+  announceBoss() {
+    const banner = this.add.text(this.scale.width / 2, 200, 'BOSS INCOMING', {
+      fontFamily: 'monospace', fontSize: '48px', color: '#e0562f', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6).setScrollFactor(0).setDepth(60);
+    this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 600, onComplete: () => banner.destroy() });
   }
 
   spawnEnemy() {
-    const es = ENEMY_SPECIES[Math.floor(Math.random() * ENEMY_SPECIES.length)];
-    const spawn = this.pathWaypoints[0];
+    // The boss slot (see startWave/BOSS_WAVE_INTERVAL) is always the last
+    // enemy of a boss wave; every other spawn - boss wave or not - rolls
+    // from the normal spawnable pool (excludes split-only/boss-only entries
+    // like wormlet/kingcrab, see SPAWNABLE_ENEMY_SPECIES).
+    const isBossSpawn = this.isBossWave && this.spawnedCount === this.waveEnemyCount - 1;
+    const es = isBossSpawn ? getEnemySpecies('kingcrab')
+      : SPAWNABLE_ENEMY_SPECIES[Math.floor(Math.random() * SPAWNABLE_ENEMY_SPECIES.length)];
+    this.spawnEnemyOfSpecies(es, this.pathWaypoints[0], 0, 0);
+  }
 
-    const sprite = this.add.sprite(spawn.x, spawn.y, es.sheetKey, es.frame).setScale(1.5);
+  // Shared by spawnEnemy (fresh spawns at the map entrance) and
+  // spawnSplitChildren (split-species children continuing from wherever
+  // their parent died) - everything about building one enemy game object
+  // lives here so both paths stay in sync.
+  spawnEnemyOfSpecies(es, pos, waypointIndex, progress) {
+    const barW = es.boss ? BOSS_BAR_W : HP_BAR_W;
+    const sprite = this.add.sprite(pos.x, pos.y, es.sheetKey, es.frame).setScale(es.boss ? 2.4 : 1.5);
     const enemy = {
-      species: es, x: spawn.x, y: spawn.y, waypointIndex: 0, progress: 0,
-      hp: es.maxHp, maxHp: es.maxHp, statusEffects: {},
+      species: es, x: pos.x, y: pos.y, waypointIndex, progress,
+      hp: es.maxHp, maxHp: es.maxHp, statusEffects: {}, barW,
       sprite,
-      hpBg: this.add.rectangle(spawn.x, spawn.y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x1c202a),
-      hpFill: this.add.rectangle(spawn.x - HP_BAR_W / 2, spawn.y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0xe0562f).setOrigin(0, 0.5)
+      hpBg: this.add.rectangle(pos.x, pos.y + HP_BAR_Y_OFFSET, barW, HP_BAR_H, 0x1c202a),
+      hpFill: this.add.rectangle(pos.x - barW / 2, pos.y + HP_BAR_Y_OFFSET, barW, HP_BAR_H, 0xe0562f).setOrigin(0, 0.5)
     };
+    if (es.boss) {
+      enemy.nameLabel = this.add.text(pos.x, pos.y + HP_BAR_Y_OFFSET - 16, es.name.toUpperCase(), {
+        fontFamily: 'monospace', fontSize: '14px', color: '#e0562f', fontStyle: 'bold'
+      }).setOrigin(0.5).setStroke('#1c2530', 3);
+    }
     this.enemies.push(enemy);
+    return enemy;
+  }
+
+  // On-death effect for splitInto/splitCount species (see monsters.js) -
+  // spawns the weaker child species picking up the parent's exact path
+  // position/progress rather than restarting from the map entrance.
+  spawnSplitChildren(parent) {
+    const childId = parent.species.splitInto;
+    const count = parent.species.splitCount || 0;
+    if (!childId || count <= 0) return;
+    const childSpecies = getEnemySpecies(childId);
+    for (let i = 0; i < count; i++) {
+      const offsetX = (i - (count - 1) / 2) * 18;
+      this.spawnEnemyOfSpecies(
+        childSpecies, { x: parent.x + offsetX, y: parent.y }, parent.waypointIndex, parent.progress
+      );
+    }
   }
 
   update(time, delta) {
@@ -521,6 +575,7 @@ class BattleScene extends Phaser.Scene {
     // the dead-enemy sweep later in this same frame.
     for (const enemy of this.enemies) {
       this.processStatusEffects(enemy, time);
+      this.processRegen(enemy, delta);
     }
 
     // enemy movement along the path
@@ -552,7 +607,8 @@ class BattleScene extends Phaser.Scene {
 
       enemy.sprite.x = enemy.x; enemy.sprite.y = enemy.y;
       enemy.hpBg.x = enemy.x; enemy.hpBg.y = enemy.y + HP_BAR_Y_OFFSET;
-      enemy.hpFill.x = enemy.x - HP_BAR_W / 2; enemy.hpFill.y = enemy.y + HP_BAR_Y_OFFSET;
+      enemy.hpFill.x = enemy.x - enemy.barW / 2; enemy.hpFill.y = enemy.y + HP_BAR_Y_OFFSET;
+      if (enemy.nameLabel) { enemy.nameLabel.x = enemy.x; enemy.nameLabel.y = enemy.y + HP_BAR_Y_OFFSET - 16; }
     }
 
     if (escaped.length > 0) {
@@ -606,6 +662,7 @@ class BattleScene extends Phaser.Scene {
       dead.forEach(e => {
         gameState.score += e.species.reward;
         gameState.earnCoins(e.species.reward);
+        this.spawnSplitChildren(e);
         this.destroyEnemy(e);
       });
       this.enemies = this.enemies.filter(e => e.hp > 0);
@@ -624,9 +681,15 @@ class BattleScene extends Phaser.Scene {
   }
 
   dealDamage(enemy, amount) {
-    enemy.hp = Math.max(0, enemy.hp - amount);
+    // Armor is a flat reduction (min 1 damage still gets through, so it
+    // slows a tower down rather than hard-walling it) - see monsters.js.
+    // The floating number shows what actually landed, armor included, so
+    // it visibly reads as "this hit for less" against an armored target.
+    const armor = enemy.species.armor || 0;
+    const finalAmount = armor > 0 ? Math.max(1, amount - armor) : amount;
+    enemy.hp = Math.max(0, enemy.hp - finalAmount);
     enemy.hpFill.scaleX = enemy.hp / enemy.maxHp;
-    this.showDamageNumber(enemy.x, enemy.y, amount);
+    this.showDamageNumber(enemy.x, enemy.y, finalAmount);
   }
 
   // A floating "-N" that rises and fades - centralized here (rather than at
@@ -653,6 +716,7 @@ class BattleScene extends Phaser.Scene {
     enemy.sprite.destroy();
     enemy.hpBg.destroy();
     enemy.hpFill.destroy();
+    if (enemy.nameLabel) enemy.nameLabel.destroy();
   }
 
   playHitSpark(x, y, tint, scale) {
@@ -677,7 +741,15 @@ class BattleScene extends Phaser.Scene {
   }
 
   applySlowToEnemy(enemy, cfg, time) {
+    if (enemy.species.slowImmune) return; // e.g. the boss - see monsters.js
     enemy.statusEffects.slow = { multiplier: cfg.multiplier, expiresAt: time + cfg.durationMs };
+  }
+
+  processRegen(enemy, delta) {
+    const regen = enemy.species.regenPerSecond || 0;
+    if (regen <= 0 || enemy.hp <= 0) return;
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + regen * (delta / 1000));
+    enemy.hpFill.scaleX = enemy.hp / enemy.maxHp;
   }
 
   processStatusEffects(enemy, time) {
@@ -794,7 +866,7 @@ class BattleScene extends Phaser.Scene {
   onWaveComplete() {
     Sfx.waveClear();
     this.phase = 'waveComplete';
-    const essenceReward = 10;
+    const essenceReward = this.isBossWave ? 25 : 10;
     gameState.earnEssence(essenceReward);
     this.setOverlayVisible(true);
     this.overlayPrimaryBtn.bg.off('pointerdown');

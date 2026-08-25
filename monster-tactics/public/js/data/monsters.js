@@ -100,14 +100,45 @@ const EVOLUTION_ESSENCE_COST = 150;
 
 // Enemy species that spawn during battle waves. speed is pixels/second.
 // Deliberately distinct frames from the player pool above.
+//
+// Beyond the original 6 (which are all just "walk and die" at different
+// stat points), the entries below give BattleScene real counterplay to
+// build around instead of every enemy being a bigger-numbers version of the
+// same unit:
+//   armor            flat damage reduction per hit (min 1 still gets
+//                    through) - rewards high-damage-per-hit towers over
+//                    many-small-hits ones (see BattleScene.dealDamage).
+//   regenPerSecond   heals back over time - rewards burst damage, punishes
+//                    chip damage that lets it outheal you.
+//   slowImmune       can't be slowed - the counter to just kiting it forever.
+//   splitInto/       on death, spawns splitCount copies of a (weaker,
+//   splitCount       spawnable:false) species picking up the same path
+//                    progress - splash/AoE towers matter more against it.
+//   spawnable        false = only ever appears via a split or a boss slot,
+//                    never picked by the normal random spawn roll
+//                    (see SPAWNABLE_ENEMY_SPECIES below).
+//   boss             true = eligible for BattleScene's periodic boss-wave
+//                    slot (BOSS_WAVE_INTERVAL), not the regular roll either.
 const ENEMY_SPECIES = [
   { id: 'widow', name: 'Widow', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 33, maxHp: 14, attack: 1, speed: 58, reward: 4 },
   { id: 'rollodon', name: 'Rollodon', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 2, maxHp: 40, attack: 2, speed: 26, reward: 10 },
   { id: 'ragefang', name: 'Ragefang', type: 'FIRE', sheetKey: RETROMON_SHEET, frame: 5, maxHp: 28, attack: 3, speed: 40, reward: 9 },
   { id: 'tuskram', name: 'Tuskram', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 8, maxHp: 34, attack: 2, speed: 30, reward: 8 },
   { id: 'clawcrab', name: 'Clawcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 43, maxHp: 20, attack: 1, speed: 70, reward: 6 },
-  { id: 'bouldergeist', name: 'Bouldergeist', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 62, maxHp: 90, attack: 4, speed: 16, reward: 16 }
+  { id: 'bouldergeist', name: 'Bouldergeist', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 62, maxHp: 90, attack: 4, speed: 16, reward: 16 },
+
+  // -- variety --
+  { id: 'ironshell', name: 'Ironshell', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 9, maxHp: 46, attack: 3, speed: 22, reward: 14, armor: 4 },
+  { id: 'zipfin', name: 'Zipfin', type: 'WATER', sheetKey: RETROMON_SHEET, frame: 12, maxHp: 12, attack: 1, speed: 100, reward: 5 },
+  { id: 'mossback', name: 'Mossback', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 15, maxHp: 50, attack: 2, speed: 20, reward: 13, regenPerSecond: 3 },
+  { id: 'splitworm', name: 'Splitworm', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 18, maxHp: 36, attack: 2, speed: 34, reward: 11, splitInto: 'wormlet', splitCount: 2 },
+  { id: 'wormlet', name: 'Wormlet', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 21, maxHp: 10, attack: 1, speed: 46, reward: 3, spawnable: false },
+
+  // -- boss (see BattleScene.BOSS_WAVE_INTERVAL) --
+  { id: 'kingcrab', name: 'Kingcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 24, maxHp: 400, attack: 6, speed: 20, reward: 60, armor: 5, slowImmune: true, regenPerSecond: 4, boss: true, spawnable: false }
 ];
+
+const SPAWNABLE_ENEMY_SPECIES = ENEMY_SPECIES.filter(e => e.spawnable !== false);
 
 function getSpecies(id) {
   return SPECIES.find(s => s.id === id) || EVOLVED_SPECIES.find(s => s.id === id);

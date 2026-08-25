@@ -62,11 +62,13 @@ lock, not just rough onboarding.
    its cost. Towers target whichever enemy in range has traveled furthest
    along the path (BTD6's default "First" priority), not whichever happens
    to be nearest. Start a wave once you're happy with your layout - enemies
-   spawn and follow the path's turns exactly, and any enemy that reaches
-   the end costs you lives (lives and score persist across the whole run,
-   not just one stage). Clearing a wave earns essence and moves to the
-   next, harder one (difficulty scales off the run-wide wave count, not
-   the per-stage one, so stage 2 picks up where stage 1 left off).
+   spawn and follow the path's turns exactly (see "Enemy variety & bosses"
+   below for what's actually coming at you, not just bigger numbers), and
+   any enemy that reaches the end costs you lives (lives and score persist
+   across the whole run, not just one stage). Clearing a wave earns essence
+   (more on a boss wave) and moves to the next, harder one (difficulty
+   scales off the run-wide wave count, not the per-stage one, so stage 2
+   picks up where stage 1 left off).
 4. **Hub** - clearing a stage's 3rd wave drops you here instead of straight
    into the next stage: a small bonus to lives, a choice between 2 of the
    remaining stage layouts (a single-player stand-in for "vote on the next
@@ -107,6 +109,30 @@ segment at a single tangent point, not a real firing arc. Every range is
 padded past the nearest integer so a tower placed the normal way always gets
 real coverage. See the range-circle preview in-game, not the raw number, for
 what's actually in range.
+
+## Enemy variety & bosses
+
+The original 6 enemy species (`ENEMY_SPECIES` in `data/monsters.js`) were all
+the same "walk and die" unit at different stat points - no real reason to
+build differently against any of them. On top of those, there are now
+species with genuine counterplay:
+
+| Trait | Example | What it means |
+|---|---|---|
+| `armor` | Ironshell | Flat damage reduction per hit (min 1 still lands) - rewards a few big hits over many small ones; DoT/chip damage struggles against it. |
+| `regenPerSecond` | Mossback | Heals back over time - rewards burst damage, punishes leaving it half-dead and moving on. |
+| `slowImmune` | the boss | Can't be slowed - the counter to just kiting it with WATER towers forever. |
+| `splitInto`/`splitCount` | Splitworm -> 2x Wormlet | Killing it spawns weaker copies that pick up its exact path progress - splash/AoE towers matter more than single-target ones against it. |
+
+**Boss waves:** every 5th wave counting across the whole run
+(`BOSS_WAVE_INTERVAL` in `BattleScene.js`, not per-stage - matches how
+regular difficulty already scales) spawns one boss as the last enemy of that
+wave, after the normal ramp - a "BOSS INCOMING" banner announces it when the
+wave starts. Currently one boss species (Kingcrab: huge HP, armored, immune
+to slow, regenerating) at 2.4x scale with a wider HP bar and a name label so
+it's unmistakable, worth double the essence on clear. Not yet: multiple
+distinct boss species, a boss-specific attack/ability beyond stats, or
+scaling boss difficulty within a single run beyond the normal per-wave curve.
 
 ## Structure
 
@@ -297,7 +323,8 @@ There's no separate multiplayer account system.
 - Only `retromon-b1` (Big Pack 1) is wired into species data; Big Packs 2-4
   are extracted and ready to use for more species (see the asset index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -
-  there's no overworld/exploration scene, just menu -> sanctuary/battle.
+  the Multiplayer World's avatars are plain colored circles + name labels,
+  not a sprite.
 - The path/grass boundary is a flat-color rim stroke, not proper transition
   tiles (no corner pieces where the road turns) - reads clearly enough at
   this grid's cell size, but wouldn't scale to a larger or diagonal path.
@@ -307,16 +334,17 @@ There's no separate multiplayer account system.
 ## Bigger design not built yet
 
 The long-term pitch is larger than what's here. Immediate next targets, in
-priority order per direction from the project owner: **enemy variety**
-(flying/armored/fast enemies with real resistances, plus boss waves - the
-combat archetypes already differentiate towers by type, but every enemy
-today is just a bigger-numbers version of the same "walk and die" unit) and
-**meta-progression** (a talent tree or other permanent-upgrade track unlocked
-by completed runs, on top of the per-run gacha/leveling loop that currently
-resets to nothing but roster/essence between runs). Also on the list:
-evolution for the other 11 species (only the 3 starters have one defined
-right now), an Ultimate combat tier (`archetypes.js` has a documented, unused
-shape for it), and differentiated pull currencies.
+priority order per direction from the project owner: ~~enemy variety~~ (see
+"Enemy variety & bosses" above - armor/regen/split/slow-immune traits plus
+periodic boss waves now exist; still to add: a flying trait that only
+certain tower types can hit, more boss species, and further balance pass now
+that real variety exists to balance) and **meta-progression** (a talent tree
+or other permanent-upgrade track unlocked by completed runs, on top of the
+per-run gacha/leveling loop that currently resets to nothing but
+roster/essence between runs - next up). Also on the list: evolution for the
+other 11 species (only the 3 starters have one
+defined right now), an Ultimate combat tier (`archetypes.js` has a
+documented, unused shape for it), and differentiated pull currencies.
 
 Longer-term, the stated direction is a multiplayer .io-style game (think
 Roblox tycoon-tower-defense) - a shared world players build/defend in
