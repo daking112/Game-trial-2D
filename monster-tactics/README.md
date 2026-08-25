@@ -29,6 +29,15 @@ lock, not just rough onboarding.
 
 ## Current loop
 
+The main menu's **Quick Play** button skips straight to step 3 below with
+whatever roster/team a player already has (auto-filling a team from the
+roster only if one isn't set yet, never overwriting a deliberate choice) -
+added because a brand-new player previously had to sit through steps 1-2
+before ever placing a single tower, which is the opposite of the instant,
+seconds-to-play onboarding most browser/`.io`-style games lean on. The full
+walkthrough below is still how a first-time player would naturally learn
+the loop, or how anyone revisits it to actually manage their roster:
+
 1. **Monster Sanctuary** - pick a themed discovery banner (Standard, or one
    restricted to a single type: Verdant/GRASS, Inferno/FIRE, Frozen/WATER,
    Storm/ELECTRIC, Bedrock/EARTH) and spend **essence** (persistent, earned by
@@ -326,6 +335,17 @@ first ~25% of the tween - the position tween keeps that ease, the alpha
 tween holds full opacity and only fades linearly in the final third.
 
 ## Multiplayer World (beta)
+
+Even a player who never opens the world sees a sign it exists: `MenuScene`
+does a best-effort `fetch('/status')` (server/server.js - a plain HTTP JSON
+endpoint, not a WebSocket) and shows "N Tamers online now" if it gets an
+answer, silently showing nothing otherwise - single-player still needs no
+server, same guarantee as everywhere else this pattern is used. Deliberately
+a plain HTTP check rather than opening a real connection just to read a
+headcount: a WebSocket connection registers as a "player" on the server the
+moment it opens, which would leave an idle avatar sitting in `WorldScene`
+for everyone else, for someone who only ever glanced at the main menu and
+never actually chose to enter the shared world.
 
 `MenuScene`'s "Multiplayer World (Beta)" button drops the player into
 `WorldScene`: a shared overworld map (`server/server.js` + `net/NetClient.js`)

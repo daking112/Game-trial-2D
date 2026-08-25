@@ -26,25 +26,51 @@ class MenuScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
 
-    this.add.text(width / 2, 440, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
-      fontFamily: 'monospace', fontSize: '26px', color: '#e8ecf5'
+    this.add.text(width / 2, 415, `Roster: ${Object.keys(gameState.roster).length} monster(s)`, {
+      fontFamily: 'monospace', fontSize: '24px', color: '#e8ecf5'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
-    UiKit.iconLabel(this, width / 2, 484, 'icon-essence', `Essence: ${gameState.essence}`, {
-      fontFamily: 'monospace', fontSize: '22px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
-    }, 24);
-    this.add.text(width / 2, 518, `Mastery: ${gameState.mastery}`, {
-      fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b8'
+    UiKit.iconLabel(this, width / 2, 456, 'icon-essence', `Essence: ${gameState.essence}   Mastery: ${gameState.mastery}`, {
+      fontFamily: 'monospace', fontSize: '19px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
+    }, 20);
+
+    // Best-effort - a plain HTTP status check (see server/server.js), not a
+    // multiplayer connection, so this never registers this player as
+    // "present" in the shared world just for sitting on the main menu.
+    // Silently shows nothing if there's no server (single-player still
+    // needs none, same guarantee as everywhere else this pattern is used).
+    this.onlineCountText = this.add.text(width / 2, 490, '', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#4a90d9'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
+    let leftMenu = false;
+    this.events.once('shutdown', () => { leftMenu = true; });
+    fetch('/status').then(res => res.ok ? res.json() : null).then(data => {
+      if (!data || leftMenu) return; // player already navigated away by the time this resolved
+      this.onlineCountText.setText(`● ${data.playerCount} Tamer${data.playerCount === 1 ? '' : 's'} online now`);
+    }).catch(() => {});
 
-    UiKit.makeButton(this, width / 2, 610, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
-    UiKit.makeButton(this, width / 2, 710, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
-    UiKit.makeButton(this, width / 2, 810, 'Mastery', () => this.scene.start('MasteryScene'), { size: 'large', tint: 0xf5c94b });
+    // The fast path - jump straight into a battle with whatever roster a
+    // player already has (auto-filling a team only if one isn't set, never
+    // overwriting a deliberate choice), skipping the Sanctuary/Team Select
+    // review a brand-new player used to have to sit through before their
+    // very first tower placement.
+    UiKit.makeButton(this, width / 2, 580, 'Quick Play', () => {
+      if (gameState.team.length === 0) {
+        gameState.team = Object.keys(gameState.roster).slice(0, MAX_TEAM_SIZE);
+      }
+      gameState.resetRun();
+      gameState.startStage(FIRST_STAGE_ID);
+      this.scene.start('BattleScene');
+    }, { size: 'large', tint: 0x8fdc8f });
 
-    UiKit.makeButton(this, width / 2, 920, 'Multiplayer World (Beta)', () => {
+    UiKit.makeButton(this, width / 2, 675, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 770, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
+    UiKit.makeButton(this, width / 2, 865, 'Mastery', () => this.scene.start('MasteryScene'), { size: 'large', tint: 0xf5c94b });
+
+    UiKit.makeButton(this, width / 2, 960, 'Multiplayer World (Beta)', () => {
       gameState.inMultiplayerWorld = true;
       this.scene.start('WorldScene');
     }, { size: 'large', tint: 0xbfe8ff });
 
-    UiKit.makeLink(this, width / 2, 985, 'Leaderboard', () => this.scene.start('LeaderboardScene'), { fontSize: '19px' });
+    UiKit.makeLink(this, width / 2, 1020, 'Leaderboard', () => this.scene.start('LeaderboardScene'), { fontSize: '19px' });
   }
 }

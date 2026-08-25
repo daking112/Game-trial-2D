@@ -34,6 +34,18 @@ const MIME_TYPES = {
 
 const httpServer = http.createServer((req, res) => {
   const requestPath = decodeURIComponent(req.url.split('?')[0]);
+
+  // A plain HTTP status check (not a WebSocket connection) so MenuScene can
+  // show "N Tamers online" without actually joining the shared world -
+  // opening a real connection just to read a headcount would register a
+  // "player" on the server and leave an idle avatar sitting in WorldScene
+  // for everyone else, for someone who never chose to enter it at all.
+  if (requestPath === '/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ playerCount: players.size, worldWave }));
+    return;
+  }
+
   const relative = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
   const filePath = path.join(PUBLIC_DIR, relative);
 
