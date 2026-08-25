@@ -60,11 +60,15 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 // ---------- shared world state ----------
 
 const WORLD_WIDTH = 3200;
-const WORLD_HEIGHT = 2000;
+// Taller than the original 2000 - the extra 250px at the top is a dedicated
+// arena band for the World Boss (see below), clear of the plot grid's first
+// row (which starts at PLOT_ORIGIN_Y - PLOT_H/2, PLOT_H from the client's
+// WorldScene.js) rather than competing with it for space.
+const WORLD_HEIGHT = 2250;
 const PLOT_COUNT = 12;
 const PLOT_COLS = 4;
 const PLOT_ORIGIN_X = 420;
-const PLOT_ORIGIN_Y = 400;
+const PLOT_ORIGIN_Y = 600;
 const PLOT_SPACING_X = 620;
 const PLOT_SPACING_Y = 520;
 const WORLD_WAVE_INTERVAL_MS = 45000;
@@ -94,6 +98,67 @@ let worldWaveDeadline = Date.now() + WORLD_WAVE_INTERVAL_MS;
 // server process restarts, same as the shared-world state above.
 const LEADERBOARD_MAX = 25;
 let leaderboard = [];
+
+// The one genuinely *shared* piece of gameplay in the world (everything
+// else - plots - is one player's own combat, just visible to others). This
+// is also the one place this server is authoritative over actual combat
+// numbers rather than just presence/relayed cosmetics (see README's
+// "trust the client" note on plots) - a shared HP pool that many clients
+// hit at once has to live somewhere nobody's individual client controls,
+// or two players' clients would each think they landed the finishing blow.
+// Kept deliberately simple: a flat, server-decided damage-per-click (not
+// trusting a client-reported amount) with a per-player cooldown, rather
+// than simulating each player's actual team/stats server-side.
+const WORLD_BOSS_MAX_HP = 6000;
+const WORLD_BOSS_ATTACK_DAMAGE = 15;
+const WORLD_BOSS_ATTACK_COOLDOWN_MS = 500;
+const WORLD_BOSS_HIT_RANGE = 140;
+const WORLD_BOSS_X = WORLD_WIDTH / 2;
+const WORLD_BOSS_Y = 280; // the dedicated arena band above the plot grid (see WORLD_HEIGHT)
+const WORLD_BOSS_ESSENCE_POOL = 200; // split across contributors by damage share
+
+let worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
+const lastBossAttackAt = new Map(); // playerId -> timestamp, for the per-player cooldown
+
+function spawnWorldBoss() {
+  worldBoss = { active: true, hp: WORLD_BOSS_MAX_HP, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
+  broadcast({ type: 'worldBossSpawned', hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: WORLD_BOSS_X, y: WORLD_BOSS_Y });
+}
+
+function publicWorldBoss() {
+  return worldBoss.active
+    ? { active: true, hp: worldBoss.hp, maxHp: worldBoss.maxHp, x: WORLD_BOSS_X, y: WORLD_BOSS_Y }
+    : { active: false };
+}
+
+function attackWorldBoss(attackerId, attackerPlayer) {
+  if (!worldBoss.active) return;
+  const dx = attackerPlayer.x - WORLD_BOSS_X, dy = attackerPlayer.y - WORLD_BOSS_Y;
+  if (Math.hypot(dx, dy) > WORLD_BOSS_HIT_RANGE) return;
+
+  const now = Date.now();
+  if (now - (lastBossAttackAt.get(attackerId) || 0) < WORLD_BOSS_ATTACK_COOLDOWN_MS) return;
+  lastBossAttackAt.set(attackerId, now);
+
+  const damage = Math.min(WORLD_BOSS_ATTACK_DAMAGE, worldBoss.hp);
+  worldBoss.hp -= damage;
+  worldBoss.contributions.set(attackerId, (worldBoss.contributions.get(attackerId) || 0) + damage);
+  broadcast({ type: 'worldBossHit', hp: worldBoss.hp, maxHp: worldBoss.maxHp, byId: attackerId, damage });
+
+  if (worldBoss.hp <= 0) {
+    const totalDamage = worldBoss.maxHp;
+    const rewards = [];
+    for (const [contributorId, damageDealt] of worldBoss.contributions.entries()) {
+      const contributor = players.get(contributorId);
+      if (!contributor) continue;
+      const essenceReward = Math.max(5, Math.round((damageDealt / totalDamage) * WORLD_BOSS_ESSENCE_POOL));
+      send(contributor.ws, { type: 'worldBossReward', essence: essenceReward, damageDealt });
+      rewards.push({ name: contributor.name, damageDealt });
+    }
+    broadcast({ type: 'worldBossDefeated', rewards });
+    worldBoss = { active: false, hp: 0, maxHp: WORLD_BOSS_MAX_HP, contributions: new Map() };
+  }
+}
 
 function submitScore(playerName, entry) {
   leaderboard.push({
@@ -128,7 +193,8 @@ function snapshotFor(playerId, name) {
     worldHeight: WORLD_HEIGHT,
     worldWave,
     worldWaveDeadline,
-    leaderboard
+    leaderboard,
+    worldBoss: publicWorldBoss()
   };
 }
 
@@ -219,6 +285,10 @@ wss.on('connection', (ws) => {
         submitScore(player.name, msg);
         break;
 
+      case 'attackBoss':
+        attackWorldBoss(id, player);
+        break;
+
       default:
         break;
     }
@@ -231,13 +301,16 @@ wss.on('connection', (ws) => {
 });
 
 // A shared beat every player sees at once (the zombs.io-style "wave hits the
-// whole map" rhythm) - purely informational for now (see README), each plot
-// still starts its own wave manually via its own Start Wave button.
+// whole map" rhythm). Each plot still starts its own wave manually via its
+// own Start Wave button, but this now also spawns the shared World Boss
+// (see attackWorldBoss above) if the last one isn't still standing - never
+// stacks a second boss on top of one still being fought.
 setInterval(() => {
   if (Date.now() < worldWaveDeadline) return;
   worldWave += 1;
   worldWaveDeadline = Date.now() + WORLD_WAVE_INTERVAL_MS;
   broadcast({ type: 'worldWaveTick', worldWave, worldWaveDeadline });
+  if (!worldBoss.active) spawnWorldBoss();
 }, 1000);
 
 httpServer.listen(PORT, () => {

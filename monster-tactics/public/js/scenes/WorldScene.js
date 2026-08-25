@@ -1,12 +1,16 @@
 // The shared multiplayer overworld (see server/server.js + net/NetClient.js).
 // Every connected player walks the same map; each claimed plot renders a
 // live mini-preview of that player's tower layout to everyone else, and a
-// shared "world wave" clock ticks in the corner as a common rhythm. Walking
-// into your own claimed plot and pressing E hands off into the ordinary
-// single-player BattleScene - it doesn't know or care it's being used from
-// here beyond the gameState.multiplayerPlotId hook a few of its methods
-// check (report layout/wave changes back, route "back" here instead of the
-// single-player menu/hub).
+// shared "world wave" clock ticks in the corner as a common rhythm - which
+// also spawns the World Boss (see the "world boss" methods below), the one
+// piece of gameplay here that's genuinely shared rather than one player's
+// own combat rendered for others to watch: everyone converges on it and
+// fights it together, HP tracked server-side so it can't diverge between
+// clients. Walking into your own claimed plot and pressing E hands off into
+// the ordinary single-player BattleScene - it doesn't know or care it's
+// being used from here beyond the gameState.multiplayerPlotId hook a few of
+// its methods check (report layout/wave changes back, route "back" here
+// instead of the single-player menu/hub).
 const AVATAR_SPEED = 260; // px/sec
 const MOVE_BROADCAST_MS = 90;
 const PLOT_W = 520;
@@ -65,6 +69,10 @@ class WorldScene extends Phaser.Scene {
       ['plotWaveUpdated', (msg) => this.onPlotWaveUpdated(msg)],
       ['worldWaveTick', (msg) => this.onWorldWaveTick(msg)],
       ['leaderboard', (msg) => this.onLeaderboardUpdate(msg.leaderboard)],
+      ['worldBossSpawned', (msg) => this.onWorldBossSpawned(msg)],
+      ['worldBossHit', (msg) => this.onWorldBossHit(msg)],
+      ['worldBossDefeated', (msg) => this.onWorldBossDefeated()],
+      ['worldBossReward', (msg) => this.onWorldBossReward(msg)],
       ['disconnected', () => this.onDisconnected()]
     ];
     this.netHandlers.forEach(([type, fn]) => NetClient.on(type, fn));
@@ -85,6 +93,7 @@ class WorldScene extends Phaser.Scene {
       this.syncPlayers(snapshot.players);
       this.syncPlots(snapshot.plots);
       this.onLeaderboardUpdate(snapshot.leaderboard || []);
+      this.syncWorldBoss(snapshot.worldBoss);
       return;
     }
 
@@ -112,6 +121,7 @@ class WorldScene extends Phaser.Scene {
     this.buildControls();
     this.buildLeaderboardPanel();
     this.onLeaderboardUpdate(snapshot.leaderboard || []);
+    if (snapshot.worldBoss && snapshot.worldBoss.active) this.onWorldBossSpawned(snapshot.worldBoss);
   }
 
   syncPlayers(players) {
@@ -275,6 +285,91 @@ class WorldScene extends Phaser.Scene {
     this.worldWaveDeadline = msg.worldWaveDeadline;
   }
 
+  // ---------- world boss ----------
+  //
+  // The one genuinely shared piece of gameplay here - every plot is still
+  // one player's own combat, just visible to others. The server (see
+  // server.js attackWorldBoss) owns the real HP number and validates range/
+  // cooldown; this scene just renders whatever it's told and fires attack
+  // attempts, so a player mashing keys or lying about position can't do
+  // anything except waste their own clicks.
+
+  onWorldBossSpawned(state) {
+    this.destroyBossVisual();
+    this.bossX = state.x;
+    this.bossY = state.y;
+    this.bossMaxHp = state.maxHp;
+
+    this.bossSprite = this.add.sprite(state.x, state.y, RETROMON_SHEET, 24).setScale(3).setInteractive({ useHandCursor: true });
+    this.bossSprite.on('pointerdown', () => this.attemptBossAttack());
+    this.bossNameLabel = this.add.text(state.x, state.y - 130, 'WORLD BOSS', {
+      fontFamily: 'monospace', fontSize: '22px', color: '#e0562f', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 4);
+    this.bossHpBg = this.add.rectangle(state.x, state.y - 100, 260, 16, 0x1c202a).setStrokeStyle(2, 0x394258);
+    this.bossHpFill = this.add.rectangle(state.x - 130, state.y - 100, 260, 16, 0xe0562f).setOrigin(0, 0.5);
+    this.bossHpFill.scaleX = Math.max(0, state.hp / state.maxHp);
+    this.bossHint = this.add.text(state.x, state.y + 90, 'Click it, or walk up and press SPACE!', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#f5c94b'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
+
+    this.announceBossBanner('WORLD BOSS HAS APPEARED!', '#e0562f');
+  }
+
+  destroyBossVisual() {
+    [this.bossSprite, this.bossNameLabel, this.bossHpBg, this.bossHpFill, this.bossHint].forEach(o => o && o.destroy());
+    this.bossSprite = null;
+  }
+
+  onWorldBossHit(msg) {
+    if (!this.bossSprite) return;
+    this.bossHpFill.scaleX = Math.max(0, msg.hp / msg.maxHp);
+    if (msg.byId === NetClient.id) {
+      this.showFloatingText(this.bossX + (Math.random() * 40 - 20), this.bossY - 40, `-${msg.damage}`, '#fff2c4');
+    }
+  }
+
+  onWorldBossDefeated() {
+    this.announceBossBanner('WORLD BOSS DEFEATED!', '#4caf50');
+    this.destroyBossVisual();
+  }
+
+  // Only sent to players who actually landed a hit (see server.js
+  // attackWorldBoss) - essence split by each contributor's damage share.
+  onWorldBossReward(msg) {
+    gameState.earnEssence(msg.essence);
+    this.showFloatingText(this.myX, this.myY - 50, `+${msg.essence} essence!`, '#f5c94b');
+  }
+
+  syncWorldBoss(state) {
+    if (!state) return;
+    if (state.active && !this.bossSprite) { this.onWorldBossSpawned(state); return; }
+    if (state.active && this.bossSprite) { this.bossHpFill.scaleX = Math.max(0, state.hp / state.maxHp); return; }
+    if (!state.active && this.bossSprite) this.destroyBossVisual();
+  }
+
+  attemptBossAttack() {
+    if (!this.bossSprite) return;
+    NetClient.send('attackBoss');
+  }
+
+  announceBossBanner(text, color) {
+    const banner = this.add.text(this.scale.width / 2, 220, text, {
+      fontFamily: 'monospace', fontSize: '40px', color, fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6).setScrollFactor(0).setDepth(60);
+    this.tweens.add({ targets: banner, alpha: 0, delay: 2000, duration: 600, onComplete: () => banner.destroy() });
+  }
+
+  // Same rise-then-fade split as BattleScene.showDamageNumber - a single
+  // tween easing both position and alpha fades the alpha almost to nothing
+  // in the first quarter of the animation, unreadable in practice.
+  showFloatingText(x, y, text, color) {
+    const t = this.add.text(x, y, text, {
+      fontFamily: 'monospace', fontSize: '18px', color, fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 3).setDepth(50);
+    this.tweens.add({ targets: t, y: t.y - 34, duration: 550, ease: 'Cubic.Out' });
+    this.tweens.add({ targets: t, alpha: 0, delay: 280, duration: 270, ease: 'Linear', onComplete: () => t.destroy() });
+  }
+
   // ---------- hud / controls ----------
 
   buildHud() {
@@ -354,6 +449,7 @@ class WorldScene extends Phaser.Scene {
   buildControls() {
     this.moveKeys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
     this.enterKey = this.input.keyboard.addKey('E');
+    this.attackKey = this.input.keyboard.addKey('SPACE');
   }
 
   updateWorldWaveHud() {
@@ -433,5 +529,6 @@ class WorldScene extends Phaser.Scene {
       if (this.nearOwnPlot) this.enterPlot(this.nearOwnPlot);
       else if (this.nearUnclaimedPlot) this.claimPlot(this.nearUnclaimedPlot);
     }
+    if (Phaser.Input.Keyboard.JustDown(this.attackKey)) this.attemptBossAttack();
   }
 }

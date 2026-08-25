@@ -320,9 +320,8 @@ to load your battle at all.
 
 **The trust split that keeps this simple:** the server is authoritative only
 for *world* state - who's connected, where their avatar is, who owns which
-plot, and a shared "World Wave" clock ticking in the corner (currently
-informational only - each plot still starts its own waves manually). It does
-**not** simulate combat; that stays entirely client-side exactly as
+plot, and the shared "World Wave" clock ticking in the corner. It does
+**not** simulate a plot's combat; that stays entirely client-side exactly as
 single-player already worked, and a plot's owner just reports outcomes
 (`plotLayout`, `waveResult` messages) for the server to relay to everyone
 else. This is a deliberate simplification, not an oversight - full
@@ -330,6 +329,23 @@ server-authoritative combat (recomputing every attack server-side to prevent
 a client from lying about outcomes) is a much bigger project; trusting the
 client for combat now and hardening it later if the concept proves out is
 the standard early move for this genre of game.
+
+**The World Boss is the one exception to that trust split**, because it has
+to be: it's the one piece of gameplay here that's genuinely *shared* rather
+than one player's own combat rendered for others to watch, so its HP can't
+live on any one client or two players' clients would each think they landed
+the finishing blow. Every World Wave tick (`WORLD_WAVE_INTERVAL_MS`, 45s)
+spawns one if the last isn't still standing, in a dedicated open arena above
+the plot grid. Click it, or walk up and press **SPACE** - each hit is a
+flat, server-decided amount (`WORLD_BOSS_ATTACK_DAMAGE`) on a per-player
+cooldown, not a client-reported number, specifically so a client can't just
+lie about its damage the way it can everywhere else on this server. HP is
+one shared number, broadcast to everyone on every hit; when it dies, essence
+is split among every contributor by their share of the total damage and
+sent only to them (`worldBossReward`) - verified this whole loop directly
+with 8 concurrent connections hammering it at once: damage summed to
+exactly its max HP, HP only ever decreased, and reward messages went only to
+the 8 who actually landed a hit, none of the bystanders.
 
 Progression (roster/essence/coins/lives) is exactly the same
 `GameState`/localStorage as single-player - entering a plot just calls the
@@ -349,13 +365,11 @@ There's no separate multiplayer account system.
   there's nothing tying a person to the same identity across sessions.
 - No reconnect handling - a dropped WebSocket just shows a "Disconnected"
   message; refreshing starts a brand new connection/avatar.
-- The shared World Wave clock is cosmetic only - it doesn't yet force
-  anyone's wave to start, which was step 1 of the originally-scoped rollout
-  (shared clock -> avatars -> plots+previews -> clock actually triggers
-  combat). Making it do that is the natural next step once the social loop
-  itself is confirmed fun.
-- No visiting/co-op (walking into someone else's live battle to help
-  defend) or chat - purely a "see each other build" loop right now.
+- Only one World Boss species/difficulty exists - no variety or scaling by
+  however many players happen to be online when it spawns.
+- No visiting/co-op on a *plot* specifically (walking into someone else's
+  live battle to help defend) or chat - the World Boss is the only actually
+  shared combat right now.
 - Needs real hosting to be reachable by anyone but localhost - this only
   runs as long as `npm start`'s process does, on whatever host runs it.
 
