@@ -12,6 +12,14 @@ const ESSENCE_STORAGE_KEY = 'monster-tactics:essence';
 const STARTER_GRANTED_KEY = 'monster-tactics:starterGranted';
 const MASTERY_STORAGE_KEY = 'monster-tactics:mastery';
 const TALENTS_STORAGE_KEY = 'monster-tactics:talents';
+const DAILY_LOGIN_STORAGE_KEY = 'monster-tactics:dailyLogin';
+// A reason to open the game today beyond "I feel like playing" - the one
+// return hook this project didn't have yet (see README). Streak resets if a
+// day is skipped entirely rather than just decaying, so it stays a clean
+// daily habit signal instead of a fuzzy recency score. Cycles every 7 days
+// rather than growing forever, so a long-time player's day 8 looks like
+// their day 1 again instead of the reward table needing to be open-ended.
+const DAILY_LOGIN_CYCLE_ESSENCE = [20, 25, 30, 40, 50, 60, 100];
 const MAX_TEAM_SIZE = 5;
 const STARTING_COINS = 120;
 const STARTER_ESSENCE = 80;
@@ -29,6 +37,7 @@ class GameState {
     // effectiveMaxLives/effectiveStartingCoins.
     this.mastery = this.loadMastery();
     this.talents = this.loadTalents();
+    this.dailyLogin = this.loadDailyLogin();
     this.team = [];
     this.lives = this.effectiveMaxLives();
     this.maxLives = this.effectiveMaxLives();
@@ -180,6 +189,48 @@ class GameState {
     } catch (e) {
       // localStorage unavailable - talents just won't persist
     }
+  }
+
+  loadDailyLogin() {
+    try {
+      const raw = localStorage.getItem(DAILY_LOGIN_STORAGE_KEY);
+      if (!raw) return { lastDate: null, streak: 0 };
+      const parsed = JSON.parse(raw);
+      return { lastDate: parsed.lastDate || null, streak: Number(parsed.streak) || 0 };
+    } catch (e) {
+      return { lastDate: null, streak: 0 };
+    }
+  }
+
+  saveDailyLogin() {
+    try {
+      localStorage.setItem(DAILY_LOGIN_STORAGE_KEY, JSON.stringify(this.dailyLogin));
+    } catch (e) {
+      // localStorage unavailable - streak just won't persist
+    }
+  }
+
+  // Call once per page load (MenuScene.create) - returns null if today's
+  // reward was already claimed (including "already claimed earlier this
+  // same session"), or {day, streak, essence} right after applying it.
+  // Dates compare as plain 'YYYY-MM-DD' (UTC) rather than elapsed
+  // milliseconds - simpler than tracking a rolling 24h window, at the cost
+  // of the day boundary being UTC midnight rather than the player's local
+  // midnight. A skipped day (more than 1 calendar day since lastDate) resets
+  // the streak to 1 rather than partially decaying it.
+  claimDailyLoginIfDue() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.dailyLogin.lastDate === today) return null;
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const streak = this.dailyLogin.lastDate === yesterday ? this.dailyLogin.streak + 1 : 1;
+    const day = ((streak - 1) % DAILY_LOGIN_CYCLE_ESSENCE.length) + 1;
+    const essence = DAILY_LOGIN_CYCLE_ESSENCE[day - 1];
+
+    this.dailyLogin = { lastDate: today, streak };
+    this.saveDailyLogin();
+    this.earnEssence(essence);
+    return { day, streak, essence };
   }
 
   // Returns { isNew, essenceGained } so the caller (SanctuaryScene) can show

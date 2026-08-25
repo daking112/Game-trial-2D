@@ -220,6 +220,45 @@ built yet: persisting the leaderboard across a server restart (it's
 in-memory only, same as the rest of the shared-world state), per-player
 identity across sessions, and any filtering (e.g. "this week" / by mode).
 
+## Daily Login Streak
+
+The other honest gap this project had: every hook so far (Sanctuary pulls,
+Mastery, the leaderboard, raids) only pays off *while playing* - nothing
+gave a player a reason to specifically open the game **today**, the kind of
+return hook most `.io`-style/mobile games lean on hard. `GameState` now
+tracks a `lastDate`/`streak` pair (`monster-tactics:dailyLogin`,
+localStorage, single-player-only - no server involved), checked once per
+page load from `MenuScene.create()`. First visit of a UTC calendar day
+grants essence from a 7-day reward cycle (`DAILY_LOGIN_CYCLE_ESSENCE` -
+20/25/30/40/50/60/100, then repeats) and shows a claim modal; visiting
+again the same day is a no-op. Missing a day entirely resets the streak to
+1 rather than partially decaying it, so it stays a clean daily-habit signal
+instead of a fuzzy recency score.
+
+Verified directly (Playwright, manipulating the stored date to simulate
+"yesterday" and "3 days ago" rather than waiting real days out): a fresh
+profile gets day 1, a same-day reload grants nothing further, a simulated
+next-day reload correctly advances to day 2/streak 2, and a simulated
+skipped day correctly resets to streak 1. Also caught and fixed a real bug
+while building this: the modal's dimming background wasn't `setInteractive()`,
+so a click landing on a button positioned underneath it (Quick Play,
+Monster Sanctuary) passed straight through to that button instead of being
+absorbed by the modal - confirmed both the click-through was possible
+before the fix and blocked after, and that Claim still correctly dismisses
+the modal and restores normal clicks.
+
+**Not built yet:**
+- Day boundary is UTC midnight, not the player's local midnight - a player
+  near the international date line could see their "day" flip at an odd
+  local time.
+- No visual reward-track preview (what day 5, 6, 7 actually pay out) before
+  you're on them - only the day you're currently claiming is shown.
+- No catch-up/grace mechanic (e.g. a streak freeze item) for an otherwise
+  strong streak broken by one missed day - a skip is a hard reset, matching
+  the "clean daily-habit signal" reasoning above, but worth revisiting if it
+  turns out to feel too punishing in practice.
+- Essence-only reward - no roster pulls, coins, or cosmetic-track tie-in.
+
 ## Structure
 
 ```

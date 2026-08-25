@@ -72,5 +72,41 @@ class MenuScene extends Phaser.Scene {
     }, { size: 'large', tint: 0xbfe8ff });
 
     UiKit.makeLink(this, width / 2, 1020, 'Leaderboard', () => this.scene.start('LeaderboardScene'), { fontSize: '19px' });
+
+    this.showDailyLoginRewardIfDue();
+  }
+
+  // A reason to come back today beyond "I feel like it" - the one hook this
+  // project was missing (see README). gameState.claimDailyLoginIfDue()
+  // already applied the reward by the time this runs; this is purely the
+  // "hey, that happened" moment - skippable/no-op if it's not due (already
+  // claimed today, including earlier this same session).
+  showDailyLoginRewardIfDue() {
+    const reward = gameState.claimDailyLoginIfDue();
+    if (!reward) return;
+
+    const { width, height } = this.scale;
+    const DEPTH = 100;
+    // Interactive with no handler, purely so it intercepts clicks - without
+    // this, Quick Play/Monster Sanctuary sit interactive right underneath
+    // this panel and a click "through" the modal would trigger them.
+    const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7).setDepth(DEPTH).setInteractive();
+    const panel = this.add.image(width / 2, height / 2, 'panel-overlay').setDepth(DEPTH);
+    const title = this.add.text(width / 2, height / 2 - 140, 'DAILY LOGIN!', {
+      fontFamily: 'monospace', fontSize: '44px', color: '#f5c94b', fontStyle: 'bold'
+    }).setOrigin(0.5).setStroke('#1c2530', 6).setDepth(DEPTH);
+    const streakText = this.add.text(width / 2, height / 2 - 70, `Day ${reward.day} - ${reward.streak} day streak`, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
+    }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(DEPTH);
+    const rewardLabel = UiKit.iconLabel(this, width / 2, height / 2 - 10, 'icon-essence', `+${reward.essence} essence`, {
+      fontFamily: 'monospace', fontSize: '26px', color: '#f5f7fa', stroke: '#1c2530', strokeThickness: 4
+    }, 24);
+    rewardLabel.icon.setDepth(DEPTH);
+    rewardLabel.text.setDepth(DEPTH);
+
+    const claimBtn = UiKit.makeButton(this, width / 2, height / 2 + 90, 'Claim', () => {
+      [bg, panel, title, streakText, rewardLabel.icon, rewardLabel.text, claimBtn.container].forEach(o => o.destroy());
+    }, { size: 'large', tint: 0xf5c94b });
+    claimBtn.container.setDepth(DEPTH);
   }
 }
