@@ -30,7 +30,7 @@ class SanctuaryScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '22px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 4
     }, 24);
 
-    const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
+    const backTarget = gameState.inMultiplayerWorld ? 'WorldScene' : (gameState.runActive ? 'HubScene' : 'MenuScene');
     this.backBtn(backTarget, () => this.scene.start(backTarget));
 
     const cols = 3, cardW = 330, cardH = 195;
@@ -167,7 +167,7 @@ class SanctuaryScene extends Phaser.Scene {
   }
 
   backBtn(target, onClick) {
-    const label = target === 'HubScene' ? '< Hub' : '< Menu';
+    const label = target === 'HubScene' ? '< Hub' : target === 'WorldScene' ? '< World' : '< Menu';
     UiKit.makeLink(this, 30, 30, label, onClick, { originX: 0, originY: 0 });
   }
 }

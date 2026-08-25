@@ -2,3 +2,5 @@
 # regenerated on demand by scripts/gen_assets.py, not meant to be committed.
 public/assets/border-panels-raw/
 public/assets/humble-gift-raw/
+
+node_modules/

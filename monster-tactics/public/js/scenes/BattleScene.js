@@ -29,6 +29,14 @@ class BattleScene extends Phaser.Scene {
     this.pathCells = this.stage.pathCells;
 
     this.phase = 'placement'; // 'placement' | 'wave' | 'waveComplete' | 'gameOver'
+    // Set (via WorldScene.enterPlot) when this scene is standing in for one
+    // claimed plot in the shared multiplayer world rather than a
+    // single-player run - see the multiplayerPlotId checks throughout this
+    // file for what changes: reporting the grid layout/wave count back to
+    // the server so other players' WorldScene can see it, and routing
+    // "back"/game-over/wave-complete to WorldScene instead of the
+    // single-player Menu/Hub/Roster flow.
+    this.multiplayerPlotId = gameState.multiplayerPlotId;
     this.pathWaypoints = this.buildPathWaypoints();
     this.pathBlockedCells = this.buildPathBlockedCells();
 
@@ -55,6 +63,10 @@ class BattleScene extends Phaser.Scene {
 
     this.updateHud();
     this.refreshStartButton();
+    // Reports this plot's (empty, at this point) layout so a rebuild after
+    // a game-over visibly clears the old preview for other players instead
+    // of leaving their last stand frozen on everyone else's screen.
+    if (this.multiplayerPlotId != null) this.reportPlotLayout();
   }
 
   // ---------- camera ----------
@@ -243,7 +255,9 @@ class BattleScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '22px', color: '#f5f7fa'
     }).setScrollFactor(0);
 
-    this.backBtn = UiKit.makeLink(this, this.scale.width - 30, 32, 'Menu >', () => this.scene.start('MenuScene'), {
+    const backLabel = this.multiplayerPlotId != null ? 'World >' : 'Menu >';
+    const backTarget = this.multiplayerPlotId != null ? 'WorldScene' : 'MenuScene';
+    this.backBtn = UiKit.makeLink(this, this.scale.width - 30, 32, backLabel, () => this.scene.start(backTarget), {
       originX: 1, originY: 0, fontSize: '22px'
     }).setScrollFactor(0);
 
@@ -311,9 +325,11 @@ class BattleScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '24px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4).setDepth(OVERLAY_DEPTH).setScrollFactor(0).setVisible(false);
 
+    const secondaryLabel = this.multiplayerPlotId != null ? 'Return to World' : 'Return to Menu';
+    const secondaryTarget = this.multiplayerPlotId != null ? 'WorldScene' : 'MenuScene';
     this.overlayPrimaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 40, '', () => {}, { size: 'large' });
-    this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 140, 'Return to Menu', () => {
-      this.scene.start('MenuScene');
+    this.overlaySecondaryBtn = UiKit.makeButton(this, width / 2, height / 2 + 140, secondaryLabel, () => {
+      this.scene.start(secondaryTarget);
     }, { size: 'large' });
     this.overlayPrimaryBtn.container.setDepth(OVERLAY_DEPTH);
     this.overlaySecondaryBtn.container.setDepth(OVERLAY_DEPTH);
@@ -413,6 +429,7 @@ class BattleScene extends Phaser.Scene {
     this.grid[row][col] = ally;
     this.allies.push(ally);
     this.updateHud();
+    if (this.multiplayerPlotId != null) this.reportPlotLayout();
   }
 
   removeAllyFromGrid(ally) {
@@ -428,6 +445,23 @@ class BattleScene extends Phaser.Scene {
     this.layoutBench();
     this.refreshStartButton();
     this.updateHud();
+    if (this.multiplayerPlotId != null) this.reportPlotLayout();
+  }
+
+  // Sends "here's what my grid looks like" to the shared-world server (see
+  // server/server.js) so every other connected player's WorldScene can draw
+  // a live mini-preview of this plot without needing this scene/tab to be
+  // running at all - it's just a snapshot of occupied cells and each one's
+  // type color, not a live simulation feed.
+  reportPlotLayout() {
+    const layout = [];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const ally = this.grid[r][c];
+        if (ally) layout.push({ col: c, row: r, color: TYPE_COLORS[ally.species.type] });
+      }
+    }
+    NetClient.send('plotLayout', { plotId: this.multiplayerPlotId, layout });
   }
 
   refreshStartButton() {
@@ -765,6 +799,27 @@ class BattleScene extends Phaser.Scene {
     this.setOverlayVisible(true);
     this.overlayPrimaryBtn.bg.off('pointerdown');
 
+    // A claimed plot is a persistent base, not a run through a fixed set of
+    // stages - there's no stage-complete/Hub/Victory concept for it, it just
+    // loops waves forever. Branch out before any of that single-player
+    // stage-progress logic runs.
+    if (this.multiplayerPlotId != null) {
+      NetClient.send('waveResult', { plotId: this.multiplayerPlotId, wave: gameState.wave });
+      this.overlayTitle.setText(`Wave ${gameState.wave} Cleared!`);
+      this.overlaySub.setText(
+        `Score: ${gameState.score}   Lives: ${gameState.lives}/${gameState.maxLives}   +${essenceReward} essence`
+      );
+      this.overlayPrimaryBtn.text.setText('Next Wave');
+      this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+        Sfx.click();
+        gameState.wave += 1;
+        this.phase = 'placement';
+        this.setOverlayVisible(false);
+        this.refreshStartButton();
+      });
+      return;
+    }
+
     const stageComplete = gameState.wave >= WAVES_PER_STAGE;
 
     if (!stageComplete) {
@@ -802,11 +857,24 @@ class BattleScene extends Phaser.Scene {
     this.phase = 'gameOver';
     this.setOverlayVisible(true);
     this.overlayTitle.setText('Base Overrun');
+    this.overlayPrimaryBtn.bg.off('pointerdown');
+
+    if (this.multiplayerPlotId != null) {
+      this.overlaySub.setText(`Your base fell on wave ${gameState.wave}   Final Score: ${gameState.score}`);
+      this.overlayPrimaryBtn.text.setText('Rebuild Base');
+      this.overlayPrimaryBtn.bg.once('pointerdown', () => {
+        Sfx.click();
+        gameState.resetRun();
+        gameState.startStage(FIRST_STAGE_ID);
+        this.scene.restart();
+      });
+      return;
+    }
+
     this.overlaySub.setText(
       `Run ended on stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}, wave ${gameState.wave}   Final Score: ${gameState.score}`
     );
     this.overlayPrimaryBtn.text.setText('Start New Run');
-    this.overlayPrimaryBtn.bg.off('pointerdown');
     this.overlayPrimaryBtn.bg.once('pointerdown', () => {
       Sfx.click();
       gameState.runActive = false; // team select treats this as "not mid-run"
@@ -817,8 +885,11 @@ class BattleScene extends Phaser.Scene {
   // ---------- helpers ----------
 
   updateHud() {
+    const header = this.multiplayerPlotId != null
+      ? `Your Base (Plot ${this.multiplayerPlotId + 1})   Wave ${gameState.wave}   `
+      : `${this.stage.name}   Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Wave ${gameState.wave}/${WAVES_PER_STAGE}   `;
     this.hudText.setText(
-      `${this.stage.name}   Stage ${gameState.stageInRun}/${RUN_TARGET_STAGES}   Wave ${gameState.wave}/${WAVES_PER_STAGE}   ` +
+      header +
       `Lives ${gameState.lives}/${gameState.maxLives}   Coins ${gameState.coins}   Score ${gameState.score}   ` +
       `Bench ${this.bench.length}   Placed ${this.allies.length}`
     );

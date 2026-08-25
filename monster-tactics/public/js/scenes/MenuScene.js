@@ -10,6 +10,7 @@ class MenuScene extends Phaser.Scene {
     // context flag SanctuaryScene/RosterScene use to route their back
     // button to the Hub instead of here.
     gameState.runActive = false;
+    gameState.inMultiplayerWorld = false;
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.55);
@@ -34,5 +35,10 @@ class MenuScene extends Phaser.Scene {
 
     UiKit.makeButton(this, width / 2, 590, 'Monster Sanctuary', () => this.scene.start('SanctuaryScene'), { size: 'large' });
     UiKit.makeButton(this, width / 2, 700, 'Team & Battle', () => this.scene.start('RosterScene'), { size: 'large' });
+
+    UiKit.makeButton(this, width / 2, 810, 'Multiplayer World (Beta)', () => {
+      gameState.inMultiplayerWorld = true;
+      this.scene.start('WorldScene');
+    }, { size: 'large', tint: 0xbfe8ff });
   }
 }

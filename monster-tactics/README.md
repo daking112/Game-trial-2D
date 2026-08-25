@@ -1,13 +1,23 @@
 # Monster Tactics
 
-A single-player, browser-based tower-defense game built with Phaser 3, in the
-style of Bloons TD 6: enemies march along a fixed winding path, you place
-monsters off the path to attack anything that comes into range, and you build
-your collection through a gacha-style Monster Sanctuary instead of a shop.
+A browser-based tower-defense game built with Phaser 3, in the style of
+Bloons TD 6: enemies march along a fixed winding path, you place monsters off
+the path to attack anything that comes into range, and you build your
+collection through a gacha-style Monster Sanctuary instead of a shop. Also
+has an early **Multiplayer World** beta - see below - where players share one
+map and can see each other build.
 
-No build step - open `public/index.html` in a browser, or serve the `public/`
-folder with any static file server. Canvas is a fixed 1920x1080 (Phaser's FIT
-scale mode letterboxes/scales it to whatever window it's actually shown in).
+Canvas is a fixed 1920x1080 (Phaser's FIT scale mode letterboxes/scales it to
+whatever window it's actually shown in). Two ways to run it:
+
+- **Single-player only:** no build step, no server needed - open
+  `public/index.html` in a browser, or serve `public/` with any static file
+  server.
+- **With the multiplayer world:** `npm install && npm start` (needs the `ws`
+  package - see `package.json`) runs `server/server.js`, which both serves
+  `public/` *and* hosts the multiplayer WebSocket endpoint at `/ws`, then
+  visit `http://localhost:8080`. Single-player still works fine served this
+  way too; it just doesn't use the socket.
 
 A brand-new player starts with 3 starter monsters (one each of a poison-DoT,
 burn-DoT, and splash archetype - Rollpup/Snarlpup/Hornlet) and 80 essence,
@@ -116,7 +126,9 @@ public/
     scenes/BattleScene.js     the path, range preview, placement, waves, combat
     scenes/HubScene.js        between-stage hub: stage choice, countdown, Ready
     scenes/VictoryScene.js    run-complete stats screen
+    scenes/WorldScene.js     shared multiplayer overworld - see "Multiplayer World" below
     audio/Sfx.js            procedural Web Audio sound effects - see "Audio" below
+    net/NetClient.js        WebSocket client wrapper for WorldScene/BattleScene
     ui/UiKit.js             shared button/panel/link factory - see "Art" below
     vendor/phaser.min.js   Phaser 3.70.0, vendored (no CDN dependency)
   assets/
@@ -132,6 +144,8 @@ public/
     Humble Gift - v1.3.zip                       source pack for ui/icon-*.png
 scripts/
   gen_assets.py            regenerates tiles/ and ui/ - see "Art" below
+server/
+  server.js                shared-world WebSocket server + static file host - see "Multiplayer World" below
 ```
 
 ## Art
@@ -205,6 +219,63 @@ rise (`Cubic.Out`) front-loads the fade almost to invisibility in the
 first ~25% of the tween - the position tween keeps that ease, the alpha
 tween holds full opacity and only fades linearly in the final third.
 
+## Multiplayer World (beta)
+
+`MenuScene`'s "Multiplayer World (Beta)" button drops the player into
+`WorldScene`: a shared overworld map (`server/server.js` + `net/NetClient.js`)
+where every connected player has a walking avatar (WASD/arrows) and can see
+everyone else's in real time. The map has 12 fixed plots; walking into an
+unclaimed one and pressing **E** claims it as your base, and pressing **E**
+again while standing in your own claimed plot hands off into the ordinary
+single-player `BattleScene` - it plays exactly like solo mode (same
+placement/combat/archetypes), just against an endless wave counter instead of
+a fixed 5-stage run, since a claimed plot is a persistent base rather than a
+run through a set path list. Every other player sees a live miniature preview
+of your grid (a colored square per occupied cell, from `TYPE_COLORS`) update
+on their own screen as you place/remove towers, without their client needing
+to load your battle at all.
+
+**The trust split that keeps this simple:** the server is authoritative only
+for *world* state - who's connected, where their avatar is, who owns which
+plot, and a shared "World Wave" clock ticking in the corner (currently
+informational only - each plot still starts its own waves manually). It does
+**not** simulate combat; that stays entirely client-side exactly as
+single-player already worked, and a plot's owner just reports outcomes
+(`plotLayout`, `waveResult` messages) for the server to relay to everyone
+else. This is a deliberate simplification, not an oversight - full
+server-authoritative combat (recomputing every attack server-side to prevent
+a client from lying about outcomes) is a much bigger project; trusting the
+client for combat now and hardening it later if the concept proves out is
+the standard early move for this genre of game.
+
+Progression (roster/essence/coins/lives) is exactly the same
+`GameState`/localStorage as single-player - entering a plot just calls the
+same `gameState.resetRun()` + `startStage()` single-player already used.
+There's no separate multiplayer account system.
+
+**Not built yet, roughly in the order it'd matter:**
+- Per-plot state (lives/coins/wave) lives only in that player's own
+  `GameState` for their current session - the server only ever sees the
+  cosmetic layout + wave number it relays to other players' previews, not
+  real persistent base stats. Closing the tab resets your base's session
+  progress same as abandoning a single-player run does today.
+- One shared room for everyone connected, capped at 12 plots total - no
+  matchmaking, sharding into multiple rooms, or a lobby list. Fine for a
+  handful of concurrent players, not for real scale.
+- No accounts/auth - `Tamer<N>` display names are assigned per-connection,
+  there's nothing tying a person to the same identity across sessions.
+- No reconnect handling - a dropped WebSocket just shows a "Disconnected"
+  message; refreshing starts a brand new connection/avatar.
+- The shared World Wave clock is cosmetic only - it doesn't yet force
+  anyone's wave to start, which was step 1 of the originally-scoped rollout
+  (shared clock -> avatars -> plots+previews -> clock actually triggers
+  combat). Making it do that is the natural next step once the social loop
+  itself is confirmed fun.
+- No visiting/co-op (walking into someone else's live battle to help
+  defend) or chat - purely a "see each other build" loop right now.
+- Needs real hosting to be reachable by anyone but localhost - this only
+  runs as long as `npm start`'s process does, on whatever host runs it.
+
 ## Known limitations (v1)
 
 - Enemies don't fight back - placed monsters are invincible during a wave,
@@ -249,8 +320,13 @@ shape for it), and differentiated pull currencies.
 
 Longer-term, the stated direction is a multiplayer .io-style game (think
 Roblox tycoon-tower-defense) - a shared world players build/defend in
-together rather than solo runs. Nothing here is built for that yet, and it
-needs backend infrastructure (matchmaking, real-time state sync) this
-project doesn't have, but it's why the battle grid was built with a camera
-scrolling a world bigger than one screen instead of just a bigger fixed
-viewport - a shared world needs to be navigable, not just large.
+together rather than solo runs. A first slice of that now exists (see
+"Multiplayer World (beta)" above): a real WebSocket server, a shared
+walkable map, claimable plots with live cross-player previews, and a shared
+wave clock - client-trusted combat rather than server-authoritative, and a
+single fixed-size room rather than real matchmaking, both called out above
+as the next things to harden if the concept proves out. It's also why the
+single-player battle grid was built with a camera scrolling a world bigger
+than one screen instead of just a bigger fixed viewport - a shared world
+needs to be navigable, not just large, and that camera work carried over
+directly into WorldScene.

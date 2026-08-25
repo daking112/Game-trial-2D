@@ -41,6 +41,14 @@ class GameState {
     this.stageInRun = 0;
     this.currentStageId = null;
 
+    // Multiplayer world context (see scenes/WorldScene.js) - mirrors
+    // runActive's role of telling SanctuaryScene/RosterScene's back button
+    // where "back" means, but for the shared-world flow instead of a
+    // single-player run. multiplayerPlotId is set only while BattleScene is
+    // standing in for one specific claimed plot.
+    this.inMultiplayerWorld = false;
+    this.multiplayerPlotId = null;
+
     // A brand-new player has no monsters and no essence to pull one - that's
     // a hard lock, not just rough onboarding (Team Select says "go pull",
     // the Sanctuary says "can't afford it"). Grant a starter kit exactly

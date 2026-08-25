@@ -13,7 +13,7 @@ class RosterScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 6);
 
-    const backTarget = gameState.runActive ? 'HubScene' : 'MenuScene';
+    const backTarget = gameState.inMultiplayerWorld ? 'WorldScene' : (gameState.runActive ? 'HubScene' : 'MenuScene');
     this.backBtn(backTarget, () => this.scene.start(backTarget));
 
     // Team selection is scoped to monsters still actually in the roster.
@@ -47,7 +47,11 @@ class RosterScene extends Phaser.Scene {
       this.buildCard(entry, x, y);
     });
 
-    if (gameState.runActive) {
+    if (gameState.inMultiplayerWorld) {
+      this.add.text(width / 2, 990, "Head back to the World when you're ready", {
+        fontFamily: 'monospace', fontSize: '19px', color: '#c8ceda'
+      }).setOrigin(0.5).setStroke('#1c2530', 4);
+    } else if (gameState.runActive) {
       // Mid-run, this screen is purely for adjusting the team/upgrades -
       // the Hub is the only place that actually commits to the next stage
       // (it's what picked gameState.pendingStageId), so send the player
@@ -176,7 +180,7 @@ class RosterScene extends Phaser.Scene {
   }
 
   backBtn(target, onClick) {
-    const label = target === 'HubScene' ? '< Hub' : '< Menu';
+    const label = target === 'HubScene' ? '< Hub' : target === 'WorldScene' ? '< World' : '< Menu';
     UiKit.makeLink(this, 30, 30, label, onClick, { originX: 0, originY: 0 });
   }
 }

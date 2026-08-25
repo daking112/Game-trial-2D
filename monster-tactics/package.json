@@ -1,0 +1,16 @@
+{
+  "name": "monster-tactics",
+  "version": "1.0.0",
+  "description": "A browser-based tower-defense game built with Phaser 3, in the style of Bloons TD 6: enemies march along a fixed winding path, you place monsters off the path to attack anything that comes into range, and you build your collection through a gacha-style Monster Sanctuary instead of a shop. Also has an early Multiplayer World beta - a shared map players walk around together with live previews of each other's bases.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}
