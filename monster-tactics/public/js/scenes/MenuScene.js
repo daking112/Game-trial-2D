@@ -14,15 +14,35 @@ class MenuScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.55);
+    // Radial vignette (see scripts/gen_assets.py make_vignette) on top of
+    // the flat darken above - pulls focus toward the title/button column
+    // instead of the whole tiled ground reading as one flat wall of green.
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
-    this.add.sprite(350, 180, 'tree-1').play('tree-1-sway').setScale(1.0).setAlpha(0.5);
-    this.add.sprite(width - 350, 180, 'tree-2').play('tree-2-sway').setScale(0.85).setAlpha(0.5);
+    // A scattered handful of background decoration (dim, varied scale) so
+    // the menu reads as a clearing in a forest rather than 2 lonely trees
+    // floating on a tiled texture - kept low-alpha and off the button
+    // column so it stays atmosphere, not clutter.
+    const bgDecor = [
+      ['rock-1', 120, 520, 1.3], ['rock-3', width - 150, 560, 1.2],
+      ['bush-1', 150, 340, 1.1], ['bush-2', width - 170, 300, 1.15],
+      ['rock-2', 90, 800, 1.1], ['rock-4', width - 110, 850, 1.15],
+      ['bush-1', width - 260, 700, 1.0], ['bush-2', 260, 900, 1.05]
+    ];
+    bgDecor.forEach(([key, x, y, scale]) => {
+      const isBush = key.startsWith('bush');
+      const spr = this.add.sprite(x, y, key).setScale(scale).setAlpha(0.65);
+      if (isBush) spr.play(`${key}-sway`);
+    });
 
-    this.add.text(width / 2, 220, 'MONSTER TACTICS', {
-      fontFamily: 'monospace', fontSize: '72px', color: '#f5f7fa', fontStyle: 'bold'
-    }).setOrigin(0.5).setStroke('#1c2530', 7);
+    this.add.sprite(350, 190, 'tree-1').play('tree-1-sway').setScale(1.0).setAlpha(0.55);
+    this.add.sprite(width - 350, 190, 'tree-2').play('tree-2-sway').setScale(0.85).setAlpha(0.55);
 
-    this.add.text(width / 2, 300, 'hatch monsters, place them along the path, hold the line', {
+    // Pre-rendered logo (gradient/outline/shadow baked in - see
+    // gen_assets.py make_title_logo) in place of a flat Text title.
+    this.add.image(width / 2, 205, 'title-logo').setScale(0.45);
+
+    this.add.text(width / 2, 305, 'hatch monsters, place them along the path, hold the line', {
       fontFamily: 'monospace', fontSize: '22px', color: '#c8ceda'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
 

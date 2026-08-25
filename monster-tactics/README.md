@@ -340,8 +340,9 @@ credit, see `public/assets/retromon/LICENSE.txt`. The original sheets bake an
 opaque near-white background into every frame; `public/assets/retromon/*.png`
 are re-exported with that background flood-filled to transparent (see
 `public/assets/retromon/index.json` for exactly what was done and which
-frames are currently wired up - only 14 of the 288 available frames are used
-so far between the gacha pool and enemy roster, so there's a lot of room to
+frames are currently wired up - between the two sheets now open
+(`retromon-b1`/`retromon-b2`, see "New species from Big Pack 2" above) still
+well under half the available frames are used, so there's a lot of room to
 add more species before needing new art).
 
 The battle grid's ground (`assets/tiles/grass.png`, `path.png`) is hand-authored:
@@ -378,6 +379,92 @@ bundled RAR codec doesn't support every method these were saved with).
 `public/js/ui/UiKit.js` is the one shared button/panel/link/icon-label
 factory every scene calls into, replacing what used to be six near-identical
 hand-rolled `makeButton()` copies.
+
+## Visual polish pass
+
+A dedicated pass on how the game actually looks, on top of everything
+above being functionally complete - explicit direction from the project
+owner ("start polishing the looks... UI, Menus, Title card, the sprites,
+etc... and the map as well").
+
+- **Crisp pixel art everywhere** (`main.js`, `pixelArt: true` in the Phaser
+  config) - the single highest-impact fix, found by zooming into a
+  screenshot of the bench icons and seeing visibly soft/blurred pixel edges.
+  Every sprite in this game is small hand-pixel-art scaled up; without this,
+  Phaser's default bilinear texture filtering smooths every hard pixel edge
+  into a blur. One line, and every sprite/tile/UI texture in the game got
+  sharper - verified with a before/after crop comparison.
+- **A real title logo** (`scripts/gen_assets.py` `make_title_logo`, baked to
+  `assets/ui/title-logo.png`) replaces MenuScene's old plain white
+  `Text` object - a gold vertical gradient (matching the existing essence/
+  coin gold), a thick hard-edged outline (dilating the text's own alpha
+  mask, not drawing offset copies - fills inner corners cleanly), and a
+  soft drop shadow underneath. Rendered with `FreeMonoBold` via PIL rather
+  than attempting gradient/outline text live in Phaser (no built-in support
+  for either without a canvas-texture trick anyway - simpler to just bake
+  it alongside every other generated asset).
+- **A radial vignette** (`make_vignette`, `assets/ui/vignette.png`) darkens
+  the corners on every menu-like scene's tiled-grass background (Menu,
+  Sanctuary, Roster, Hub, Mastery, Leaderboard, Victory) - pulls focus
+  toward the center/button column instead of the whole screen reading as
+  one flat wall of repeating texture. MenuScene also got a scattered handful
+  of low-alpha background trees/bushes/rocks (fixed positions, not random -
+  same "looks the same on replay" reasoning as the battle grid's margin
+  decorations) so it reads as a forest clearing rather than 2 lonely trees.
+- **Every button and panel got real depth**: a soft offset drop shadow (a
+  tinted-black copy of the same texture, offset behind - `UiKit.makeButton`
+  for buttons, one extra `add.image` line at each panel-card call site for
+  roster/hub/banner/raid cards) and a baked-in top-to-transparent white
+  sheen (`add_sheen` in `gen_assets.py`, masked by the texture's own alpha
+  so it never spills outside the rounded shape) - the nine-slice border has
+  real texture, but the stretched middle fill used to be one dead-flat
+  color. Applied once in `stitch_nineslice` so every button/panel size gets
+  it automatically, no per-scene work needed beyond the shadows.
+- **The battle grid's path/grass boundary** got a softer edge: a scatter of
+  small dirt-colored flecks just past the existing dark rim stroke,
+  deterministically seeded per cell (`BattleScene.seededRandom`/
+  `drawPathTransition`) so it looks identical on every reload rather than
+  re-rolling. Doesn't fully close the "no autotile corner pieces" gap noted
+  below, but reads as a hand-worn edge instead of a ruler-straight line for
+  much less effort than real per-corner art. The always-on grid-line overlay
+  was also dropped from 0.12 to 0.06 alpha - functionally still there to
+  help placement, but no longer reads as graph paper laid over the terrain.
+- **WorldScene's plot panels and the "Top Runs" leaderboard panel** moved
+  from a flat single-color `Rectangle` with a plain stroke to a rounded,
+  gradient-filled `Graphics` shape with the same drop-shadow treatment.
+- **Player avatars** (`WorldScene.buildAvatar`) are still a colored circle
+  (real trainer sprites are unprocessed source art - see "Known
+  limitations" below) but now sit in a proper marker treatment: a ground
+  shadow ellipse so it doesn't look like it's floating, a soft outer glow
+  ring, and the name on a small dark pill instead of bare stroked text -
+  bundled into one Container so every caller moves the whole avatar with a
+  single `setPosition` instead of repositioning each piece separately.
+
+**Two real bugs found and fixed in the process, not just look-and-feel:**
+- Adding a shadow to every `UiKit.makeButton` broke `BattleScene`'s overlay
+  (game-over/wave-clear) and its "Start Wave" button, because both toggled
+  visibility on the button's `.bg`/`.text` children individually rather
+  than its whole `.container` - the new shadow child was invisible to that
+  list and stayed visible even while the rest of the button was hidden,
+  showing two persistent floating shadow boxes mid-grid. Fixed by toggling
+  `.container` instead (also more future-proof against whatever
+  `UiKit.makeButton` grows next). Caught by screenshotting an otherwise
+  unrelated change and noticing shapes that shouldn't have been there -
+  traced via direct display-list inspection, not guessing.
+- Bundling `WorldScene`'s avatar pieces into a Container meant `.marker`'s
+  own `x`/`y` became container-local (always 0,0) instead of world
+  position - `cameras.main.startFollow(this.myAvatar.marker, ...)` would
+  have silently frozen camera tracking. Caught before it shipped by
+  re-pointing `startFollow` at `.container` and adding an explicit
+  regression check that moves the avatar and asserts the camera's
+  `scrollX` actually changes.
+
+Verified with real Playwright sessions throughout, not just code review: a
+before/after pixel-level crop comparison for the sharpness fix, screenshots
+of every major scene after each change, and a full regression pass
+afterward (placement, wave start, the overlay's shadow bug, camera-follow
+after the avatar refactor, claiming a plot) confirming nothing about how
+the game *behaves* changed, only how it looks.
 
 ## Audio & combat feedback
 
@@ -643,13 +730,17 @@ banner; reconnecting again after that showed nothing further.
   are still extracted and ready to use for more species (see the asset
   index.json).
 - Trainer/player sprites in `retromon-raw/` aren't wired in anywhere yet -
-  the Multiplayer World's avatars are plain colored circles + name labels,
-  not a sprite.
-- The path/grass boundary is a flat-color rim stroke, not proper transition
-  tiles (no corner pieces where the road turns) - reads clearly enough at
-  this grid's cell size, but wouldn't scale to a larger or diagonal path.
-  Border decorations (trees/bushes/rocks) are fixed positions, not randomized
-  or stage-specific, so every stage's margins look the same.
+  the Multiplayer World's avatars are still a colored circle at heart (now
+  dressed up with a shadow/glow/name-pill, see "Visual polish pass" above),
+  not a real sprite.
+- The path/grass boundary has a soft dirt-fleck scatter now (see "Visual
+  polish pass" above) but still no real per-corner autotile art - reads
+  clearly enough at this grid's cell size, but wouldn't scale to a larger or
+  diagonal path. Border decorations (trees/bushes/rocks) are fixed
+  positions, not randomized or stage-specific, so every stage's margins
+  look the same. The grass/path tiles themselves are also each one fixed
+  pattern repeated every cell - no per-tile variation to break up
+  repetition at a closer zoom.
 
 ## Bigger design not built yet
 

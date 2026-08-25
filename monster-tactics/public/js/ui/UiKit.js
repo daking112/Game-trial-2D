@@ -8,6 +8,12 @@ const UiKit = {
     const textureKey = size === 'large' ? 'btn-large' : 'btn-medium';
     const fontSize = opts.fontSize || (size === 'large' ? '27px' : '23px');
 
+    // Soft drop shadow - a tinted-black copy of the same nine-slice texture,
+    // offset behind - gives every button a sense of lift off the background
+    // it sits on instead of reading as flush/pasted-on, with no separate
+    // shadow asset needed.
+    const shadow = scene.add.image(6, 8, textureKey).setTint(0x000000).setAlpha(0.35);
+
     const bg = scene.add.image(0, 0, textureKey);
     if (opts.tint) bg.setTint(opts.tint);
     bg.setInteractive({ useHandCursor: true });
@@ -16,7 +22,7 @@ const UiKit = {
       fontFamily: 'monospace', fontSize, color: '#f5f7fa', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 4);
 
-    const container = scene.add.container(x, y, [bg, text]);
+    const container = scene.add.container(x, y, [shadow, bg, text]);
 
     // Hover-only feedback (no separate press-tween) - some callers (e.g.
     // BattleScene's overlay) dynamically swap the click handler later via
@@ -30,7 +36,7 @@ const UiKit = {
     bg.on('pointerdown', () => { Sfx.click(); onClick(); });
 
     return {
-      container, bg, text,
+      container, bg, text, shadow,
       setLabel: (t) => text.setText(t),
       setPosition: (nx, ny) => container.setPosition(nx, ny)
     };
@@ -67,6 +73,7 @@ const UiKit = {
     btn.container.setScrollFactor(0);
     btn.bg.setScrollFactor(0);
     btn.text.setScrollFactor(0);
+    if (btn.shadow) btn.shadow.setScrollFactor(0);
     return btn;
   },
 

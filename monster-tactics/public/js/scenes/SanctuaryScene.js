@@ -22,6 +22,7 @@ class SanctuaryScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, 60, 'MONSTER SANCTUARY', {
       fontFamily: 'monospace', fontSize: '39px', color: '#f5f7fa', fontStyle: 'bold'
@@ -45,6 +46,8 @@ class SanctuaryScene extends Phaser.Scene {
   }
 
   buildBannerCard(banner, x, y, w, h) {
+    // Soft offset shadow - see UiKit.makeButton's identical trick.
+    this.add.image(x + 5, y + 7, 'panel-card-banner').setTint(0x000000).setAlpha(0.3);
     const bg = this.add.image(x, y, 'panel-card-banner').setInteractive({ useHandCursor: true });
     bg.on('pointerover', () => bg.setScale(1.03));
     bg.on('pointerout', () => bg.setScale(1));
@@ -69,6 +72,7 @@ class SanctuaryScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, 60, `${banner.icon} ${banner.name.toUpperCase()}`, {
       fontFamily: 'monospace', fontSize: '36px', color: '#f5f7fa', fontStyle: 'bold'

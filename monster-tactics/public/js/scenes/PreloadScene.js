@@ -44,6 +44,13 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('panel-card-banner', 'assets/ui/panel-card-banner.png');
     this.load.image('panel-egg', 'assets/ui/panel-egg.png');
     this.load.image('bench-slot', 'assets/ui/bench-slot.png');
+    // Pre-rendered title logo (gradient fill + outline + drop shadow baked
+    // in - see scripts/gen_assets.py make_title_logo) - was a plain flat
+    // Phaser Text object.
+    this.load.image('title-logo', 'assets/ui/title-logo.png');
+    // Soft radial darken for MenuScene's background - see gen_assets.py
+    // make_vignette.
+    this.load.image('vignette', 'assets/ui/vignette.png');
 
     // Coin/star icons from the "Humble Gift" pack - already gold-toned to
     // match this game's existing essence/coin color, used unmodified.

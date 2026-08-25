@@ -4,3 +4,4 @@ public/assets/border-panels-raw/
 public/assets/humble-gift-raw/
 
 node_modules/
+__pycache__/

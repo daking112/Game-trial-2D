@@ -193,7 +193,9 @@ class BattleScene extends Phaser.Scene {
       }
     }
 
-    g.lineStyle(1, 0xf5f7fa, 0.12);
+    this.drawPathTransition(g);
+
+    g.lineStyle(1, 0xf5f7fa, 0.06);
     for (let c = 0; c <= GRID_COLS; c++) {
       g.lineBetween(GRID_X + c * CELL, GRID_Y, GRID_X + c * CELL, GRID_Y + GRID_ROWS * CELL);
     }
@@ -226,6 +228,51 @@ class BattleScene extends Phaser.Scene {
 
     this.rangePreview = this.add.circle(0, 0, 1, 0xffffff, 0.12)
       .setStrokeStyle(1, 0xffffff, 0.5).setDepth(-5).setVisible(false);
+  }
+
+  // A deterministic (not Math.random) pseudo-random 0..1 value per
+  // coordinate pair - same inputs always give the same output, so the dirt
+  // scatter below looks identical on every reload of the same stage rather
+  // than re-rolling and shifting around each time (see drawMapDecorations'
+  // "a stage always looks the same on replay" reasoning above).
+  seededRandom(x, y, salt) {
+    const v = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453;
+    return v - Math.floor(v);
+  }
+
+  // The rim stroke above draws a clean hard edge where path meets grass -
+  // reads clearly, but is a flat geometric line with no corner variety (see
+  // README "Known limitations"). This scatters a handful of small
+  // dirt-colored flecks just past that edge, fading out over a few pixels,
+  // for a softer, hand-worn boundary instead of a ruler-straight one -
+  // cheap to add without needing real per-corner autotile art.
+  drawPathTransition(g) {
+    const dirtColors = [0x6b4f34, 0xa9865c, 0x5a4028];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (!this.isPathCell(c, r)) continue;
+        const x0 = GRID_X + c * CELL, y0 = GRID_Y + r * CELL;
+        const edges = [
+          [!this.isPathCell(c, r - 1), 'h', x0, y0],
+          [!this.isPathCell(c, r + 1), 'h', x0, y0 + CELL],
+          [!this.isPathCell(c - 1, r), 'v', x0, y0],
+          [!this.isPathCell(c + 1, r), 'v', x0 + CELL, y0]
+        ];
+        edges.forEach(([isEdge, axis, ex, ey], edgeIdx) => {
+          if (!isEdge) return;
+          for (let i = 0; i < 10; i++) {
+            const salt = c * 1000 + r * 10 + edgeIdx * 4 + i;
+            const along = this.seededRandom(c, r, salt) * CELL;
+            const depth = 1 + this.seededRandom(r, c, salt) * 8;
+            const size = 4 + Math.floor(this.seededRandom(salt, salt, 1) * 5);
+            const px = axis === 'h' ? ex + along : ex + (ex === x0 ? -depth : depth);
+            const py = axis === 'h' ? ey + (ey === y0 ? -depth : depth) : ey + along;
+            g.fillStyle(dirtColors[i % dirtColors.length], 0.9 - (depth / 9) * 0.5);
+            g.fillRect(px - size / 2, py - size / 2, size, size);
+          }
+        });
+      }
+    }
   }
 
   // Purely cosmetic dressing in the margins flanking the grid - fixed
@@ -351,9 +398,14 @@ class BattleScene extends Phaser.Scene {
   }
 
   setOverlayVisible(visible) {
+    // Toggling each button's whole .container (rather than just .bg/.text
+    // individually) so it also covers UiKit.makeButton's shadow child - a
+    // per-child list here silently missed that shadow when it was added,
+    // leaving it visible (at a scroll-panned world position, since it's
+    // otherwise pinned to screen space) even while the rest of the overlay
+    // was hidden.
     [this.overlayBg, this.overlayPanel, this.overlayTitle, this.overlaySub,
-      this.overlayPrimaryBtn.bg, this.overlayPrimaryBtn.text,
-      this.overlaySecondaryBtn.bg, this.overlaySecondaryBtn.text].forEach(o => o.setVisible(visible));
+      this.overlayPrimaryBtn.container, this.overlaySecondaryBtn.container].forEach(o => o.setVisible(visible));
   }
 
   // ---------- placement ----------
@@ -502,8 +554,11 @@ class BattleScene extends Phaser.Scene {
 
   refreshStartButton() {
     const ready = this.phase === 'placement' && this.allies.length > 0;
-    this.startWaveBtn.bg.setVisible(this.phase === 'placement');
-    this.startWaveBtn.text.setVisible(this.phase === 'placement');
+    // .container, not .bg/.text individually - a per-child list here would
+    // silently miss UiKit.makeButton's shadow child, leaving it visible
+    // even once the rest of the button is hidden (see setOverlayVisible's
+    // identical fix above).
+    this.startWaveBtn.container.setVisible(this.phase === 'placement');
     this.startWaveBtn.bg.setTint(ready ? 0xffffff : 0x777777);
     this.startWaveBtn.text.setColor(ready ? '#f5f7fa' : '#8a95ab');
   }

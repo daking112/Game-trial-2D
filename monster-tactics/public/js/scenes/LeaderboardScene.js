@@ -13,6 +13,7 @@ class LeaderboardScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, 60, 'LEADERBOARD', {
       fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'

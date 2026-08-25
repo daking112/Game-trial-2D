@@ -8,7 +8,13 @@ const config = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
-  }
+  },
+  // Every sprite in this game (monsters, tiles, UI chrome) is hand-pixel-art
+  // at a small native size, scaled up - without this, Phaser's default
+  // bilinear texture filtering softens every hard pixel edge into a blur.
+  // pixelArt also sets antialias:false and roundPixels:true for the same
+  // "keep pixels crisp" reason.
+  pixelArt: true
 };
 
 window.game = new Phaser.Game(config);

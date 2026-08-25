@@ -8,7 +8,7 @@
 # Idempotent: re-running overwrites public/assets/{tiles,ui}/*.png in place.
 import random
 import subprocess
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 import numpy as np
 import os
 
@@ -91,6 +91,87 @@ def make_path_tile():
 
 
 # ---------------------------------------------------------------------------
+# Part 1b: the main menu's title logo - was a plain single-color
+# Phaser Text object (flat, no depth), replaced with a pre-rendered PNG so it
+# can have a real gradient fill, a thick hard-edged outline, and a soft drop
+# shadow, none of which Phaser's Text object can do on its own without a
+# canvas-texture trick anyway - simpler to just bake it here alongside every
+# other generated asset. Kept crisp/pixel-art-appropriate throughout (the
+# outline is a hard dilation, not a blur) except the drop shadow, which is
+# deliberately soft - a blurred *shadow* under a crisp sprite reads as depth,
+# it's blurring the actual letterforms that would look wrong for this style.
+FREEMONO_BOLD = '/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf'
+
+
+def make_title_logo(text='MONSTER TACTICS', font_size=150):
+    font = ImageFont.truetype(FREEMONO_BOLD, font_size)
+    dummy = Image.new('L', (1, 1))
+    bbox = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=font)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    pad = 90  # room for the outline dilation + shadow offset + blur spread
+    canvas_w, canvas_h = text_w + pad * 2, text_h + pad * 2
+    origin = (pad - bbox[0], pad - bbox[1])
+
+    # 1. Text mask (alpha only) - the source everything else derives from.
+    text_mask = Image.new('L', (canvas_w, canvas_h), 0)
+    ImageDraw.Draw(text_mask).text(origin, text, font=font, fill=255)
+
+    # 2. Outline mask - dilate the text mask with a square max-filter (odd
+    # kernel size = 2*radius+1) so it grows into a uniform ring around every
+    # letter, including inner corners, which drawing offset copies in a ring
+    # of angles tends to leave gaps on.
+    outline_radius = 9
+    outline_mask = text_mask.filter(ImageFilter.MaxFilter(outline_radius * 2 + 1))
+
+    # 3. Soft drop shadow - the dilated shape again (reads better as a solid
+    # silhouette than the thinner raw text), offset down-right, blurred.
+    shadow = Image.new('L', (canvas_w, canvas_h), 0)
+    shadow.paste(outline_mask, (14, 18))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(10))
+
+    # 4. Vertical gradient fill for the letters themselves - warm gold to
+    # amber, matching the game's existing essence/coin gold (#f5c94b) so the
+    # logo reads as part of the same palette rather than a bolted-on asset.
+    top_color = (255, 244, 200)
+    bottom_color = (230, 140, 40)
+    gradient = Image.new('RGB', (1, canvas_h))
+    for y in range(canvas_h):
+        t = y / max(1, canvas_h - 1)
+        gradient.putpixel((0, y), tuple(
+            int(top_color[i] + (bottom_color[i] - top_color[i]) * t) for i in range(3)
+        ))
+    gradient = gradient.resize((canvas_w, canvas_h))
+
+    # Composite: shadow (bottom) -> solid dark outline -> gradient letters.
+    out = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+    out.paste((10, 8, 4, 255), (0, 0), shadow)
+    outline_color = Image.new('RGBA', (canvas_w, canvas_h), (26, 20, 10, 255))
+    out.paste(outline_color, (0, 0), outline_mask)
+    gradient_rgba = gradient.convert('RGBA')
+    gradient_rgba.putalpha(text_mask)
+    out.alpha_composite(gradient_rgba)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Part 1c: a soft radial vignette for MenuScene - darkens the corners/edges
+# so the tiled grass background reads as depth-of-field around the title
+# rather than one flat wall of repeating texture. Generated at half the
+# canvas resolution and stretched (see MenuScene.js) since it's a smooth
+# gradient with no fine detail to lose.
+def make_vignette(w=960, h=540, strength=0.65):
+    yy, xx = np.mgrid[0:h, 0:w]
+    cx, cy = w / 2, h / 2
+    # Normalized so the corners reach ~1.0 (full strength) and the center is 0.
+    dist = np.sqrt(((xx - cx) / cx) ** 2 + ((yy - cy) / cy) ** 2) / np.sqrt(2)
+    alpha = np.clip(dist, 0, 1) ** 1.6 * strength * 255
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 3] = alpha.astype(np.uint8)
+    return Image.fromarray(arr, 'RGBA')
+
+
+# ---------------------------------------------------------------------------
 # Part 2: nine-slice stitching, two source shapes -
 #  (a) a Tiny-Swords-style sheet already fragmented into a 3x3 grid of
 #      separate corner/edge/center pieces (auto-detected via alpha gaps)
@@ -153,6 +234,27 @@ def single_frame_nineslice_cells(path, box, border):
     ]
 
 
+def add_sheen(img, strength=0.16, fade_to=0.55):
+    """A faint top-to-transparent white highlight, masked by the image's own
+    alpha so it never spills outside the button/panel's rounded shape - the
+    nine-slice border (see stitch_nineslice) has real texture, but the
+    stretched middle fill is dead flat; this reads as a subtle glossy/
+    beveled highlight on every button and panel in the game for free,
+    rather than a plain painted rectangle. fade_to is how far down (as a
+    fraction of height) the highlight fades to nothing."""
+    w, h = img.size
+    sheen = Image.new('L', (1, h), 0)
+    for y in range(h):
+        t = y / max(1, h - 1)
+        a = max(0, 1 - t / fade_to) * strength * 255 if t < fade_to else 0
+        sheen.putpixel((0, y), int(a))
+    sheen = sheen.resize((w, h))
+    sheen = ImageChops.multiply(sheen, img.split()[3])
+    out = img.copy()
+    out.paste((255, 255, 255, 255), (0, 0), sheen)
+    return out
+
+
 def stitch_nineslice(cells, target_w, target_h):
     tl, tm, tr = cells[0]
     ml, mm, mr = cells[1]
@@ -172,7 +274,7 @@ def stitch_nineslice(cells, target_w, target_h):
     out.alpha_composite(tr, (target_w - right_w, 0))
     out.alpha_composite(bl, (0, target_h - bottom_h))
     out.alpha_composite(br, (target_w - right_w, target_h - bottom_h))
-    return out
+    return add_sheen(out)
 
 
 def main():
@@ -183,6 +285,12 @@ def main():
     make_grass_tile().save(os.path.join(OUT_TILES, 'grass.png'))
     make_path_tile().save(os.path.join(OUT_TILES, 'path.png'))
     print('wrote grass.png, path.png')
+
+    make_title_logo().save(os.path.join(OUT_UI, 'title-logo.png'))
+    print('wrote title-logo.png')
+
+    make_vignette().save(os.path.join(OUT_UI, 'vignette.png'))
+    print('wrote vignette.png')
 
     # "Border All 4" = the green colorway; cell (row1, col1) of its 10x8
     # grid of 64x64 frames is a plain rounded-square design (no scalloping),

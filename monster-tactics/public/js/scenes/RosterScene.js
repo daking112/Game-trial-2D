@@ -8,6 +8,7 @@ class RosterScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.68);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, 60, 'TEAM SELECT', {
       fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'
@@ -73,6 +74,9 @@ class RosterScene extends Phaser.Scene {
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
+    // Soft offset shadow so the card reads as sitting above the background
+    // instead of flush with it - see UiKit.makeButton's identical trick.
+    this.add.image(x + 5, y + 7, 'panel-card-roster').setTint(0x000000).setAlpha(0.3);
     const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true });
     const rarityDot = this.add.circle(x - 87, y - 72, 9, rarity.color).setStrokeStyle(2, 0x1c2530);
     const selectionRing = this.add.rectangle(x, y, 213, 183, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);

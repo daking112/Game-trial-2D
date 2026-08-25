@@ -122,7 +122,10 @@ class WorldScene extends Phaser.Scene {
     this.myX = me.x;
     this.myY = me.y;
     this.myAvatar = this.buildAvatar(this.myX, this.myY, `${NetClient.name} (you)`, 0x4caf50);
-    this.cameras.main.startFollow(this.myAvatar.marker, true, 0.15, 0.15);
+    // Follows the Container, not .marker - marker is now a child positioned
+    // in container-local space (always 0,0), not world space, since
+    // buildAvatar bundled marker/label/shadow/glow into one Container.
+    this.cameras.main.startFollow(this.myAvatar.container, true, 0.15, 0.15);
 
     snapshot.players.forEach(p => { if (p.id !== NetClient.id) this.onPlayerJoined(p); });
     snapshot.plots.forEach(p => this.createPlotPanel(p));
@@ -140,14 +143,13 @@ class WorldScene extends Phaser.Scene {
       seen.add(p.id);
       if (p.id === NetClient.id) {
         this.myX = p.x; this.myY = p.y;
-        this.myAvatar.marker.setPosition(p.x, p.y);
-        this.myAvatar.label.setPosition(p.x, p.y - 34);
+        this.myAvatar.container.setPosition(p.x, p.y);
         return;
       }
       if (this.otherPlayers.has(p.id)) {
         const op = this.otherPlayers.get(p.id);
         op.x = op.targetX = p.x; op.y = op.targetY = p.y;
-        op.marker.setPosition(p.x, p.y); op.label.setPosition(p.x, p.y - 34);
+        op.container.setPosition(p.x, p.y);
       } else {
         this.onPlayerJoined(p);
       }
@@ -171,12 +173,27 @@ class WorldScene extends Phaser.Scene {
 
   // ---------- players ----------
 
+  // A flat colored circle read as pure placeholder art (see README "Known
+  // limitations" - "not a sprite"). Short of wiring in real trainer sprites
+  // (unprocessed art, a bigger job - see retromon-raw/), this dresses the
+  // same circle up into a proper marker: a ground shadow so it doesn't look
+  // like it's floating, a soft outer glow ring, and the name on a small
+  // dark pill instead of bare stroked text. Everything lives in one
+  // Container so every caller moves the whole avatar with a single
+  // setPosition instead of repositioning marker/label separately.
   buildAvatar(x, y, name, color) {
-    const marker = this.add.circle(x, y, 16, color).setStrokeStyle(2, 0x1c2530);
-    const label = this.add.text(x, y - 34, name, {
+    const shadow = this.add.ellipse(0, 20, 26, 10, 0x000000, 0.35);
+    const glow = this.add.circle(0, 0, 21, color, 0.18);
+    const marker = this.add.circle(0, 0, 16, color).setStrokeStyle(2, 0x1c2530);
+    const labelText = this.add.text(0, 0, name, {
       fontFamily: 'monospace', fontSize: '14px', color: '#f5f7fa'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
-    return { marker, label };
+    const labelBg = this.add.rectangle(0, 0, labelText.width + 14, labelText.height + 6, 0x0b0d12, 0.55)
+      .setStrokeStyle(1, 0x394258);
+    labelBg.setPosition(0, -34);
+    labelText.setPosition(0, -34);
+    const container = this.add.container(x, y, [shadow, glow, marker, labelBg, labelText]);
+    return { container, marker, label: labelText };
   }
 
   onPlayerJoined(p) {
@@ -188,8 +205,7 @@ class WorldScene extends Phaser.Scene {
   onPlayerLeft(id) {
     const op = this.otherPlayers.get(id);
     if (!op) return;
-    op.marker.destroy();
-    op.label.destroy();
+    op.container.destroy();
     this.otherPlayers.delete(id);
   }
 
@@ -205,8 +221,7 @@ class WorldScene extends Phaser.Scene {
     for (const op of this.otherPlayers.values()) {
       op.x = Phaser.Math.Linear(op.x, op.targetX, t);
       op.y = Phaser.Math.Linear(op.y, op.targetY, t);
-      op.marker.setPosition(op.x, op.y);
-      op.label.setPosition(op.x, op.y - 34);
+      op.container.setPosition(op.x, op.y);
     }
   }
 
@@ -225,7 +240,14 @@ class WorldScene extends Phaser.Scene {
       ownerId: p.ownerId, ownerName: p.ownerName,
       layout: p.layout || [], wave: p.wave || 0, raidedUntil: p.raidedUntil || 0
     };
-    panel.border = this.add.rectangle(p.x, p.y, PLOT_W, PLOT_H, 0x1c2530, 0.35).setStrokeStyle(3, 0x394258);
+    // A soft offset shadow (see UiKit.makeButton's identical trick) plus a
+    // rounded, gradient-filled border redrawn per-state in refreshPlotPanel
+    // (owner color changes) - was a flat single-color Rectangle with a
+    // plain stroke, no depth or texture at all.
+    panel.shadow = this.add.graphics();
+    panel.shadow.fillStyle(0x000000, 0.28);
+    panel.shadow.fillRoundedRect(p.x - PLOT_W / 2 + 7, p.y - PLOT_H / 2 + 9, PLOT_W, PLOT_H, 16);
+    panel.border = this.add.graphics();
     panel.title = this.add.text(p.x, p.y - PLOT_H / 2 + 22, '', {
       fontFamily: 'monospace', fontSize: '18px', color: '#e8ecf5', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
@@ -247,7 +269,16 @@ class WorldScene extends Phaser.Scene {
       mine ? `Plot ${panel.id + 1} - YOUR BASE (wave ${panel.wave || 1})` :
       `Plot ${panel.id + 1} - ${panel.ownerName}'s base (wave ${panel.wave || 1})`
     );
-    panel.border.setStrokeStyle(3, mine ? 0x4caf50 : (unclaimed ? 0x394258 : 0xe0562f));
+    const accent = mine ? 0x4caf50 : (unclaimed ? 0x394258 : 0xe0562f);
+    const left = panel.x - PLOT_W / 2, top = panel.y - PLOT_H / 2;
+    panel.border.clear();
+    // A faint vertical gradient fill (dark base, barely-lighter top) instead
+    // of one flat translucent color - same "reads as a real card, not a
+    // painted rectangle" reasoning as UiKit's button/panel sheen.
+    panel.border.fillGradientStyle(0x232c38, 0x232c38, 0x171b22, 0x171b22, 0.55, 0.55, 0.55, 0.55);
+    panel.border.fillRoundedRect(left, top, PLOT_W, PLOT_H, 16);
+    panel.border.lineStyle(3, accent, 1);
+    panel.border.strokeRoundedRect(left, top, PLOT_W, PLOT_H, 16);
     panel.hint.setText(unclaimed ? 'Walk in and press E to claim it' : (mine ? 'Walk in, press E to enter' : ''));
     this.drawPlotPreview(panel);
   }
@@ -504,7 +535,15 @@ class WorldScene extends Phaser.Scene {
   buildLeaderboardPanel() {
     const { width } = this.scale;
     const panelX = width - 190, panelTop = 100;
-    this.add.rectangle(panelX, panelTop + 110, 320, 230, 0x0b0d12, 0.75).setScrollFactor(0).setStrokeStyle(2, 0x394258);
+    // Same rounded-corner/gradient/shadow treatment as the plot panels
+    // (see refreshPlotPanel) instead of a flat stroked Rectangle.
+    const pw = 320, ph = 230, left = panelX - pw / 2, top = panelTop + 110 - ph / 2;
+    this.add.graphics().setScrollFactor(0)
+      .fillStyle(0x000000, 0.28).fillRoundedRect(left + 5, top + 7, pw, ph, 12);
+    this.add.graphics().setScrollFactor(0)
+      .fillGradientStyle(0x1c2530, 0x1c2530, 0x0b0d12, 0x0b0d12, 0.8, 0.8, 0.8, 0.8)
+      .fillRoundedRect(left, top, pw, ph, 12)
+      .lineStyle(2, 0x394258, 1).strokeRoundedRect(left, top, pw, ph, 12);
     this.add.text(panelX, panelTop, 'TOP RUNS', {
       fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', fontStyle: 'bold'
     }).setOrigin(0.5).setScrollFactor(0);
@@ -564,8 +603,7 @@ class WorldScene extends Phaser.Scene {
 
     this.myX = Phaser.Math.Clamp(this.myX + dx * step, 20, this.worldWidth - 20);
     this.myY = Phaser.Math.Clamp(this.myY + dy * step, 20, this.worldHeight - 20);
-    this.myAvatar.marker.setPosition(this.myX, this.myY);
-    this.myAvatar.label.setPosition(this.myX, this.myY - 34);
+    this.myAvatar.container.setPosition(this.myX, this.myY);
 
     this.moveTimerMs += delta;
     if (this.moveTimerMs >= MOVE_BROADCAST_MS) {

@@ -114,6 +114,8 @@ class RaidScene extends Phaser.Scene {
 
   buildRosterCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
+    // Soft offset shadow - see UiKit.makeButton's identical trick.
+    this.add.image(x + 5, y + 7, 'panel-card-roster').setTint(0x000000).setAlpha(0.3).setScale(0.86);
     const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true }).setScale(0.86);
     const ring = this.add.rectangle(x, y, 183, 157, 0xffffff, 0).setStrokeStyle(4, 0xe0562f).setVisible(false);
     const sprite = this.add.sprite(x, y - 42, species.sheetKey, species.frame).setScale(1.1);

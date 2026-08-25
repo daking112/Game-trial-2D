@@ -8,6 +8,7 @@ class VictoryScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.6);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, height / 2 - 150, 'RUN COMPLETE!', {
       fontFamily: 'monospace', fontSize: '60px', color: '#f5c94b', fontStyle: 'bold'

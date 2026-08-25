@@ -10,6 +10,7 @@ class HubScene extends Phaser.Scene {
 
     this.add.tileSprite(width / 2, height / 2, width, height, 'tile-grass');
     this.add.rectangle(width / 2, height / 2, width, height, 0x12151d, 0.62);
+    this.add.image(width / 2, height / 2, 'vignette').setDisplaySize(width, height);
 
     this.add.text(width / 2, 65, 'STAGE CLEAR', {
       fontFamily: 'monospace', fontSize: '42px', color: '#f5f7fa', fontStyle: 'bold'
@@ -57,6 +58,8 @@ class HubScene extends Phaser.Scene {
 
   buildStageCard(stage, x, y) {
     const w = 330, h = 195;
+    // Soft offset shadow - see UiKit.makeButton's identical trick.
+    this.add.image(x + 5, y + 7, 'panel-card-hub').setTint(0x000000).setAlpha(0.3);
     const bg = this.add.image(x, y, 'panel-card-hub').setInteractive({ useHandCursor: true });
     const selectionRing = this.add.rectangle(x, y, w + 8, h + 8, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);
 
