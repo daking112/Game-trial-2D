@@ -266,7 +266,19 @@ function publicPlot(p) {
   return { id: p.id, ownerId: p.ownerId, ownerName: p.ownerName, layout: p.layout, wave: p.wave, x: p.x, y: p.y, raidedUntil: p.raidedUntil || 0 };
 }
 
-function snapshotFor(playerId, name) {
+function snapshotFor(playerId, name, clientId) {
+  // Deliver-once catch-up notice for a raid that happened while this
+  // clientId's owning connection wasn't around to see the live broadcast
+  // (see the 'raid' handler) - cleared immediately so it surfaces exactly
+  // once, to whichever connection next asks (fresh connect or an explicit
+  // requestState), not on every reconnect afterward.
+  let myRaidNotice = null;
+  const myPlot = plots.find(p => p.ownerId === clientId && p.raidNotice);
+  if (myPlot) {
+    myRaidNotice = { ...myPlot.raidNotice, plotId: myPlot.id };
+    myPlot.raidNotice = null;
+  }
+
   return {
     id: playerId,
     name,
@@ -277,7 +289,8 @@ function snapshotFor(playerId, name) {
     worldWave,
     worldWaveDeadline,
     leaderboard,
-    worldBoss: publicWorldBoss()
+    worldBoss: publicWorldBoss(),
+    myRaidNotice
   };
 }
 
@@ -332,7 +345,7 @@ wss.on('connection', (ws, request) => {
     if (plot.ownerId === clientId) plot.ownerName = player.name;
   }
 
-  send(ws, { type: 'welcome', ...snapshotFor(id, name) });
+  send(ws, { type: 'welcome', ...snapshotFor(id, name, clientId) });
   broadcast({ type: 'playerJoined', player: publicPlayer(player) }, id);
 
   ws.on('message', (raw) => {
@@ -355,7 +368,7 @@ wss.on('connection', (ws, request) => {
   function handleMessage(msg) {
     switch (msg.type) {
       case 'requestState':
-        send(ws, { type: 'state', ...snapshotFor(id, name) });
+        send(ws, { type: 'state', ...snapshotFor(id, name, clientId) });
         break;
 
       case 'move': {
@@ -428,6 +441,15 @@ wss.on('connection', (ws, request) => {
         }
         plot.raidedUntil = now + RAID_COOLDOWN_MS;
 
+        // A defender who's off in BattleScene/the menu (or just not
+        // connected at all right now) gets nothing from the broadcast below
+        // - broadcast only reaches currently-open sockets. This is the
+        // catch-up path: stashed on the plot itself and handed to whichever
+        // connection next identifies as this plot's owner (see snapshotFor),
+        // then cleared - delivered once, to whichever tab/device happens to
+        // reconnect first, not persisted or synced across multiple tabs.
+        plot.raidNotice = { attackerName: player.name, attackerWon: !!msg.attackerWon, time: now };
+
         const faintedCells = [];
         if (Array.isArray(msg.deadDefenderCells)) {
           const faintedUntil = now + RAID_FAINT_MS;
@@ -436,6 +458,7 @@ wss.on('connection', (ws, request) => {
             if (cell) { cell.faintedUntil = faintedUntil; faintedCells.push({ col: cell.col, row: cell.row, faintedUntil }); }
           });
         }
+        plot.raidNotice.faintedCount = faintedCells.length;
 
         broadcast({
           type: 'plotRaided', plotId: plot.id, attackerName: player.name,

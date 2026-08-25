@@ -90,6 +90,13 @@ class WorldScene extends Phaser.Scene {
   // ---------- state sync ----------
 
   applyState(snapshot) {
+    // Catch-up delivery for a raid that happened while this player wasn't
+    // connected (or was off in BattleScene/the menu) to see the live
+    // plotRaided broadcast - see server.js snapshotFor. Delivered at most
+    // once per raid, whichever connect/requestState round-trip sees it
+    // first.
+    if (snapshot.myRaidNotice) this.showRaidNotice(snapshot.myRaidNotice);
+
     if (this.ready) {
       this.worldWave = snapshot.worldWave;
       this.worldWaveDeadline = snapshot.worldWaveDeadline;
@@ -307,6 +314,18 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
+  // The catch-up counterpart to onPlotRaided's live banner - shown once,
+  // from applyState, for a raid the player wasn't around (or wasn't in
+  // WorldScene) to see happen in real time.
+  showRaidNotice(notice) {
+    this.announceBossBanner(
+      notice.attackerWon
+        ? `While you were away: ${notice.attackerName} raided your base and won!`
+        : `While you were away: ${notice.attackerName} raided your base and lost!`,
+      notice.attackerWon ? '#e0562f' : '#4caf50'
+    );
+  }
+
   onPlotWaveUpdated(msg) {
     const panel = this.plots.get(msg.plotId);
     if (!panel) return;
@@ -447,7 +466,7 @@ class WorldScene extends Phaser.Scene {
     this.worldWaveText = this.add.text(20, 18, '', {
       fontFamily: 'monospace', fontSize: '20px', color: '#f5c94b'
     }).setScrollFactor(0);
-    this.add.text(20, 44, `You are ${NetClient.name} - WASD/arrows to walk`, {
+    this.add.text(20, 44, `You are ${NetClient.name} - WASD/arrows to walk, E to claim/enter, SPACE to hit the boss, R to raid`, {
       fontFamily: 'monospace', fontSize: '15px', color: '#9aa4b8'
     }).setScrollFactor(0);
 

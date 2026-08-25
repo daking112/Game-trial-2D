@@ -561,12 +561,22 @@ error boundary at all, so any one bad/malformed message could crash the
 whole process. Now wrapped so a bad message just drops that one message
 instead.
 
+A defender who's off doing something else when it happens still finds out:
+on top of the live `plotRaided` banner shown to anyone currently in
+`WorldScene`, the server stashes a one-time catch-up notice on the plot
+itself (`plot.raidNotice`) if the owner wasn't around, handed to whichever
+connection next identifies as that plot's owner (a fresh connect or an
+explicit `requestState` - see `snapshotFor`'s `myRaidNotice`) and cleared
+immediately so it surfaces exactly once, not on every future reconnect.
+Verified directly: a defender who placed a base then closed their tab
+entirely (a real disconnect, not just switching scenes) got raided while
+fully offline, and the very next time they opened the game and entered the
+world - a brand new page, same browser profile - saw a "while you were away"
+banner; reconnecting again after that showed nothing further.
+
 **Not built yet:**
-- No visible "raid me" signal beyond walking up and seeing the hint - no
-  raid log, no notification for a defender who's off doing something else
-  entirely (they do get a banner if they happen to be in `WorldScene` when
-  it happens, via the same `plotRaided` broadcast everyone else's preview
-  updates from, but nothing if they're mid-`BattleScene` or off the page).
+- No raid log or history - the catch-up notice above says who raided you
+  and whether they won, but only the most recent one, and only once.
 - No retreat/flee mid-raid - once launched, the skirmish auto-resolves to
   completion or a 45s timeout tiebreak on total remaining HP.
 - No raid history, no leaderboard for raid wins, no cosmetic distinction
