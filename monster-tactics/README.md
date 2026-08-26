@@ -213,6 +213,29 @@ tried and then removed at the user's request to start over with different
 instructions - see git history around the "hand-authored tower monsters"
 commits if picking that back up.
 
+The restart uses hand-drawn art from **Piskel** (piskelapp.com, a free
+browser pixel-art editor) instead of Python-generated pixel grids, via
+`scripts/import_piskel.py`. Draw a monster as a 16x16 canvas with exactly 9
+frames in Piskel's timeline (any number of layers) - frames 0-2 are the
+down-facing idle bob, 3-5 up, 6-8 side, matching the pack's own 3-frame
+idle convention - save as `.piskel`, then run:
+
+```
+python3 scripts/import_piskel.py monster.piskel --out custom_blocks/
+```
+
+to get a 48x48 block (3 facings x 3 frames, 16px cells - the same layout
+`gen_towers.py` slices per monster out of the pack sheet). The importer
+reads the `.piskel` JSON format directly (each layer's frames are a base64
+PNG horizontal strip plus a layout index; layers composite by opacity) -
+reverse-engineered straight from the piskel source
+(github.com/piskelapp/piskel:
+`src/js/utils/serialization/{Serializer,Deserializer}.js` and
+`src/js/utils/FrameUtils.js#createFramesFromChunk`), not guessed from PNG
+export settings, so there's no ambiguity about frame order or spacing.
+Not yet wired into `gen_towers.py`'s output or `data/monsters.js` - no
+hand-drawn species exist yet, this is just the import tool waiting for art.
+
 `UiKit.speciesSprite` is now the single place a player-species sprite gets
 built, so all six screens that show a monster (battle bench + placed
 towers, roster, gacha reveal, and the raid squad/defender/detail views)
