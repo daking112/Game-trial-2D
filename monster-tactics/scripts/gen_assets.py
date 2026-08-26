@@ -21,6 +21,15 @@ HG_SHEET = os.path.join(HG_RAW, "Humble Gift - v1.3/PNG/SpriteSheet.png")
 OUT_TILES = os.path.join(ASSETS, "tiles")
 OUT_UI = os.path.join(ASSETS, "ui")
 
+# Two "Pixel Fantasy" tileset packs (https://pixel-fantasy.itch.io/ -
+# editable/usable commercially, not resellable; LICENSE.txt inside each
+# zip). Unlike every other biome's ground, these tiles are real hand-drawn
+# art rather than generated speckle - see make_tileset_tiles below.
+CLOUD_ZIP = os.path.join(ASSETS, "pixel-fantasy-above-the-clouds-1.0.zip")
+CAVE_ZIP = os.path.join(ASSETS, "pixel-fantasy-crystal-cave-1.0.zip")
+CLOUD_RAW = os.path.join(ASSETS, "pixel-fantasy-cloud-raw")
+CAVE_RAW = os.path.join(ASSETS, "pixel-fantasy-cave-raw")
+
 
 def ensure_extracted():
     """The two source packs ship as a .rar and a .zip (both already
@@ -40,6 +49,10 @@ def ensure_extracted():
             ["unzip", "-o", "-q", os.path.join(ASSETS, "Humble Gift - v1.3.zip"), "-d", HG_RAW],
             check=True
         )
+    for zip_path, raw_dir in ((CLOUD_ZIP, CLOUD_RAW), (CAVE_ZIP, CAVE_RAW)):
+        if not os.path.isdir(raw_dir):
+            os.makedirs(raw_dir)
+            subprocess.run(["unzip", "-o", "-q", zip_path, "-d", raw_dir], check=True)
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +157,66 @@ BIOME_TILES = {
 }
 
 
+# Ground/path pairs cut out of the two Pixel Fantasy tilesets instead of
+# generated. Each entry names a source tileset and a 16x16 pixel offset to
+# lift as the repeating unit, which then gets tiled up to TILE_SIZE.
+#
+# Those offsets were picked by measurement, not by eye: a scan compared
+# every candidate cell's wraparound edge difference (what a tiling seam
+# would look like) against its own internal adjacent-pixel difference (the
+# texture's natural busyness). Every offset below scored a ratio well under
+# 1.0 - the seam is quieter than the noise already in the texture - so
+# these tile without a visible line despite not being authored as tiles.
+# The ratio for each is noted so a future re-pick has a baseline.
+# A second measurement mattered as much as the seam: how *homogeneous* a
+# candidate is. The first picks tiled without a seam but repeated an
+# obvious motif every 16px, which reads as wallpaper. The offsets below
+# were re-picked scoring wraparound difference and colour spread together,
+# so there is no strong feature to repeat.
+#
+# The path tiles deliberately come from the packs' alternate colorways
+# rather than a different part of the same sheet: the variants are the same
+# art in a different palette, so a path reads as a real trail cut through
+# the ground it sits on instead of an unrelated material dropped next to
+# it. The cave's own grey rock was tried first and rejected - it is high
+# contrast with hard magenta outlines and stayed visibly repetitive at
+# every offset.
+TILESET_TILES = {
+    'cloud': {
+        # A path of solid cloud through open sky.
+        'ground': (CLOUD_RAW, 'tileset_cloudworld.png', (44, 16)),
+        'path': (CLOUD_RAW, 'tileset_cloudworld.png', (104, 22)),
+    },
+    'crystal': {
+        # Purple cave floor with an amber trail worn through it - same
+        # floor texture, the pack's colorway 3.
+        'ground': (CAVE_RAW, 'tileset_crystal_cave.png', (12, 16)),
+        'path': (CAVE_RAW, 'tileset_crystal_cave_3.png', (12, 16)),
+    },
+}
+
+
+def make_tileset_tile(raw_dir, sheet_name, offset, size=None):
+    size = size or TILE_SIZE
+    src = Image.open(os.path.join(raw_dir, sheet_name)).convert('RGBA')
+    x, y = offset
+    unit = src.crop((x, y, x + 16, y + 16))
+    out = Image.new('RGBA', (size, size))
+    for ty in range(0, size, 16):
+        for tx in range(0, size, 16):
+            out.paste(unit, (tx, ty))
+    return out.convert('RGB')
+
+
+def make_tileset_biome_tiles():
+    out = {}
+    for biome, cfg in TILESET_TILES.items():
+        for kind in ('ground', 'path'):
+            raw_dir, sheet_name, offset = cfg[kind]
+            out[f'{biome}-{kind}'] = make_tileset_tile(raw_dir, sheet_name, offset)
+    return out
+
+
 def make_biome_tiles():
     out = {}
     for biome, cfg in BIOME_TILES.items():
@@ -222,6 +295,28 @@ GROUND_ACCENTS = {
         (0x1a, 0x15, 0x13, 255), 4, 3, 5, 6,
     ], [
         (0xe0, 0x56, 0x2f, 220), 2, 1, 2, 3,
+    ]),
+    # Cloud/crystal accents are tuned against the two tileset-sourced
+    # grounds above rather than a generated one - wisps of brighter cloud
+    # against the blue sky, and glinting crystal shards against the purple
+    # cave floor (magenta, matching the crystals in the source tileset).
+    'cloud-accent-1': ([
+        (0xff, 0xff, 0xff, 200), 5, 2, 5, 7,
+    ], [
+        (0xc8, 0xdc, 0xff, 180), 3, 2, 3, 5,
+    ]),
+    'cloud-accent-2': ([
+        (0xe8, 0xf0, 0xff, 160), 7, 3, 6, 6,
+    ],),
+    'crystal-accent-1': ([
+        (0xe0, 0x3c, 0xe0, 255), 3, 2, 4, 6,
+    ], [
+        (0xff, 0x9c, 0xff, 255), 3, 1, 2, 4,
+    ]),
+    'crystal-accent-2': ([
+        (0x6b, 0x3a, 0x6b, 255), 5, 2, 5, 7,
+    ], [
+        (0xe0, 0x3c, 0xe0, 200), 2, 1, 2, 3,
     ]),
 }
 
@@ -433,6 +528,10 @@ def main():
     for name, img in make_biome_tiles().items():
         img.save(os.path.join(OUT_TILES, f'{name}.png'))
     print('wrote biome tiles:', ', '.join(f'{b}-{k}' for b in BIOME_TILES for k in ('ground', 'path')))
+
+    for name, img in make_tileset_biome_tiles().items():
+        img.save(os.path.join(OUT_TILES, f'{name}.png'))
+    print('wrote tileset biome tiles:', ', '.join(f'{b}-{k}' for b in TILESET_TILES for k in ('ground', 'path')))
 
     accent_dir = os.path.join(OUT_TILES, 'accents')
     os.makedirs(accent_dir, exist_ok=True)

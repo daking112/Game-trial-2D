@@ -81,6 +81,12 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('tile-desert-path', 'assets/tiles/desert-path.png');
     this.load.image('tile-volcanic-ground', 'assets/tiles/volcanic-ground.png');
     this.load.image('tile-volcanic-path', 'assets/tiles/volcanic-path.png');
+    // These two biomes' tiles are cut from real tilesets rather than
+    // generated - see gen_assets.py TILESET_TILES.
+    this.load.image('tile-cloud-ground', 'assets/tiles/cloud-ground.png');
+    this.load.image('tile-cloud-path', 'assets/tiles/cloud-path.png');
+    this.load.image('tile-crystal-ground', 'assets/tiles/crystal-ground.png');
+    this.load.image('tile-crystal-path', 'assets/tiles/crystal-path.png');
     // Sparse per-biome ground decals (flowers/pebbles/embers/sparkle) - see
     // data/biomes.js's groundAccents and gen_assets.py's GROUND_ACCENTS.
     this.load.image('grass-accent-1', 'assets/tiles/accents/grass-accent-1.png');
@@ -91,6 +97,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('desert-accent-2', 'assets/tiles/accents/desert-accent-2.png');
     this.load.image('volcanic-accent-1', 'assets/tiles/accents/volcanic-accent-1.png');
     this.load.image('volcanic-accent-2', 'assets/tiles/accents/volcanic-accent-2.png');
+    this.load.image('cloud-accent-1', 'assets/tiles/accents/cloud-accent-1.png');
+    this.load.image('cloud-accent-2', 'assets/tiles/accents/cloud-accent-2.png');
+    this.load.image('crystal-accent-1', 'assets/tiles/accents/crystal-accent-1.png');
+    this.load.image('crystal-accent-2', 'assets/tiles/accents/crystal-accent-2.png');
 
     // UI buttons/panels: stitched from the "Custom Border and Panels" pack's
     // green frame design into flattened textures at the exact sizes this

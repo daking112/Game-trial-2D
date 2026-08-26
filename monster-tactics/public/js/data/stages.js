@@ -233,6 +233,53 @@ const STAGES = [
       { col: 6, row: 5 }, { col: 6, row: 8 }, { col: 2, row: 8 },
       { col: 2, row: 10 }, { col: 0, row: 10 }
     ]
+  },
+
+  // -- Cloud / Crystal (tileset-art biomes, see data/biomes.js) --
+  // Same generator as the block above, one simpler and one maze-like per
+  // biome.
+  {
+    id: 'skybridge',
+    name: 'Skybridge',
+    biome: 'cloud',
+    pathCells: [
+      { col: 25, row: 0 }, { col: 14, row: 0 }, { col: 14, row: 15 },
+      { col: 0, row: 15 }
+    ]
+  },
+  {
+    id: 'stormreach-spiral',
+    name: 'Stormreach Spiral',
+    biome: 'cloud',
+    pathCells: [
+      { col: 25, row: 2 }, { col: 22, row: 2 }, { col: 22, row: 14 },
+      { col: 20, row: 14 }, { col: 20, row: 3 }, { col: 15, row: 3 },
+      { col: 15, row: 6 }, { col: 12, row: 6 }, { col: 12, row: 10 },
+      { col: 10, row: 10 }, { col: 10, row: 0 }, { col: 7, row: 0 },
+      { col: 7, row: 15 }, { col: 5, row: 15 }, { col: 5, row: 2 },
+      { col: 0, row: 2 }
+    ]
+  },
+  {
+    id: 'geode-hollow',
+    name: 'Geode Hollow',
+    biome: 'crystal',
+    pathCells: [
+      { col: 27, row: 10 }, { col: 15, row: 10 }, { col: 15, row: 15 },
+      { col: 11, row: 15 }, { col: 11, row: 8 }, { col: 7, row: 8 },
+      { col: 7, row: 0 }, { col: 0, row: 0 }
+    ]
+  },
+  {
+    id: 'prism-descent',
+    name: 'Prism Descent',
+    biome: 'crystal',
+    pathCells: [
+      { col: 25, row: 4 }, { col: 22, row: 4 }, { col: 22, row: 11 },
+      { col: 18, row: 11 }, { col: 18, row: 15 }, { col: 14, row: 15 },
+      { col: 14, row: 3 }, { col: 9, row: 3 }, { col: 9, row: 9 },
+      { col: 4, row: 9 }, { col: 4, row: 0 }, { col: 0, row: 0 }
+    ]
   }
 ];
 

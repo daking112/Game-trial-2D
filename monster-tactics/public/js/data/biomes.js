@@ -45,6 +45,27 @@ const BIOMES = {
     pathFleckColors: [0xe0562f, 0xffc46b, 0x5c473a],
     decorTint: 0xb85a3a,
     groundAccents: ['volcanic-accent-1', 'volcanic-accent-2']
+  },
+  // The two biomes below are the only ones whose ground/path art is real
+  // hand-drawn tileset material rather than generated speckle (see
+  // gen_assets.py's TILESET_TILES) - everything else about them works the
+  // same way.
+  cloud: {
+    groundKey: 'tile-cloud-ground',
+    pathKey: 'tile-cloud-path',
+    pathFleckColors: [0xffffff, 0xdbe6ff, 0xaebde8],
+    // Washes the shared trees/rocks pale and cold so they read as cloud
+    // formations flanking the path rather than land plants floating in
+    // open sky.
+    decorTint: 0xa8bce0,
+    groundAccents: ['cloud-accent-1', 'cloud-accent-2']
+  },
+  crystal: {
+    groundKey: 'tile-crystal-ground',
+    pathKey: 'tile-crystal-path',
+    pathFleckColors: [0xc98a2e, 0x8a5f1e, 0xe0b154],
+    decorTint: 0x9c5aa8,
+    groundAccents: ['crystal-accent-1', 'crystal-accent-2']
   }
 };
 
