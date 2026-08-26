@@ -252,6 +252,25 @@ type (fire runs warm orange-red, water cyan, electric a contrasting indigo
 against its own yellow fur, and so on) so the eyes read as varied as the
 pack's rather than uniform across the whole custom roster.
 
+A third pass answered a sharper complaint: next to the pack, the custom
+monsters still read as faces rather than small creatures. A silhouette
+dump of Puffle/Molecap/Ogglord's actual alpha and color channels (not a
+guess) showed why: the pack doesn't build a separate head and body, it's
+one compact blob per monster - the "creature" feeling comes from 4-5
+scattered color tones inside that blob rather than a flat fill, plus (on
+Ogglord specifically) a solid arm-colored patch running down each side
+that breaks the blob into "body with limbs" instead of one undifferen-
+tiated shape. `render_grid` now reproduces both automatically: the body
+color gets a fixed 4x4 Bayer-dithered light/dark fleck scattered across it
+(textured material instead of flat fill) on top of the existing rim-light,
+and the palette's second-most-common color - already present in every
+line as its shade/leg tone - takes over the outer 1-2 pixels of the body
+color's own lower third on both sides, standing in as a visible limb
+stripe. Both are silhouette-preserving (no grid edits, still zero risk to
+the 135 hand-drawn shapes) and derived the same way as the rim-light: from
+whichever characters are already most common in a given grid, so a
+rebuilt `towers.png` applies it everywhere at once.
+
 Between the pack's 54 (18 lines x 3 stages) and the hand-authored 45 (15
 lines x 3 stages), `towers.png` now holds **99 monsters** across 33
 complete three-stage evolution lines.

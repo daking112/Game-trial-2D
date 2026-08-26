@@ -712,19 +712,47 @@ def _lighten(color, factor=1.3):
     return (min(255, int(r * factor)), min(255, int(g * factor)), min(255, int(b * factor)), a)
 
 
+def _darken(color, factor=0.8):
+    r, g, b, a = color
+    return (int(r * factor), int(g * factor), int(b * factor), a)
+
+
+# 4x4 ordered-dither matrix (classic Bayer pattern) - used to scatter a
+# second and third tone across the main fill in a fixed, repeatable
+# pattern rather than picking pixels at random, so it reads as intentional
+# texture/material shading instead of noise.
+_BAYER4 = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+]
+
+
 def render_grid(rows, palette, size=16):
     """One 16x16 RGBA frame from a list of row strings.
 
-    The pack's own sprites aren't flat-filled - they carry a rim-light band
-    along the top of the silhouette on top of the low dark shade every
-    custom line already draws by hand, which is what gives them their
-    faceted, slightly worn look next to a single flat fill. Rather than
-    hand-picking a highlight color per grid (135 of them across every
-    line/stage/facing), this derives it automatically: whichever non-
-    outline/eye character covers the most pixels in a given grid is that
-    frame's main body color, and its first (topmost) pixel in each column
-    is lightened - a 1px rim-light that tracks the silhouette's own top
-    edge, however that grid is shaped, with no per-monster tuning needed.
+    A real alpha/color dump of the pack's own frames (Puffle, Molecap,
+    Ogglord) showed two things the first style pass missed. First, their
+    fill isn't two flat bands (light top, dark bottom) - it's 4-5 distinct
+    tones scattered across the *whole* silhouette with overlapping
+    y-ranges, patchy material texture rather than geometry; a single
+    rim-light row still reads as "a flat-colored face" next to that.
+    Second, and the bigger tell: Ogglord carries a solid arm-colored patch
+    down each side of its lower silhouette, breaking the outline into
+    "head+body with limbs" instead of one undifferentiated blob - which is
+    what actually reads as a small creature instead of a floating face, not
+    the shading detail alone.
+
+    Both apply automatically, still with no per-monster tuning: whichever
+    character covers the most pixels is the body color, and (1) its
+    topmost pixel per column is lightened (rim-light) while the rest is
+    dithered in a fixed 4x4 Bayer pattern between a light and a dark fleck
+    for texture, and (2) whichever OTHER character is second-most-common
+    (every line already has one - the shade/leg color used at the bottom)
+    takes over the outer 1-2 pixels of the body color's own lower third on
+    both sides, standing in as a visible arm/limb stripe down the
+    silhouette's flanks. Eyes (W/P) and outline (K) are never touched.
     """
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     assert len(rows) <= size, f'too many rows: {len(rows)}'
@@ -734,19 +762,46 @@ def render_grid(rows, palette, size=16):
         for ch in row:
             if ch not in ('.', 'K', 'W', 'P'):
                 counts[ch] = counts.get(ch, 0) + 1
-    dominant = max(counts, key=counts.get) if counts else None
-    highlight = _lighten(palette[dominant]) if dominant else None
+    ranked = sorted(counts, key=counts.get, reverse=True)
+    dominant = ranked[0] if ranked else None
+    limb = ranked[1] if len(ranked) > 1 else None
+
+    dom_rows = [y for y, row in enumerate(rows) for ch in row if ch == dominant] if dominant else []
+    if dom_rows:
+        y_top, y_bot = min(dom_rows), max(dom_rows)
+        limb_band = range(y_top + round((y_bot - y_top) * 0.6), y_bot + 1)
+    else:
+        limb_band = range(0)
+
+    base_color = palette[dominant] if dominant else None
+    highlight = _lighten(base_color) if dominant else None
+    fleck_light = _lighten(base_color, 1.15) if dominant else None
+    fleck_dark = _darken(base_color, 0.72) if dominant else None
+    limb_color = palette[limb] if limb else None
     lit_columns = set()
 
     for y, row in enumerate(rows):
         assert len(row) <= size, f'row {y} too long ({len(row)}): {row!r}'
+        dom_xs = [x for x, ch in enumerate(row) if ch == dominant]
+        limb_xs = set()
+        if limb_color is not None and y in limb_band and len(dom_xs) >= 5:
+            limb_xs = {dom_xs[0], dom_xs[1], dom_xs[-1], dom_xs[-2]}
         for x, ch in enumerate(row):
             if ch == '.':
                 continue
             color = palette[ch]
-            if ch == dominant and x not in lit_columns:
-                color = highlight
-                lit_columns.add(x)
+            if ch == dominant:
+                if x in limb_xs:
+                    color = limb_color
+                elif x not in lit_columns:
+                    color = highlight
+                    lit_columns.add(x)
+                else:
+                    b = _BAYER4[y % 4][x % 4]
+                    if b < 3:
+                        color = fleck_dark
+                    elif b >= 14:
+                        color = fleck_light
             img.putpixel((x, y), color)
     return img
 
