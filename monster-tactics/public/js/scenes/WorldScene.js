@@ -65,6 +65,7 @@ class WorldScene extends Phaser.Scene {
       ['playerLeft', (msg) => this.onPlayerLeft(msg.id)],
       ['playerMoved', (msg) => this.onPlayerMoved(msg)],
       ['plotClaimed', (msg) => this.onPlotClaimed(msg)],
+      ['plotStageUpdated', (msg) => this.onPlotStageUpdated(msg)],
       ['plotLayoutUpdated', (msg) => this.onPlotLayoutUpdated(msg)],
       ['plotWaveUpdated', (msg) => this.onPlotWaveUpdated(msg)],
       ['worldWaveTick', (msg) => this.onWorldWaveTick(msg)],
@@ -166,6 +167,7 @@ class WorldScene extends Phaser.Scene {
       panel.layout = p.layout;
       panel.wave = p.wave;
       panel.raidedUntil = p.raidedUntil || 0;
+      panel.stageId = p.stageId || null;
       if (p.ownerId === NetClient.clientId) this.myPlotId = p.id;
       this.refreshPlotPanel(panel);
     });
@@ -286,7 +288,8 @@ class WorldScene extends Phaser.Scene {
     const panel = {
       id: p.id, x: p.x, y: p.y,
       ownerId: p.ownerId, ownerName: p.ownerName,
-      layout: p.layout || [], wave: p.wave || 0, raidedUntil: p.raidedUntil || 0
+      layout: p.layout || [], wave: p.wave || 0, raidedUntil: p.raidedUntil || 0,
+      stageId: p.stageId || null
     };
     // A soft offset shadow (see UiKit.makeButton's identical trick) plus a
     // rounded, gradient-filled border redrawn per-state in refreshPlotPanel
@@ -300,6 +303,11 @@ class WorldScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '18px', color: '#e8ecf5', fontStyle: 'bold'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
     panel.previewGfx = this.add.graphics();
+    // Which map this base is built on, so a plot's identity is readable
+    // from outside it and not just once you walk in - see plotStage.
+    panel.mapLabel = this.add.text(p.x, p.y - PLOT_H / 2 + 40, '', {
+      fontFamily: 'monospace', fontSize: '13px', color: '#9aa4b8'
+    }).setOrigin(0.5).setStroke('#1c2530', 3);
     panel.hint = this.add.text(p.x, p.y + PLOT_H / 2 - 20, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#9aa4b8'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
@@ -309,14 +317,24 @@ class WorldScene extends Phaser.Scene {
     this.refreshPlotPanel(panel);
   }
 
+  // Every plot's stage, clamped to one that actually exists. The server
+  // deliberately doesn't validate stage ids against the real pool (see its
+  // sanitizeStageId note), and an older plot claimed before per-plot maps
+  // existed has none at all, so both cases fall back to the default stage.
+  plotStage(panel) {
+    return getStage(panel.stageId) || getStage(FIRST_STAGE_ID);
+  }
+
   refreshPlotPanel(panel) {
     const mine = panel.ownerId === NetClient.clientId;
     const unclaimed = panel.ownerId == null;
+    const stage = this.plotStage(panel);
     panel.title.setText(
       unclaimed ? `Plot ${panel.id + 1} - unclaimed` :
       mine ? `Plot ${panel.id + 1} - YOUR BASE (wave ${panel.wave || 1})` :
       `Plot ${panel.id + 1} - ${panel.ownerName}'s base (wave ${panel.wave || 1})`
     );
+    panel.mapLabel.setText(unclaimed ? '' : stage.name);
     const accent = mine ? 0x4caf50 : (unclaimed ? 0x394258 : 0xe0562f);
     const left = panel.x - PLOT_W / 2, top = panel.y - PLOT_H / 2;
     panel.border.clear();
@@ -327,17 +345,42 @@ class WorldScene extends Phaser.Scene {
     panel.border.fillRoundedRect(left, top, PLOT_W, PLOT_H, 16);
     panel.border.lineStyle(3, accent, 1);
     panel.border.strokeRoundedRect(left, top, PLOT_W, PLOT_H, 16);
-    panel.hint.setText(unclaimed ? 'Walk in and press E to claim it' : (mine ? 'Walk in, press E to enter' : ''));
+    panel.hint.setText(unclaimed ? 'Walk in and press E to claim it' : (mine ? 'Walk in - E to enter, M to change map' : ''));
     this.drawPlotPreview(panel);
   }
 
   drawPlotPreview(panel) {
     panel.previewGfx.clear();
-    if (!panel.layout || panel.layout.length === 0) return;
     const cellW = (PLOT_W - 40) / GRID_COLS;
     const cellH = (PLOT_H - 70) / GRID_ROWS;
     const originX = panel.x - PLOT_W / 2 + 20;
     const originY = panel.y - PLOT_H / 2 + 44;
+
+    // A claimed plot draws its own map underneath the towers: the stage's
+    // real path, in its own biome's colors. That's the whole point of
+    // per-plot maps - from outside, one player's base should be visibly a
+    // different place from the next, not an identical dark card. Drawn
+    // from the same pathCells the battle grid walks, so the shape here
+    // matches what you'd actually play.
+    if (panel.ownerId != null) {
+      const stage = this.plotStage(panel);
+      const biome = getBiome(stage.biome);
+      panel.previewGfx.fillStyle(biome.previewColor, 0.5);
+      panel.previewGfx.fillRect(originX, originY, cellW * GRID_COLS, cellH * GRID_ROWS);
+      panel.previewGfx.fillStyle(biome.pathFleckColors[0], 0.85);
+      const wp = stage.pathCells;
+      for (let i = 0; i < wp.length - 1; i++) {
+        const a = wp[i], b = wp[i + 1];
+        const c0 = Math.min(a.col, b.col), c1 = Math.max(a.col, b.col);
+        const r0 = Math.min(a.row, b.row), r1 = Math.max(a.row, b.row);
+        panel.previewGfx.fillRect(
+          originX + c0 * cellW, originY + r0 * cellH,
+          (c1 - c0 + 1) * cellW, (r1 - r0 + 1) * cellH
+        );
+      }
+    }
+
+    if (!panel.layout || panel.layout.length === 0) return;
     const now = Date.now();
     panel.layout.forEach(cell => {
       // Layout cells carry real species/level (see BattleScene.reportPlotLayout)
@@ -361,7 +404,19 @@ class WorldScene extends Phaser.Scene {
     if (!panel) return;
     panel.ownerId = msg.ownerId;
     panel.ownerName = msg.ownerName;
+    panel.stageId = msg.stageId || null;
     if (msg.ownerId === NetClient.clientId) this.myPlotId = msg.plotId;
+    this.refreshPlotPanel(panel);
+  }
+
+  // The owner switched their base's map. The server clears the layout with
+  // it (towers placed for the old path would be stranded on the new one),
+  // so take both from the message rather than keeping stale cells around.
+  onPlotStageUpdated(msg) {
+    const panel = this.plots.get(msg.plotId);
+    if (!panel) return;
+    panel.stageId = msg.stageId;
+    panel.layout = msg.layout || [];
     this.refreshPlotPanel(panel);
   }
 
@@ -545,7 +600,7 @@ class WorldScene extends Phaser.Scene {
     this.worldWaveText = this.add.text(20, 18, '', {
       fontFamily: 'monospace', fontSize: '20px', color: '#f5c94b'
     }).setScrollFactor(0);
-    this.add.text(20, 44, `You are ${NetClient.name} - WASD/arrows to walk, E to claim/enter, SPACE to hit the boss, R to raid`, {
+    this.add.text(20, 44, `You are ${NetClient.name} - WASD/arrows to walk, E to claim/enter, M to change your map, SPACE to hit the boss, R to raid`, {
       fontFamily: 'monospace', fontSize: '15px', color: '#9aa4b8'
     }).setScrollFactor(0);
 
@@ -630,6 +685,7 @@ class WorldScene extends Phaser.Scene {
     this.enterKey = this.input.keyboard.addKey('E');
     this.attackKey = this.input.keyboard.addKey('SPACE');
     this.raidKey = this.input.keyboard.addKey('R');
+    this.mapKey = this.input.keyboard.addKey('M');
   }
 
   updateWorldWaveHud() {
@@ -711,7 +767,12 @@ class WorldScene extends Phaser.Scene {
   claimPlot(panel) {
     if (this.claimInFlight) return;
     this.claimInFlight = true;
-    NetClient.send('claimPlot', { plotId: panel.id });
+    // A freshly claimed plot gets a random map rather than everyone
+    // starting on the same one - the point of per-plot maps is that the
+    // world looks varied without every player having to go set it.
+    // pickStageChoices already does a distinct random draw over the pool.
+    const stage = pickStageChoices(1)[0] || getStage(FIRST_STAGE_ID);
+    NetClient.send('claimPlot', { plotId: panel.id, stageId: stage.id });
     this.time.delayedCall(500, () => { this.claimInFlight = false; });
   }
 
@@ -719,12 +780,84 @@ class WorldScene extends Phaser.Scene {
     if (gameState.team.length === 0) return;
     gameState.multiplayerPlotId = panel.id;
     gameState.resetRun();
-    gameState.startStage(FIRST_STAGE_ID);
+    // The plot's own map, not a hardcoded default - this is what makes one
+    // player's base actually play differently from another's.
+    gameState.startStage(this.plotStage(panel).id);
     this.scene.start('BattleScene');
+  }
+
+  // ---------- map picker ----------
+
+  // Lets the owner re-roll which map their base sits on. Deliberately a
+  // separate key from E rather than a menu layered on entering: E is the
+  // hot path a player hits constantly, and burying "enter my base" behind
+  // a menu to make room for a rarely-used setting is the wrong trade.
+  openMapPicker(panel) {
+    if (this.mapPicker) return;
+    const { width, height } = this.scale;
+    const current = this.plotStage(panel);
+
+    const blocker = this.add.rectangle(width / 2, height / 2, width, height, 0x0b0d12, 0.93)
+      .setScrollFactor(0).setDepth(200).setInteractive();
+    const title = this.add.text(width / 2, 70, 'CHOOSE YOUR BASE MAP', {
+      fontFamily: 'monospace', fontSize: '30px', color: '#f5f7fa', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201).setStroke('#1c2530', 5);
+    const warning = this.add.text(width / 2, 108,
+      `Currently ${current.name}. Changing the map clears the towers you've placed here.`, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(201).setStroke('#1c2530', 4);
+
+    const parts = [blocker, title, warning];
+    const cols = 5, cardW = 320, cardH = 92;
+    const startX = width / 2 - ((cols - 1) * cardW) / 2;
+    const startY = 190;
+    STAGES.forEach((stage, i) => {
+      const x = startX + (i % cols) * cardW;
+      const y = startY + Math.floor(i / cols) * cardH;
+      const isCurrent = stage.id === current.id;
+      const biome = getBiome(stage.biome);
+      const card = this.add.rectangle(x, y, cardW - 16, cardH - 14, biome.previewColor, isCurrent ? 1 : 0.8)
+        .setStrokeStyle(3, isCurrent ? 0x4caf50 : 0x394258)
+        .setScrollFactor(0).setDepth(201).setInteractive({ useHandCursor: true });
+      const label = this.add.text(x, y - 10, stage.name, {
+        fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(202).setStroke('#1c2530', 4);
+      const sub = this.add.text(x, y + 14, `${stage.biome || 'grass'}${isCurrent ? '  (current)' : ''}`, {
+        fontFamily: 'monospace', fontSize: '13px', color: '#dfe6f2'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(202).setStroke('#1c2530', 3);
+      card.on('pointerdown', () => {
+        if (!isCurrent) NetClient.send('plotStage', { plotId: panel.id, stageId: stage.id });
+        this.closeMapPicker();
+      });
+      parts.push(card, label, sub);
+    });
+
+    const close = UiKit.makeButton(this, width / 2, height - 60, 'Cancel', () => this.closeMapPicker());
+    close.container.setScrollFactor(0).setDepth(201);
+    close.container.list.forEach(c => c.setDepth(201));
+    parts.push(close.container);
+
+    this.mapPicker = parts;
+  }
+
+  closeMapPicker() {
+    if (!this.mapPicker) return;
+    this.mapPicker.forEach(o => o.destroy());
+    this.mapPicker = null;
   }
 
   update(time, delta) {
     if (!this.ready) return;
+
+    // While the map picker is open it owns the input: walking around or
+    // pressing E behind a full-screen modal is exactly the click-through
+    // bug the daily-login modal already had to fix once.
+    if (this.mapPicker) {
+      this.interpolateOtherPlayers(delta);
+      this.updateWorldWaveHud();
+      return;
+    }
+
     this.handleMovement(delta);
     this.interpolateOtherPlayers(delta);
     this.checkPlotProximity();
@@ -734,6 +867,7 @@ class WorldScene extends Phaser.Scene {
       if (this.nearOwnPlot) this.enterPlot(this.nearOwnPlot);
       else if (this.nearUnclaimedPlot) this.claimPlot(this.nearUnclaimedPlot);
     }
+    if (Phaser.Input.Keyboard.JustDown(this.mapKey) && this.nearOwnPlot) this.openMapPicker(this.nearOwnPlot);
     if (Phaser.Input.Keyboard.JustDown(this.raidKey) && this.nearRaidablePlot) this.startRaid(this.nearRaidablePlot);
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) this.attemptBossAttack();
   }

@@ -10,6 +10,11 @@
 // original tile-grass/tile-path texture keys rather than new ones - several
 // menu-like scenes already reference those directly as their own tiled
 // background, so renaming would touch far more than just BattleScene.
+// previewColor: a single flat color standing in for this biome's ground
+// where a real tiled texture would be overkill - WorldScene's plot preview
+// cards, which are tiny. Each is the dominant color of that biome's actual
+// ground tile so a plot reads as the same place from outside and inside.
+//
 // groundAccents: sparse decorative decals (see gen_assets.py's
 // ACCENT_SIZE/GROUND_ACCENTS) that BattleScene.drawGroundAccents scatters
 // across open (non-path) ground cells - flowers/pebbles/embers etc, purely
@@ -17,6 +22,7 @@
 const BIOMES = {
   grass: {
     groundKey: 'tile-grass',
+    previewColor: 0x43703d,
     pathKey: 'tile-path',
     pathFleckColors: [0x6b4f34, 0xa9865c, 0x5a4028],
     decorTint: null,
@@ -24,6 +30,7 @@ const BIOMES = {
   },
   snow: {
     groundKey: 'tile-snow-ground',
+    previewColor: 0xd8e8f0,
     pathKey: 'tile-snow-path',
     pathFleckColors: [0xe8f4f8, 0xb7d0de, 0xffffff],
     // Phaser tint is multiplicative (result = original x tint / 255), so a
@@ -34,6 +41,7 @@ const BIOMES = {
   },
   desert: {
     groundKey: 'tile-desert-ground',
+    previewColor: 0xdcc07a,
     pathKey: 'tile-desert-path',
     pathFleckColors: [0xa8874c, 0x8f703d, 0xe0c98e],
     decorTint: 0xc9a860,
@@ -41,6 +49,7 @@ const BIOMES = {
   },
   volcanic: {
     groundKey: 'tile-volcanic-ground',
+    previewColor: 0x2b2320,
     pathKey: 'tile-volcanic-path',
     pathFleckColors: [0xe0562f, 0xffc46b, 0x5c473a],
     decorTint: 0xb85a3a,
@@ -52,6 +61,7 @@ const BIOMES = {
   // same way.
   cloud: {
     groundKey: 'tile-cloud-ground',
+    previewColor: 0x7482cf,
     pathKey: 'tile-cloud-path',
     pathFleckColors: [0xffffff, 0xdbe6ff, 0xaebde8],
     // Washes the shared trees/rocks pale and cold so they read as cloud
@@ -62,6 +72,7 @@ const BIOMES = {
   },
   crystal: {
     groundKey: 'tile-crystal-ground',
+    previewColor: 0x4b2e4b,
     pathKey: 'tile-crystal-path',
     pathFleckColors: [0xc98a2e, 0x8a5f1e, 0xe0b154],
     decorTint: 0x9c5aa8,

@@ -85,7 +85,8 @@ the loop, or how anyone revisits it to actually manage their roster:
 4. **Hub** - clearing a stage's 3rd wave drops you here instead of straight
    into the next stage: a small bonus to lives, a choice between 2 of the
    remaining stage layouts (a single-player stand-in for "vote on the next
-   map" - real voting needs a second player, which this project doesn't
+   map" for single-player runs - real voting needs a second player, which
+   this project doesn't
    have), quick links back into the Sanctuary/Team Select to spend essence
    or adjust your team, and a 20-second auto-advance countdown with a
    Ready button to skip it. Clearing the 5th stage instead sends you to a
@@ -225,6 +226,51 @@ the roster screen renders every one distinctly, a live wave with three
 placed towers scored a real kill, an ally's facing was observed flipping
 from `down` to `side` mid-combat, and the gacha reveal tween lands at
 exactly its previous 112px size on the animated path.
+
+## Per-player maps in the shared world
+
+Every claimed plot in the Multiplayer World used to hand off into the same
+hardcoded first stage, and the server's plot record had no notion of a map
+at all - so every base played identically and, from the outside, looked
+like an identical dark card with a few colored tower dots on it.
+
+Plots now carry a `stageId`:
+
+- **Claiming** a plot draws a random stage from the pool rather than
+  defaulting everyone to the same one - the world should look varied
+  without every player having to go and set it.
+- **Entering** your plot loads *that plot's* map, which is what actually
+  makes one player's base play differently from another's.
+- **Pressing M** while standing in your own plot opens a picker of all 23
+  stages, each card tinted by its biome. Changing the map clears the
+  towers on that plot, which the picker warns about up front - towers
+  placed for the old path would otherwise be stranded on cells the new
+  path runs straight through. It's a separate key from E rather than a
+  menu layered onto entering: E is the hot path a player hits constantly,
+  and burying "enter my base" behind a menu to make room for a
+  rarely-used setting is the wrong trade. While the picker is open it
+  owns input entirely, so walking and E can't fire behind it - the same
+  click-through bug the daily-login modal already had to fix once.
+- **Plot previews** now draw the stage's real path, from the same
+  `pathCells` the battle grid walks, over that biome's color, with the
+  map's name under the plot title. That's the visible payoff: from across
+  the world, one player's base is a purple crystal cave with an amber
+  trail and their neighbour's is a green valley.
+
+The server deliberately does **not** validate stage ids against the real
+pool. The stage list lives in the client's `data/stages.js`, and
+duplicating it server-side would just invite the two to drift; it bounds
+the id to a plausible shape instead and the client clamps whatever
+arrives to a stage that actually exists (`WorldScene.plotStage`) - the
+same "trust the client, sanity-check the shape" posture the rest of the
+plot data already takes. That clamp also covers plots claimed before
+per-plot maps existed, which have no `stageId` at all.
+
+Verified with two real browser clients: each claimed a plot, they were
+assigned different maps, both clients agreed on both plots' maps, one
+client switched its map through the picker and the change propagated to
+the other, and entering the plot loaded that plot's stage (`prism-descent`
+on the `crystal` biome) rather than the old hardcoded default.
 
 ## Player avatars
 

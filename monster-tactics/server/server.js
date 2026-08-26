@@ -112,7 +112,7 @@ function plotPosition(index) {
 }
 
 const plots = Array.from({ length: PLOT_COUNT }, (_, i) => ({
-  id: i, ownerId: null, ownerName: null, layout: [], wave: 0, ...plotPosition(i)
+  id: i, ownerId: null, ownerName: null, layout: [], wave: 0, stageId: null, ...plotPosition(i)
 }));
 
 const players = new Map(); // id -> { id, name, x, y, ws }
@@ -279,8 +279,20 @@ function publicPlayer(p) {
   return { id: p.id, name: p.name, x: p.x, y: p.y, avatar: p.avatar };
 }
 
+// The stage id a plot is built on. Deliberately NOT validated against a
+// list of real stages here: the stage pool lives in the client's
+// data/stages.js and duplicating it server-side would just invite the two
+// to drift. This bounds it to a plausible id instead, and the client
+// clamps whatever arrives to a stage that actually exists before using it
+// (see WorldScene.plotStageId) - the same "trust the client, sanity-check
+// the shape" posture the rest of the plot data already takes.
+function sanitizeStageId(value) {
+  if (typeof value !== 'string') return null;
+  return /^[a-z0-9-]{1,64}$/.test(value) ? value : null;
+}
+
 function publicPlot(p) {
-  return { id: p.id, ownerId: p.ownerId, ownerName: p.ownerName, layout: p.layout, wave: p.wave, x: p.x, y: p.y, raidedUntil: p.raidedUntil || 0 };
+  return { id: p.id, ownerId: p.ownerId, ownerName: p.ownerName, layout: p.layout, wave: p.wave, x: p.x, y: p.y, raidedUntil: p.raidedUntil || 0, stageId: p.stageId || null };
 }
 
 function snapshotFor(playerId, name, clientId) {
@@ -405,7 +417,28 @@ wss.on('connection', (ws, request) => {
         if (plot && !plot.ownerId) {
           plot.ownerId = clientId;
           plot.ownerName = player.name;
-          broadcast({ type: 'plotClaimed', plotId: plot.id, ownerId: clientId, ownerName: player.name });
+          plot.stageId = sanitizeStageId(msg.stageId);
+          broadcast({
+            type: 'plotClaimed', plotId: plot.id, ownerId: clientId,
+            ownerName: player.name, stageId: plot.stageId
+          });
+        }
+        break;
+      }
+
+      // Which map the owner has built their base on. Broadcast so every
+      // other client can draw this plot's preview in its real biome rather
+      // than everyone's base looking identical from the outside.
+      case 'plotStage': {
+        const plot = plots[msg.plotId];
+        const stageId = sanitizeStageId(msg.stageId);
+        if (plot && plot.ownerId === clientId && stageId) {
+          plot.stageId = stageId;
+          // Changing the map replaces the base built on the old one -
+          // keeping the towers would leave them sitting on cells the new
+          // path may run straight through.
+          plot.layout = [];
+          broadcast({ type: 'plotStageUpdated', plotId: plot.id, stageId, layout: plot.layout });
         }
         break;
       }
