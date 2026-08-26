@@ -81,7 +81,7 @@ class RaidScene extends Phaser.Scene {
       const species = getSpecies(cell.speciesId);
       if (!species) return;
       const x = defenderStartX + i * 140, y = 200;
-      this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.6);
+      UiKit.speciesSprite(this, x, y, species, 90);
       this.add.text(x, y + 50, `${species.name} Lv.${cell.level}`, {
         fontFamily: 'monospace', fontSize: '14px', color: '#e8ecf5'
       }).setOrigin(0.5).setStroke('#1c2530', 3);
@@ -118,7 +118,7 @@ class RaidScene extends Phaser.Scene {
     this.add.image(x + 5, y + 7, 'panel-card-roster').setTint(0x000000).setAlpha(0.3).setScale(0.86);
     const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true }).setScale(0.86);
     const ring = this.add.rectangle(x, y, 183, 157, 0xffffff, 0).setStrokeStyle(4, 0xe0562f).setVisible(false);
-    const sprite = this.add.sprite(x, y - 42, species.sheetKey, species.frame).setScale(1.1);
+    const sprite = UiKit.speciesSprite(this, x, y - 42, species, 62);
     const name = this.add.text(x, y, `${species.name} Lv.${entry.level}`, {
       fontFamily: 'monospace', fontSize: '13px', color: '#f5f7fa'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
@@ -205,7 +205,7 @@ class RaidScene extends Phaser.Scene {
   buildCombatant(speciesId, level, side, x, y, col, row) {
     const species = getSpecies(speciesId);
     const effective = getEffectiveStats(species, level);
-    const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(2.2);
+    const sprite = UiKit.speciesSprite(this, x, y, species, 123);
     const nameText = this.add.text(x, y - 70, `${species.name} Lv.${level}`, {
       fontFamily: 'monospace', fontSize: '15px', color: '#f5f7fa'
     }).setOrigin(0.5).setStroke('#1c2530', 3);

@@ -52,6 +52,15 @@ class PreloadScene extends Phaser.Scene {
       frameHeight: 32
     });
 
+    // Animated player-species (tower) sprites - see data/monsters.js
+    // (TOWER_SHEET) and scripts/gen_towers.py. Same block shape as the
+    // enemy sheets above: one monster per 3-col x 3-row block, 3 frames x
+    // 3 facings (down/up/side, in that row order).
+    this.load.spritesheet(TOWER_SHEET, 'assets/towers/towers.png', {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+
     // Hand-authored seamless ground tiles (see scripts note in README.md -
     // procedurally generated, not sourced from any asset pack).
     this.load.image('tile-grass', 'assets/tiles/grass.png');
@@ -176,6 +185,26 @@ class PreloadScene extends Phaser.Scene {
           key: enemyAnimKey(es.sheetKey, es.enemyIndex, dir),
           frames: this.anims.generateFrameNumbers(es.sheetKey, { start, end: start + 1 }),
           frameRate: 6,
+          repeat: -1
+        });
+      });
+    });
+
+    // 3 facings per player species, 3 frames each (see TOWER_DIRECTIONS).
+    // Built off SPECIES/EVOLVED_SPECIES themselves - same reasoning as the
+    // enemy anims above - and skipping any species without a towerIndex,
+    // which renders as a static frame instead (see UiKit.speciesSprite).
+    // Deliberately slower than the enemies' walk cycle: a tower is standing
+    // still on the grid, so this reads as an idle breath rather than a
+    // march in place.
+    [...SPECIES, ...EVOLVED_SPECIES].forEach(sp => {
+      if (sp.towerIndex == null) return;
+      TOWER_DIRECTIONS.forEach((dir, d) => {
+        const start = (sp.towerIndex * 3 + d) * 3;
+        this.anims.create({
+          key: towerAnimKey(sp.towerIndex, dir),
+          frames: this.anims.generateFrameNumbers(TOWER_SHEET, { start, end: start + 2 }),
+          frameRate: 4,
           repeat: -1
         });
       });

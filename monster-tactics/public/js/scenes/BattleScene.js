@@ -397,7 +397,7 @@ class BattleScene extends Phaser.Scene {
       const x = startX + i * spacing;
       const bg = this.add.image(x, y, 'bench-slot').setDisplaySize(78, 78).setTint(rarity.color).setScrollFactor(0);
       const selectionRing = this.add.rectangle(x, y, 84, 84, 0xffffff, 0).setStrokeStyle(3, 0xf5c94b).setVisible(false).setScrollFactor(0);
-      const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.35).setScrollFactor(0);
+      const sprite = UiKit.speciesSprite(this, x, y, species, 76).setScrollFactor(0);
       const { icon: costIcon, text: costText } = UiKit.iconLabel(this, x, y + 48, 'icon-coin', `${species.cost}`, {
         fontFamily: 'monospace', fontSize: '16px', color: '#f5c94b', stroke: '#1c2530', strokeThickness: 3
       }, 18);
@@ -526,7 +526,7 @@ class BattleScene extends Phaser.Scene {
     const species = getSpecies(entry.speciesId);
     const effective = getEffectiveStats(species, entry.level);
     const { x, y } = this.cellToPixel(col, row);
-    const sprite = this.add.sprite(x, y, species.sheetKey, species.frame).setScale(1.5).setInteractive({ useHandCursor: true });
+    const sprite = UiKit.speciesSprite(this, x, y, species, 84).setInteractive({ useHandCursor: true });
     const rangeCircle = this.add.circle(x, y, species.range * CELL, TYPE_COLORS[species.type], 0.05)
       .setStrokeStyle(1, TYPE_COLORS[species.type], 0.25).setDepth(-5);
 
@@ -540,6 +540,10 @@ class BattleScene extends Phaser.Scene {
       speciesId: entry.speciesId, species, level: entry.level, col, row,
       attack: effective.attack, hp: effective.maxHp, maxHp: effective.maxHp,
       nextAttackTime: 0, nextAbilityTime: 0, ultimateCharge: 0, buffs: [], sprite, rangeCircle,
+      // Matches the idle facing UiKit.speciesSprite starts on, so
+      // faceAllyToward's "already facing this way" check is correct on the
+      // very first shot instead of always re-playing the anim once.
+      facing: 'down', spriteFlipped: false,
       hpBg: this.add.rectangle(x, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x1c202a),
       hpFill: this.add.rectangle(x - HP_BAR_W / 2, y + HP_BAR_Y_OFFSET, HP_BAR_W, HP_BAR_H, 0x4caf50).setOrigin(0, 0.5),
       ultBarBg: hasUltimate ? this.add.rectangle(x, y + ULT_BAR_Y_OFFSET, ULT_BAR_W, ULT_BAR_H, 0x1c202a) : null,
@@ -791,6 +795,7 @@ class BattleScene extends Phaser.Scene {
           if (d <= rangePx && enemy.progress > bestProgress) { bestProgress = enemy.progress; target = enemy; }
         }
         if (target) {
+          this.faceAllyToward(ally, target.x - center.x, target.y - center.y);
           this.dealDamage(target, ally.attack);
           Sfx.hit();
           this.playHitSpark(target.x, target.y, TYPE_COLORS[ally.species.type]);
@@ -869,6 +874,22 @@ class BattleScene extends Phaser.Scene {
     enemy.hpBg.destroy();
     enemy.hpFill.destroy();
     if (enemy.nameLabel) enemy.nameLabel.destroy();
+  }
+
+  // Turns a placed tower to face whatever it's shooting. The tower sheet
+  // only carries down/up/side facings (see TOWER_DIRECTIONS), so a left
+  // target is the side art flipped horizontally rather than its own row.
+  // No-ops for a species with no towerIndex, which has no anims at all and
+  // renders as a single static frame (see UiKit.speciesSprite).
+  faceAllyToward(ally, dx, dy) {
+    if (ally.species.towerIndex == null) return;
+    const dir = Math.abs(dx) > Math.abs(dy) ? 'side' : (dy > 0 ? 'down' : 'up');
+    const flip = dir === 'side' && dx < 0;
+    if (dir === ally.facing && flip === ally.spriteFlipped) return;
+    ally.facing = dir;
+    ally.spriteFlipped = flip;
+    ally.sprite.setFlipX(flip);
+    ally.sprite.play(towerAnimKey(ally.species.towerIndex, dir));
   }
 
   playHitSpark(x, y, tint, scale) {

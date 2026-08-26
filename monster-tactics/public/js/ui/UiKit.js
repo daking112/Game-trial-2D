@@ -88,5 +88,31 @@ const UiKit = {
     const icon = scene.add.image(x - halfWidth + iconSize / 2, y, iconKey)
       .setOrigin(0.5).setDisplaySize(iconSize, iconSize);
     return { icon, text };
+  },
+
+  // The one place a player-species sprite gets built, so every screen that
+  // shows a monster (battle bench + placed towers, roster, gacha reveal,
+  // raid squads) animates it the same way instead of each re-deciding.
+  //
+  // Species carrying a towerIndex use the animated tower sheet and start on
+  // their idle (facing-down) loop; anything without one falls back to the
+  // old static `frame` off whichever sheetKey it names (see the Retromon
+  // note in data/monsters.js) - so a species added later without new art
+  // still renders, just unanimated.
+  //
+  // displayPx sizes by final on-screen pixels rather than a raw scale
+  // multiplier, because the two paths have very different native frame
+  // sizes (16px animated vs 56px static) and a shared scale number would
+  // render them at wildly different sizes on the same screen.
+  speciesSprite(scene, x, y, species, displayPx) {
+    if (species.towerIndex != null) {
+      const sprite = scene.add.sprite(x, y, TOWER_SHEET);
+      sprite.play(towerAnimKey(species.towerIndex, 'down'));
+      sprite.setDisplaySize(displayPx, displayPx);
+      return sprite;
+    }
+    const sprite = scene.add.sprite(x, y, species.sheetKey, species.frame);
+    sprite.setDisplaySize(displayPx, displayPx);
+    return sprite;
   }
 };

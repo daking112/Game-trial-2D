@@ -133,13 +133,19 @@ class SanctuaryScene extends Phaser.Scene {
     const result = gameState.addToRoster(species.id);
 
     if (this.resultSprite) this.resultSprite.destroy();
-    this.resultSprite = this.add.sprite(this.scale.width / 2, this.eggY, species.sheetKey, species.frame).setScale(0);
+    this.resultSprite = UiKit.speciesSprite(this, this.scale.width / 2, this.eggY, species, 112);
+    // speciesSprite sizes by final pixels, but the reveal pops the sprite
+    // in by tweening `scale` - so capture the scale that sizing produced
+    // and tween up to exactly that, rather than a hardcoded multiplier
+    // that would mean different sizes for the animated vs static path.
+    const revealScale = this.resultSprite.scaleX;
+    this.resultSprite.setScale(0);
     this.eggSprite.setVisible(false);
     this.eggLabel.setVisible(false);
 
     this.tweens.add({
       targets: this.resultSprite,
-      scale: 2.0,
+      scale: revealScale,
       duration: 300,
       ease: 'Back.Out',
       onComplete: () => {

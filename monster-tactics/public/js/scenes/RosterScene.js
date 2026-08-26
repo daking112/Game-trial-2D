@@ -80,7 +80,7 @@ class RosterScene extends Phaser.Scene {
     const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true });
     const rarityDot = this.add.circle(x - 87, y - 72, 9, rarity.color).setStrokeStyle(2, 0x1c2530);
     const selectionRing = this.add.rectangle(x, y, 213, 183, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);
-    const sprite = this.add.sprite(x, y - 60, species.sheetKey, species.frame).setScale(1.4);
+    const sprite = UiKit.speciesSprite(this, x, y - 60, species, 78);
     const name = this.add.text(x, y - 15, `${species.name}  Lv.${entry.level}`, {
       fontFamily: 'monospace', fontSize: '17px', color: '#f5f7fa'
     }).setOrigin(0.5).setStroke('#1c2530', 4);

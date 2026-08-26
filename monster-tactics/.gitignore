@@ -1,8 +1,10 @@
 # Scratch extraction of the .rar/.zip source packs in public/assets/ -
-# regenerated on demand by scripts/gen_assets.py, not meant to be committed.
+# regenerated on demand by the scripts/gen_*.py that read them, not meant
+# to be committed.
 public/assets/border-panels-raw/
 public/assets/humble-gift-raw/
 public/assets/mini-dungeon-monsters-raw/
+public/assets/monster-evolution-raw/
 
 node_modules/
 __pycache__/
