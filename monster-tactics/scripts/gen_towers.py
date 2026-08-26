@@ -8,8 +8,15 @@
 #
 # Idempotent: re-running overwrites public/assets/towers/towers.png in place.
 import os
+import sys
 import zipfile
 from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from custom_tower_art import CUSTOM_MONSTERS, render_monster  # noqa: E402
+from custom_tower_art2 import CUSTOM_MONSTERS2  # noqa: E402
+
+ALL_CUSTOM_MONSTERS = CUSTOM_MONSTERS + CUSTOM_MONSTERS2
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ASSETS = os.path.join(REPO, "monster-tactics/public/assets")
@@ -30,47 +37,44 @@ BLOCK = 3          # a monster block is 3 cells wide and 3 cells tall
 LINES_ACROSS = 3
 BANDS_DOWN = 6
 
-# This game has exactly 18 base species each with exactly one evolved form
-# (SPECIES / EVOLVED_SPECIES / EVOLUTION_MAP in data/monsters.js), and the
-# pack has exactly 18 evolution lines - so each pair gets its own line and
-# evolving a monster now visibly evolves its art instead of swapping to an
+# The pack ships 18 three-stage evolution lines and this game's species are
+# organised into matching three-stage chains (SPECIES / EVOLVED_SPECIES /
+# EVOLUTION_MAP in data/monsters.js), so a line's stage 1/2/3 art maps
+# straight onto a chain's base/mid/final form and evolving a monster
+# visibly grows the same creature up rather than swapping it for an
 # unrelated sprite. Lines were matched to species by type and character
 # from a rendered contact sheet of all 18 (a tusked pig line for the
-# hornlet -> Tuskram pair, a one-eyed floating line for geodrone ->
-# Geodronarch, a pink blob for puffle -> Pufflord, and so on).
+# hornlet -> Hornbrute -> Tuskram chain, a one-eyed floating line for
+# geodrone -> Geosentry -> Geodronarch, a pink blob for the Puffle chain,
+# and so on).
 #
-# The base species takes the line's stage 1 and the evolved form takes
-# stage 3 (its final form) rather than stage 2: this game has a single
-# evolution step, so it should land on the pack's biggest visual payoff.
-# Stage 2 of every line is deliberately left unused and is what a future
-# mid-tier evolution would draw from.
-#
-# (line_index, base_species_id, evolved_species_id)
+# (line_index, [stage1_id, stage2_id, stage3_id]) - every line runs the
+# game's full three-stage chain, so all three of the pack's stages are used.
 LINE_ASSIGNMENTS = [
-    (0,  'molecap',   'molecrusher_evo'),   # dark armored brute - EARTH epic
-    (1,  'icewhelp',  'icewyrm_evo'),       # pale/icy winged - WATER rare
-    (2,  'calfrage',  'bisonlord_evo'),     # magenta horned - NORMAL rare
-    (3,  'snoutling', 'snoutzar_evo'),      # brown snouted beast - EARTH common
-    (4,  'ogglord',   'oggmonarch_evo'),    # plant/tree titan - GRASS legendary
-    (5,  'rollpup',   'rollodon_evo'),      # green rolling shell - GRASS common
-    (6,  'puffle',    'pufflord_evo'),      # pink blob - NORMAL rare
-    (7,  'pincer',    'pincerlord_evo'),    # grey stone/claw - EARTH rare
-    (8,  'hornlet',   'tuskram_evo'),       # tusked pig - EARTH common
-    (9,  'shellcrab', 'shellclaw_evo'),     # teal crystal shell - WATER common
-    (10, 'frostmaw',  'glacimaw_evo'),      # dark teal crystal maw - WATER legendary
-    (11, 'grubcoil',  'grubcoilus_evo'),    # green striped grub - GRASS rare
-    (12, 'snarlpup',  'ragefang_evo'),      # red spotted - FIRE common
-    (13, 'tigrub',    'tigrubex_evo'),      # red/orange flame beast - FIRE epic
-    (14, 'goldwasp',  'thundasp_evo'),      # gold/yellow flyer - ELECTRIC legendary
-    (15, 'geodrone',  'geodronarch_evo'),   # one-eyed floating drone - NORMAL epic
-    (16, 'boltbee',   'boltswarm_evo'),     # blue/yellow flyer - ELECTRIC common
-    (17, 'tidewisp',  'tidewraith_evo'),    # blue water blob - WATER rare
+    (0,  ['molecap',   'molebore_mid',    'molecrusher_evo']),   # dark armored brute - EARTH
+    (1,  ['icewhelp',  'icefang_mid',     'icewyrm_evo']),       # pale/icy winged - WATER
+    (2,  ['calfrage',  'bisonrage_mid',   'bisonlord_evo']),     # magenta horned - NORMAL
+    (3,  ['snoutling', 'snoutbrute_mid',  'snoutzar_evo']),      # brown snouted beast - EARTH
+    (4,  ['ogglord',   'oggtitan_mid',    'oggmonarch_evo']),    # plant/tree titan - GRASS
+    (5,  ['rollpup',   'tumblehide_mid',  'rollodon_evo']),      # green rolling shell - GRASS
+    (6,  ['puffle',    'pufflump_mid',    'pufflord_evo']),      # pink blob - NORMAL
+    (7,  ['pincer',    'pincerclaw_mid',  'pincerlord_evo']),    # grey stone/claw - EARTH
+    (8,  ['hornlet',   'hornbrute_mid',   'tuskram_evo']),       # tusked pig - EARTH
+    (9,  ['shellcrab', 'shellguard_mid',  'shellclaw_evo']),     # teal crystal shell - WATER
+    (10, ['frostmaw',  'frostfang_mid',   'glacimaw_evo']),      # dark teal crystal maw - WATER
+    (11, ['grubcoil',  'coilworm_mid',    'grubcoilus_evo']),    # green striped grub - GRASS
+    (12, ['snarlpup',  'snarlfang_mid',   'ragefang_evo']),      # red spotted - FIRE
+    (13, ['tigrub',    'tigrunt_mid',     'tigrubex_evo']),      # red/orange flame beast - FIRE
+    (14, ['goldwasp',  'goldstinger_mid', 'thundasp_evo']),      # gold/yellow flyer - ELECTRIC
+    (15, ['geodrone',  'geosentry_mid',   'geodronarch_evo']),   # one-eyed floating drone - NORMAL
+    (16, ['boltbee',   'boltdrone_mid',   'boltswarm_evo']),     # blue/yellow flyer - ELECTRIC
+    (17, ['tidewisp',  'tidespirit_mid',  'tidewraith_evo']),    # blue water blob - WATER
 ]
 
-BASE_STAGE = 0      # stage 1 of the line
-EVOLVED_STAGE = 2   # stage 3 - see the note above on skipping stage 2
-
 DIRECTIONS = ['down', 'up', 'side']
+# Row order inside a block, shared by the pack's art and the hand-authored
+# art so both halves of the sheet read identically from Phaser.
+CUSTOM_FACING_ORDER = DIRECTIONS
 
 
 def ensure_extracted():
@@ -99,11 +103,12 @@ def main():
     # the same way from Phaser: one monster per 3-col x 3-row block stacked
     # vertically, monster m / direction d / frame f at row (m*3 + d), col f.
     picks = []
-    for line_index, base_id, evolved_id in LINE_ASSIGNMENTS:
-        picks.append((base_id, line_index, BASE_STAGE))
-        picks.append((evolved_id, line_index, EVOLVED_STAGE))
+    for line_index, stage_ids in LINE_ASSIGNMENTS:
+        for stage, species_id in enumerate(stage_ids):
+            picks.append((species_id, line_index, stage))
 
-    out = Image.new('RGBA', (BLOCK * SRC_CELL, len(picks) * BLOCK * SRC_CELL), (0, 0, 0, 0))
+    total = len(picks) + len(ALL_CUSTOM_MONSTERS)
+    out = Image.new('RGBA', (BLOCK * SRC_CELL, total * BLOCK * SRC_CELL), (0, 0, 0, 0))
     index = {}
     for m, (species_id, line_index, stage) in enumerate(picks):
         col0, row0 = block_origin(line_index, stage)
@@ -115,8 +120,20 @@ def main():
                 out.paste(frame, (f * SRC_CELL, (m * BLOCK + d) * SRC_CELL))
         index[species_id] = m
 
+    # Hand-authored species appended after the pack's blocks, in the same
+    # block shape, so nothing downstream has to care which sheet a monster
+    # originally came from - see scripts/custom_tower_art.py.
+    for offset, (species_id, art_key, facings) in enumerate(ALL_CUSTOM_MONSTERS):
+        m = len(picks) + offset
+        frames = render_monster(art_key, facings)
+        for d, facing in enumerate(CUSTOM_FACING_ORDER):
+            for f, frame in enumerate(frames[facing]):
+                out.paste(frame, (f * SRC_CELL, (m * BLOCK + d) * SRC_CELL))
+        index[species_id] = m
+
     out.save(os.path.join(OUT_DIR, 'towers.png'))
-    print(f'wrote towers.png ({out.width}x{out.height}, {len(picks)} monsters)')
+    print(f'wrote towers.png ({out.width}x{out.height}, {total} monsters: '
+          f'{len(picks)} from the pack + {len(ALL_CUSTOM_MONSTERS)} hand-authored)')
     print()
     print('data/monsters.js towerIndex values:')
     for species_id, m in index.items():

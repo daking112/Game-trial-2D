@@ -186,20 +186,48 @@ frames and the 3 rows are facings (front/down, back/up, side), with three
 blocks side by side making one 3-stage evolution line. That gives 18 lines
 x 3 stages = 54 monsters.
 
-The useful coincidence: this game has exactly **18 base species, each with
-exactly one evolved form** (`SPECIES`/`EVOLVED_SPECIES`/`EVOLUTION_MAP`),
-and the pack has exactly **18 evolution lines**. So `scripts/gen_towers.py`
-gives every base/evolved pair its own line - evolving a monster now
-visibly evolves its art instead of swapping to an unrelated sprite, which
-is what evolution looked like before (evolved forms reused *enemy* frames).
-Lines were matched to species by type and character from a rendered
-contact sheet of all 18: a tusked-pig line for Hornlet -> Tuskram, a
-one-eyed floating line for Geodrone -> Geodronarch, a pink blob for Puffle
--> Pufflord, and so on. The base takes the line's stage 1 and the evolved
-form takes **stage 3** rather than stage 2 - this game has a single
-evolution step, so it should land on the pack's biggest visual payoff;
-stage 2 of every line is deliberately unused and is what a future mid-tier
-would draw from.
+The useful coincidence: this game originally had exactly **18 base
+species, each with exactly one evolved form**
+(`SPECIES`/`EVOLVED_SPECIES`/`EVOLUTION_MAP`), and the pack has exactly
+**18 evolution lines**. So `scripts/gen_towers.py` gave every base/evolved
+pair its own line - evolving a monster visibly evolves its art instead of
+swapping to an unrelated sprite, which is what evolution looked like
+before (evolved forms reused *enemy* frames). Lines were matched to
+species by type and character from a rendered contact sheet of all 18: a
+tusked-pig line for Hornlet -> Tuskram, a one-eyed floating line for
+Geodrone -> Geodronarch, a pink blob for Puffle -> Pufflord, and so on.
+
+Every species now evolves **twice**, base -> mid -> final, and the pack's
+stage 2 art (previously unused, since the game only had one evolution
+step) now renders as that mid-tier form - no new pack art was needed to
+add a middle stage, only new `EVOLVED_SPECIES`/`EVOLUTION_MAP` data, since
+`GameState.canEvolve`/`evolveMonster` and `RosterScene`'s evolve button
+were already generic single-hop lookups with no hardcoded chain length.
+
+On top of the pack's 18 lines, **9 more evolution lines (27 species) are
+hand-authored pixel art** (`scripts/custom_tower_art.py`,
+`custom_tower_art2.py`), built to fill out type/rarity combinations the
+pack alone left thin or empty (see `RARITY`/`TYPE_COLORS` in
+`data/monsters.js`) and to grow the catchable roster generally, not to
+replace anything from the original pack. Each grid is an explicit
+16x16 character-indexed pixel array (`.` = transparent, everything else a
+per-monster palette key) rather than a generated image - the same
+code-as-art pattern `gen_assets.py`/`gen_enemies.py`/`gen_avatars.py`
+already used elsewhere in this repo. The style was matched to the pack by
+measurement, not by eye: an alpha-dump of real pack frames (Rollpup,
+Puffle) showed bodies only ~9-13px wide inside a generous transparent
+margin, with readability at 16px carried almost entirely by oversized 2px
+eyes - a first draft that filled the whole cell with 1px eyes read as a
+noisy blob next to the real art, and was redrawn to match those
+proportions. Each hand-authored line's 3 stages get visibly larger
+silhouettes and more ornamentation stage to stage (spikes, wings, crowns),
+mirroring the pack's own escalation. Frame 1 of each monster's 3-frame
+loop is the drawn grid shifted 1px down (an idle bob at the tower's 4fps
+idle rate); frames 0 and 2 are the grid as-drawn.
+
+Between the pack's 54 (18 lines x 3 stages) and the hand-authored 27 (9
+lines x 3 stages), `towers.png` now holds **81 monsters** across 27
+complete three-stage evolution lines.
 
 `UiKit.speciesSprite` is now the single place a player-species sprite gets
 built, so all six screens that show a monster (battle bench + placed
@@ -220,12 +248,14 @@ its own row. The idle loop deliberately runs slower than the enemies' walk
 cycle (4fps vs 6): a tower is standing still, so it should read as an idle
 breath, not a march in place.
 
-Verified in a real browser: all 36 species/evolved forms resolve to a real
-texture with all 3 facing anims registered (no gaps, 36 unique indices),
-the roster screen renders every one distinctly, a live wave with three
-placed towers scored a real kill, an ally's facing was observed flipping
-from `down` to `side` mid-combat, and the gacha reveal tween lands at
-exactly its previous 112px size on the animated path.
+Verified in a real browser: all 81 species/evolved forms resolve to a real
+texture with all 3 facing anims registered (no gaps, 81 unique indices),
+the roster screen renders every one distinctly, evolving a base species
+twice (base -> mid -> final) walks the whole chain and lands on the
+intended final id, a live wave with placed towers from the new hand-drawn
+species scored a real kill, an ally's facing was observed flipping from
+`down` to `side` mid-combat, and the gacha reveal tween lands at exactly
+its previous 112px size on the animated path.
 
 ## Per-player maps in the shared world
 
