@@ -204,12 +204,22 @@ add a middle stage, only new `EVOLVED_SPECIES`/`EVOLUTION_MAP` data, since
 `GameState.canEvolve`/`evolveMonster` and `RosterScene`'s evolve button
 were already generic single-hop lookups with no hardcoded chain length.
 
-On top of the pack's 18 lines, **9 more evolution lines (27 species) are
+On top of the pack's 18 lines, **15 more evolution lines (45 species) are
 hand-authored pixel art** (`scripts/custom_tower_art.py`,
-`custom_tower_art2.py`), built to fill out type/rarity combinations the
-pack alone left thin or empty (see `RARITY`/`TYPE_COLORS` in
-`data/monsters.js`) and to grow the catchable roster generally, not to
-replace anything from the original pack. Each grid is an explicit
+`custom_tower_art2.py`, `custom_tower_art3.py`), built to fill out
+type/rarity combinations the pack alone left thin or empty (see
+`RARITY`/`TYPE_COLORS` in `data/monsters.js`) and to grow the catchable
+roster generally, not to replace anything from the original pack. The
+first two batches (9 lines) each closed cells that were completely empty;
+by the third batch every cell already had at least one catchable species,
+so that batch instead doubles up the thinnest remaining cell of each type
+(one more line each at FIRE/COMMON, WATER/COMMON, GRASS/RARE,
+ELECTRIC/COMMON, EARTH/RARE, NORMAL/EPIC) and reaches for silhouettes none
+of the earlier lines use - a legless coiled salamander, a teardrop tadpole,
+a flower sprite with a petal crown, a round-eared mouse with a zigzag bolt
+tail, a square-jawed rock pup, and a legless ghost with a wavy hem instead
+of feet - so the roster keeps growing in shape, not just in count. Each
+grid is an explicit
 16x16 character-indexed pixel array (`.` = transparent, everything else a
 per-monster palette key) rather than a generated image - the same
 code-as-art pattern `gen_assets.py`/`gen_enemies.py`/`gen_avatars.py`
@@ -225,8 +235,8 @@ mirroring the pack's own escalation. Frame 1 of each monster's 3-frame
 loop is the drawn grid shifted 1px down (an idle bob at the tower's 4fps
 idle rate); frames 0 and 2 are the grid as-drawn.
 
-Between the pack's 54 (18 lines x 3 stages) and the hand-authored 27 (9
-lines x 3 stages), `towers.png` now holds **81 monsters** across 27
+Between the pack's 54 (18 lines x 3 stages) and the hand-authored 45 (15
+lines x 3 stages), `towers.png` now holds **99 monsters** across 33
 complete three-stage evolution lines.
 
 `UiKit.speciesSprite` is now the single place a player-species sprite gets
@@ -248,14 +258,15 @@ its own row. The idle loop deliberately runs slower than the enemies' walk
 cycle (4fps vs 6): a tower is standing still, so it should read as an idle
 breath, not a march in place.
 
-Verified in a real browser: all 81 species/evolved forms resolve to a real
-texture with all 3 facing anims registered (no gaps, 81 unique indices),
+Verified in a real browser: all 99 species/evolved forms resolve to a real
+texture with all 3 facing anims registered (no gaps, 99 unique indices),
 the roster screen renders every one distinctly, evolving a base species
 twice (base -> mid -> final) walks the whole chain and lands on the
-intended final id, a live wave with placed towers from the new hand-drawn
-species scored a real kill, an ally's facing was observed flipping from
-`down` to `side` mid-combat, and the gacha reveal tween lands at exactly
-its previous 112px size on the animated path.
+intended final id for all 33 lines, every gacha-pool species is reachable
+from the standard banner, a live wave with placed towers from the newest
+hand-drawn species scored a real kill, an ally's facing was observed
+flipping from `down` to `side` mid-combat, and the gacha reveal tween lands
+at exactly its previous 112px size on the animated path.
 
 ## Per-player maps in the shared world
 

@@ -15,8 +15,9 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from custom_tower_art import CUSTOM_MONSTERS, render_monster  # noqa: E402
 from custom_tower_art2 import CUSTOM_MONSTERS2  # noqa: E402
+from custom_tower_art3 import CUSTOM_MONSTERS3  # noqa: E402
 
-ALL_CUSTOM_MONSTERS = CUSTOM_MONSTERS + CUSTOM_MONSTERS2
+ALL_CUSTOM_MONSTERS = CUSTOM_MONSTERS + CUSTOM_MONSTERS2 + CUSTOM_MONSTERS3
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ASSETS = os.path.join(REPO, "monster-tactics/public/assets")

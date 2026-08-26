@@ -134,7 +134,20 @@ const SPECIES = [
   { id: 'pebblet', name: 'Pebblet', type: 'EARTH', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 69, maxHp: 68, attack: 16, range: 3.6, attackIntervalMs: 720, cost: 80 },
   { id: 'pyrelet', name: 'Pyrelet', type: 'FIRE', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 72, maxHp: 60, attack: 23, range: 3.6, attackIntervalMs: 540, cost: 80 },
   { id: 'chimeling', name: 'Chimeling', type: 'NORMAL', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 75, maxHp: 62, attack: 19, range: 3.8, attackIntervalMs: 680, cost: 80 },
-  { id: 'sparkmote', name: 'Sparkmote', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 78, maxHp: 40, attack: 15, range: 2.8, attackIntervalMs: 560, cost: 55 }
+  { id: 'sparkmote', name: 'Sparkmote', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 78, maxHp: 40, attack: 15, range: 2.8, attackIntervalMs: 560, cost: 55 },
+
+  // -- Species on hand-authored art (see scripts/custom_tower_art3.py) --
+  // Batch 3: by now every type/rarity cell already had a catchable species,
+  // so this batch instead rounds out the thinnest remaining cell of each
+  // type (one more at FIRE/COMMON, WATER/COMMON, GRASS/RARE,
+  // ELECTRIC/COMMON, EARTH/RARE, NORMAL/EPIC) so every type has real pull
+  // variety at more than one rarity rather than a single guaranteed catch.
+  { id: 'emberadder', name: 'Emberadder', type: 'FIRE', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 81, maxHp: 22, attack: 9, range: 1.7, attackIntervalMs: 660, cost: 20 },
+  { id: 'tadpip', name: 'Tadpip', type: 'WATER', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 84, maxHp: 20, attack: 6, range: 1.7, attackIntervalMs: 780, cost: 20 },
+  { id: 'petaline', name: 'Petaline', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 87, maxHp: 26, attack: 8, range: 2.3, attackIntervalMs: 720, cost: 35 },
+  { id: 'voltmouse', name: 'Voltmouse', type: 'ELECTRIC', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 90, maxHp: 18, attack: 8, range: 1.6, attackIntervalMs: 620, cost: 20 },
+  { id: 'stonepup', name: 'Stonepup', type: 'EARTH', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 93, maxHp: 34, attack: 7, range: 2.2, attackIntervalMs: 820, cost: 35 },
+  { id: 'wisplet', name: 'Wisplet', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 96, maxHp: 48, attack: 13, range: 2.7, attackIntervalMs: 760, cost: 55 }
 ];
 
 // Granted to a brand-new player (empty roster) so there's something to place
@@ -237,7 +250,22 @@ const EVOLVED_SPECIES = [
   { id: 'bisonrage_mid', name: 'Bisonrage', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 7, maxHp: 51, attack: 11, range: 2.4, attackIntervalMs: 790, cost: 63 },
   { id: 'bisonlord_evo', name: 'Bisonlord', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 8, maxHp: 66, attack: 15, range: 2.6, attackIntervalMs: 780, cost: 90 },
   { id: 'tidespirit_mid', name: 'Tidespirit', type: 'WATER', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 52, maxHp: 37, attack: 13, range: 2.5, attackIntervalMs: 690, cost: 63 },
-  { id: 'tidewraith_evo', name: 'Tidewraith', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 53, maxHp: 50, attack: 18, range: 2.8, attackIntervalMs: 680, cost: 90 }
+  { id: 'tidewraith_evo', name: 'Tidewraith', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 53, maxHp: 50, attack: 18, range: 2.8, attackIntervalMs: 680, cost: 90 },
+
+  // Evolved forms of the hand-authored species above (batch 3, see
+  // custom_tower_art3.py) - same 3-stage pairing rule as every other line.
+  { id: 'cinderviper_mid', name: 'Cinderviper', type: 'FIRE', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 82, maxHp: 34, attack: 14, range: 2.2, attackIntervalMs: 610, cost: 40 },
+  { id: 'infernasp_evo', name: 'Infernasp', type: 'FIRE', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 83, maxHp: 46, attack: 19, range: 2.6, attackIntervalMs: 560, cost: 60 },
+  { id: 'ripplefin_mid', name: 'Ripplefin', type: 'WATER', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 85, maxHp: 31, attack: 9, range: 2.2, attackIntervalMs: 730, cost: 40 },
+  { id: 'tsunarine_evo', name: 'Tsunarine', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 86, maxHp: 42, attack: 12, range: 2.6, attackIntervalMs: 680, cost: 60 },
+  { id: 'petalguard_mid', name: 'Petalguard', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 88, maxHp: 36, attack: 12, range: 2.6, attackIntervalMs: 660, cost: 62 },
+  { id: 'bloomqueen_evo', name: 'Bloomqueen', type: 'GRASS', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 89, maxHp: 46, attack: 15, range: 3.0, attackIntervalMs: 600, cost: 90 },
+  { id: 'amperat_mid', name: 'Amperat', type: 'ELECTRIC', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 91, maxHp: 28, attack: 12, range: 2.0, attackIntervalMs: 570, cost: 40 },
+  { id: 'galvatail_evo', name: 'Galvatail', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 92, maxHp: 38, attack: 16, range: 2.4, attackIntervalMs: 520, cost: 60 },
+  { id: 'boulderhound_mid', name: 'Boulderhound', type: 'EARTH', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 94, maxHp: 48, attack: 11, range: 2.5, attackIntervalMs: 770, cost: 62 },
+  { id: 'granitewolf_evo', name: 'Granitewolf', type: 'EARTH', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 95, maxHp: 62, attack: 15, range: 2.8, attackIntervalMs: 720, cost: 90 },
+  { id: 'phantorb_mid', name: 'Phantorb', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 97, maxHp: 68, attack: 18, range: 3.0, attackIntervalMs: 700, cost: 92 },
+  { id: 'spectralord_evo', name: 'Spectralord', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 98, maxHp: 88, attack: 24, range: 3.4, attackIntervalMs: 640, cost: 130 }
 ];
 
 // speciesId -> speciesId it evolves into. Only species listed here (as a
@@ -274,7 +302,13 @@ const EVOLUTION_MAP = {
   pebblet: 'cragfist_mid', cragfist_mid: 'terralith_evo',
   pyrelet: 'blazeplume_mid', blazeplume_mid: 'solaris_evo',
   chimeling: 'tollward_mid', tollward_mid: 'carillon_evo',
-  sparkmote: 'arcnode_mid', arcnode_mid: 'tesladon_evo'
+  sparkmote: 'arcnode_mid', arcnode_mid: 'tesladon_evo',
+  emberadder: 'cinderviper_mid', cinderviper_mid: 'infernasp_evo',
+  tadpip: 'ripplefin_mid', ripplefin_mid: 'tsunarine_evo',
+  petaline: 'petalguard_mid', petalguard_mid: 'bloomqueen_evo',
+  voltmouse: 'amperat_mid', amperat_mid: 'galvatail_evo',
+  stonepup: 'boulderhound_mid', boulderhound_mid: 'granitewolf_evo',
+  wisplet: 'phantorb_mid', phantorb_mid: 'spectralord_evo'
 };
 
 // Monster Essence needed (on top of being at MAX_MONSTER_LEVEL) to evolve.
