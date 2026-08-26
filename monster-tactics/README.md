@@ -233,8 +233,16 @@ reverse-engineered straight from the piskel source
 `src/js/utils/serialization/{Serializer,Deserializer}.js` and
 `src/js/utils/FrameUtils.js#createFramesFromChunk`), not guessed from PNG
 export settings, so there's no ambiguity about frame order or spacing.
+
+`scripts/export_piskel.py` is the inverse: it packages generated frames
+(PIL images, built as pixel grids in code) into a real `.piskel` file
+using the same format, so hand-authored art stays openable and
+hand-tweakable in the actual Piskel app instead of only existing as a flat
+PNG. Round-trip verified pixel-exact (export -> import -> compare).
+
 Not yet wired into `gen_towers.py`'s output or `data/monsters.js` - no
-hand-drawn species exist yet, this is just the import tool waiting for art.
+hand-drawn species exist yet, this is just the import/export tooling
+waiting for art.
 
 `UiKit.speciesSprite` is now the single place a player-species sprite gets
 built, so all six screens that show a monster (battle bench + placed
