@@ -235,6 +235,23 @@ mirroring the pack's own escalation. Frame 1 of each monster's 3-frame
 loop is the drawn grid shifted 1px down (an idle bob at the tower's 4fps
 idle rate); frames 0 and 2 are the grid as-drawn.
 
+A second style pass fixed two things a closer side-by-side comparison
+against real pack frames turned up: every hand-authored monster had been
+using the same near-black pupil regardless of species, where the pack
+varies its pupil/eye-accent color per monster (Geodrone's a red cyclops
+lens, Molecap's magenta dot-pupils); and the pack's fills aren't perfectly
+flat, they carry a lighter band along the silhouette's top edge on top of
+the dark shade every custom line already draws low. `render_grid`
+(`custom_tower_art.py`) now derives that top-edge highlight automatically
+from whichever non-outline/eye character covers the most pixels in a given
+grid - no per-monster tuning needed, and it's the reason a rebuilt
+`towers.png` was enough to apply it across all 45 hand-authored monsters
+without touching any of the 135 authored grids. Each line's palette also
+now sets its own pupil color instead of sharing one constant, picked per
+type (fire runs warm orange-red, water cyan, electric a contrasting indigo
+against its own yellow fur, and so on) so the eyes read as varied as the
+pack's rather than uniform across the whole custom roster.
+
 Between the pack's 54 (18 lines x 3 stages) and the hand-authored 45 (15
 lines x 3 stages), `towers.png` now holds **99 monsters** across 33
 complete three-stage evolution lines.

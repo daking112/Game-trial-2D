@@ -32,39 +32,39 @@ W = (255, 255, 255, 255)  # eye white
 P = (28, 24, 36, 255)     # pupil
 
 PALETTES = {
-    'zapling': {'K': K, 'W': W, 'P': P,
+    'zapling': {'K': K, 'W': W, 'P': (50, 55, 150, 255),
                 'Y': (247, 205, 70, 255), 'D': (196, 140, 34, 255), 'O': (255, 156, 46, 255)},
-    'zapfowl': {'K': K, 'W': W, 'P': P,
+    'zapfowl': {'K': K, 'W': W, 'P': (50, 55, 150, 255),
                 'Y': (249, 210, 78, 255), 'D': (192, 134, 32, 255),
                 'B': (86, 168, 236, 255), 'O': (255, 156, 46, 255)},
-    'voltvern': {'K': K, 'W': W, 'P': P,
+    'voltvern': {'K': K, 'W': W, 'P': (50, 55, 150, 255),
                  'Y': (250, 214, 84, 255), 'D': (188, 128, 30, 255),
                  'B': (86, 168, 236, 255), 'O': (255, 156, 46, 255)},
-    'emberimp': {'K': K, 'W': W, 'P': P,
+    'emberimp': {'K': K, 'W': W, 'P': (230, 70, 30, 255),
                  'R': (222, 76, 42, 255), 'M': (134, 36, 30, 255),
                  'O': (255, 152, 52, 255), 'F': (255, 222, 120, 255)},
-    'emberbrute': {'K': K, 'W': W, 'P': P,
+    'emberbrute': {'K': K, 'W': W, 'P': (230, 70, 30, 255),
                    'R': (210, 66, 40, 255), 'M': (116, 32, 28, 255),
                    'O': (255, 152, 52, 255), 'F': (255, 222, 120, 255)},
-    'cinderfiend': {'K': K, 'W': W, 'P': P,
+    'cinderfiend': {'K': K, 'W': W, 'P': (230, 70, 30, 255),
                     'R': (196, 54, 38, 255), 'M': (96, 26, 26, 255),
                     'O': (255, 152, 52, 255), 'F': (255, 222, 120, 255)},
-    'thornshell': {'K': K, 'W': W, 'P': P,
+    'thornshell': {'K': K, 'W': W, 'P': (65, 155, 45, 255),
                    'G': (118, 196, 96, 255), 'E': (46, 108, 56, 255),
                    'S': (214, 234, 184, 255)},
-    'thornguard': {'K': K, 'W': W, 'P': P,
+    'thornguard': {'K': K, 'W': W, 'P': (65, 155, 45, 255),
                    'G': (112, 190, 92, 255), 'E': (44, 102, 54, 255),
                    'S': (214, 234, 184, 255), 'B': (214, 58, 70, 255)},
-    'bramblemaw': {'K': K, 'W': W, 'P': P,
+    'bramblemaw': {'K': K, 'W': W, 'P': (65, 155, 45, 255),
                    'G': (104, 180, 88, 255), 'E': (40, 96, 50, 255),
                    'B': (214, 58, 70, 255), 'S': (214, 234, 184, 255)},
-    'mothling': {'K': K, 'W': W, 'P': P,
+    'mothling': {'K': K, 'W': W, 'P': (200, 45, 190, 255),
                  'C': (238, 232, 214, 255), 'A': (176, 166, 190, 255),
                  'D': (92, 84, 108, 255)},
-    'duskwing': {'K': K, 'W': W, 'P': P,
+    'duskwing': {'K': K, 'W': W, 'P': (200, 45, 190, 255),
                  'C': (214, 206, 226, 255), 'A': (140, 128, 162, 255),
                  'D': (78, 70, 96, 255), 'T': (156, 146, 186, 255)},
-    'lunamoth': {'K': K, 'W': W, 'P': P,
+    'lunamoth': {'K': K, 'W': W, 'P': (200, 45, 190, 255),
                  'C': (226, 250, 244, 255), 'T': (104, 206, 194, 255),
                  'D': (66, 84, 100, 255), 'L': (252, 246, 176, 255)},
 }
@@ -707,16 +707,47 @@ CUSTOM_MONSTERS = [
 ]
 
 
+def _lighten(color, factor=1.3):
+    r, g, b, a = color
+    return (min(255, int(r * factor)), min(255, int(g * factor)), min(255, int(b * factor)), a)
+
+
 def render_grid(rows, palette, size=16):
-    """One 16x16 RGBA frame from a list of row strings."""
+    """One 16x16 RGBA frame from a list of row strings.
+
+    The pack's own sprites aren't flat-filled - they carry a rim-light band
+    along the top of the silhouette on top of the low dark shade every
+    custom line already draws by hand, which is what gives them their
+    faceted, slightly worn look next to a single flat fill. Rather than
+    hand-picking a highlight color per grid (135 of them across every
+    line/stage/facing), this derives it automatically: whichever non-
+    outline/eye character covers the most pixels in a given grid is that
+    frame's main body color, and its first (topmost) pixel in each column
+    is lightened - a 1px rim-light that tracks the silhouette's own top
+    edge, however that grid is shaped, with no per-monster tuning needed.
+    """
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     assert len(rows) <= size, f'too many rows: {len(rows)}'
+
+    counts = {}
+    for row in rows:
+        for ch in row:
+            if ch not in ('.', 'K', 'W', 'P'):
+                counts[ch] = counts.get(ch, 0) + 1
+    dominant = max(counts, key=counts.get) if counts else None
+    highlight = _lighten(palette[dominant]) if dominant else None
+    lit_columns = set()
+
     for y, row in enumerate(rows):
         assert len(row) <= size, f'row {y} too long ({len(row)}): {row!r}'
         for x, ch in enumerate(row):
             if ch == '.':
                 continue
-            img.putpixel((x, y), palette[ch])
+            color = palette[ch]
+            if ch == dominant and x not in lit_columns:
+                color = highlight
+                lit_columns.add(x)
+            img.putpixel((x, y), color)
     return img
 
 
