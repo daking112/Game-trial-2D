@@ -11,6 +11,18 @@ class PreloadScene extends Phaser.Scene {
       frameWidth: 64,
       frameHeight: 64
     });
+    // Same pack/verified grid as hit-spark above (see its index.json), two
+    // more sheets picked for distinct roles rather than reusing hit-spark's
+    // small flash for everything: an expanding puff for an enemy's death,
+    // and a much bigger nova-ring burst for an ability ultimate cast.
+    this.load.spritesheet('death-burst', 'assets/vfx/death-burst.png', {
+      frameWidth: 64,
+      frameHeight: 64
+    });
+    this.load.spritesheet('ultimate-burst', 'assets/vfx/ultimate-burst.png', {
+      frameWidth: 64,
+      frameHeight: 64
+    });
 
     // Retromon Big Pack 1 by Willibab - verified 56x56 cell grid, 9 cols x 8 rows.
     // See data/monsters.js for which frame index is which species.
@@ -39,6 +51,16 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('tile-desert-path', 'assets/tiles/desert-path.png');
     this.load.image('tile-volcanic-ground', 'assets/tiles/volcanic-ground.png');
     this.load.image('tile-volcanic-path', 'assets/tiles/volcanic-path.png');
+    // Sparse per-biome ground decals (flowers/pebbles/embers/sparkle) - see
+    // data/biomes.js's groundAccents and gen_assets.py's GROUND_ACCENTS.
+    this.load.image('grass-accent-1', 'assets/tiles/accents/grass-accent-1.png');
+    this.load.image('grass-accent-2', 'assets/tiles/accents/grass-accent-2.png');
+    this.load.image('snow-accent-1', 'assets/tiles/accents/snow-accent-1.png');
+    this.load.image('snow-accent-2', 'assets/tiles/accents/snow-accent-2.png');
+    this.load.image('desert-accent-1', 'assets/tiles/accents/desert-accent-1.png');
+    this.load.image('desert-accent-2', 'assets/tiles/accents/desert-accent-2.png');
+    this.load.image('volcanic-accent-1', 'assets/tiles/accents/volcanic-accent-1.png');
+    this.load.image('volcanic-accent-2', 'assets/tiles/accents/volcanic-accent-2.png');
 
     // UI buttons/panels: stitched from the "Custom Border and Panels" pack's
     // green frame design into flattened textures at the exact sizes this
@@ -87,6 +109,20 @@ class PreloadScene extends Phaser.Scene {
       key: 'hit-spark-anim',
       frames: this.anims.generateFrameNumbers('hit-spark', { start: 0, end: 7 }),
       frameRate: 24,
+      hideOnComplete: true
+    });
+    // Row 0 (orange, cols 0-11) of the death-burst sheet.
+    this.anims.create({
+      key: 'death-burst-anim',
+      frames: this.anims.generateFrameNumbers('death-burst', { start: 0, end: 11 }),
+      frameRate: 22,
+      hideOnComplete: true
+    });
+    // Row 0 (orange, cols 0-8) of the ultimate-burst sheet.
+    this.anims.create({
+      key: 'ultimate-burst-anim',
+      frames: this.anims.generateFrameNumbers('ultimate-burst', { start: 0, end: 8 }),
+      frameRate: 20,
       hideOnComplete: true
     });
 

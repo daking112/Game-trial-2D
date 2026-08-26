@@ -256,6 +256,49 @@ look everything else in this game has.
   needs real slicing work first - it's an irregular sheet, not a uniform
   grid, unlike the Tiny Swords decorations used so far.
 
+## More VFX & ground flare
+
+A follow-up pass on the same "use more of what's already sitting unused"
+theme as the biomes/maps work above, explicit direction from the project
+owner to both wire in more of `tinyswords/public/assets/vfx-pack` (the same
+126-sheet, unnamed/unsorted pack `hit-spark.png` was already picked from -
+see the "Structure" tree below) and add more tile-level variety to the maps.
+
+**Two more VFX sheets** (`assets/vfx/death-burst.png`, `ultimate-burst.png`)
+were picked out of the pack's 126 candidates by rendering a contact-sheet
+preview of one frame from every sheet, then a side-by-side animation strip
+of the strongest-looking candidates, rather than guessing from the unnamed
+filenames - `death-burst` (vfx-pack key `vfx-484`, `Part 10/484.png`) is an
+expanding, jagged smoke-puff explosion now played (`playDeathBurst`) on
+every enemy kill, tinted by the killed enemy's type same as `playHitSpark`;
+`ultimate-burst` (`vfx-293`, `Part 6/293.png`) is a much bigger nova-ring
+burst now played (`playUltimateBurst`) once at an ally's own tile whenever
+its Ultimate fires (`applyArchetypeUltimate`), so the rare "ultimate charged"
+moment reads as visually distinct from a regular attack instead of reusing
+a scaled-up `hit-spark`. Both loaded/animated the same way as `hit-spark`
+(64x64 cell grid, row 0/orange row used, `hideOnComplete` anims).
+
+**Ground accent decals** (`assets/tiles/accents/*.png`,
+`scripts/gen_assets.py`'s `make_accent_sprite`/`GROUND_ACCENTS`) add
+per-biome texture variety on top of the ground tileSprite's own repeat -
+small flower/tuft clusters on grass, sparkle glints and a soft drift mound
+on snow, pebble clusters and dry cracks on desert, ember glow flecks and
+cracked basalt on volcanic. Same blocky rectangle-speckle technique as the
+tile generator above, just on a small transparent canvas with speckles
+clustered near center instead of tiled wraparound, since these are placed
+as individual decals rather than a repeating texture. `BattleScene.
+drawGroundAccents` scatters 2 variants per biome sparsely (~16% of
+non-path cells, deterministic per-cell via the same `seededRandom` the
+path-edge dirt flecks use, so a stage looks identical on replay) with
+randomized jitter/scale/rotation so repeated variants don't look
+copy-pasted.
+
+Verified in a real browser: both new VFX confirmed to load/animate/tint
+correctly via direct invocation on a running `BattleScene` (screenshotted
+mid-animation) and via an actual real-combat kill (score change confirmed,
+zero console errors); ground accents screenshotted across grass/snow/
+volcanic and confirmed sparse rather than overwhelming.
+
 ## Meta-progression (Mastery)
 
 Every other reward in this game resets to nothing but roster/essence between
@@ -380,10 +423,13 @@ public/
   assets/
     retromon/               curated, game-ready monster art (see below)
     retromon-raw/           unprocessed source material for future species
-    vfx/hit-spark.png       one frame from tinyswords' vfx-pack, reused for
+    vfx/hit-spark.png       one sheet from tinyswords' vfx-pack, reused for
                              attack-impact flashes (see its index.json there
-                             for the full verified pack)
+                             for the full verified 126-sheet pack)
+    vfx/death-burst.png, ultimate-burst.png   two more vfx-pack sheets - see
+                             "More VFX & ground flare" below
     tiles/grass.png, path.png   hand-authored seamless 96x96 ground tiles
+    tiles/accents/           sparse per-biome ground decals - see "More VFX & ground flare" below
     decor/                  Tiny Swords trees/bushes/rocks dressing the grid's margins
     ui/                     stitched button/panel textures + 2 icons (see "Art" below)
     Custom Border and Panels Menu All Part.rar   source pack for ui/*.png (see "Art")

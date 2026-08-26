@@ -155,6 +155,86 @@ def make_biome_tiles():
 
 
 # ---------------------------------------------------------------------------
+# Part 1c: sparse ground accent decals - small transparent-background pixel
+# clusters (flowers, sparkle, pebbles, embers...) scattered across open
+# ground cells for extra per-biome visual variety beyond the base tile's own
+# repeat - see BattleScene.drawGroundAccents and data/biomes.js's
+# groundAccents list. Same blocky rectangle-speckle technique as
+# make_speckle_tile above, but on a transparent canvas with speckles
+# clustered near center instead of tiled wraparound, since these are placed
+# as individual decals rather than a repeating texture.
+# ---------------------------------------------------------------------------
+ACCENT_SIZE = 32
+
+
+def make_accent_sprite(specs, seed):
+    random.seed(seed)
+    img = Image.new('RGBA', (ACCENT_SIZE, ACCENT_SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx, cy = ACCENT_SIZE / 2, ACCENT_SIZE / 2
+    for color, count, smin, smax, spread in specs:
+        for _ in range(count):
+            w = random.randint(smin, smax)
+            h = random.randint(smin, smax)
+            x = cx + random.randint(-spread, spread) - w / 2
+            y = cy + random.randint(-spread, spread) - h / 2
+            draw.rectangle([x, y, x + w - 1, y + h - 1], fill=color)
+    return img
+
+
+GROUND_ACCENTS = {
+    'grass-accent-1': ([
+        (0xe8, 0x7a, 0xa0, 255), 4, 2, 4, 6,
+    ], [
+        (0xf2, 0xd8, 0x5c, 255), 3, 2, 3, 5,
+    ], [
+        (0x3a, 0x5c, 0x2e, 255), 3, 2, 3, 3,
+    ]),
+    'grass-accent-2': ([
+        (0x8f, 0xc0, 0x6e, 255), 6, 2, 4, 7,
+    ], [
+        (0xd8, 0xea, 0xc0, 255), 3, 1, 2, 5,
+    ]),
+    'snow-accent-1': ([
+        (0xff, 0xff, 0xff, 255), 5, 1, 3, 7,
+    ], [
+        (0xd0, 0xe8, 0xf5, 255), 4, 2, 3, 5,
+    ]),
+    'snow-accent-2': ([
+        (0xf5, 0xfb, 0xff, 220), 8, 3, 6, 6,
+    ], [
+        (0xb7, 0xd0, 0xde, 180), 3, 2, 3, 4,
+    ]),
+    'desert-accent-1': ([
+        (0x8a, 0x6a, 0x45, 255), 4, 3, 5, 6,
+    ], [
+        (0xc2, 0xa2, 0x5c, 255), 3, 2, 4, 5,
+    ]),
+    'desert-accent-2': ([
+        (0x6b, 0x55, 0x2e, 255), 5, 1, 4, 8,
+    ],),
+    'volcanic-accent-1': ([
+        (0xe0, 0x56, 0x2f, 255), 4, 1, 3, 7,
+    ], [
+        (0xff, 0xc4, 0x6b, 255), 3, 1, 2, 5,
+    ]),
+    'volcanic-accent-2': ([
+        (0x1a, 0x15, 0x13, 255), 4, 3, 5, 6,
+    ], [
+        (0xe0, 0x56, 0x2f, 220), 2, 1, 2, 3,
+    ]),
+}
+
+
+def make_ground_accents():
+    out = {}
+    for name, specs in GROUND_ACCENTS.items():
+        seed = 500 + list(GROUND_ACCENTS.keys()).index(name)
+        out[name] = make_accent_sprite(specs, seed)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Part 1b: the main menu's title logo - was a plain single-color
 # Phaser Text object (flat, no depth), replaced with a pre-rendered PNG so it
 # can have a real gradient fill, a thick hard-edged outline, and a soft drop
@@ -353,6 +433,12 @@ def main():
     for name, img in make_biome_tiles().items():
         img.save(os.path.join(OUT_TILES, f'{name}.png'))
     print('wrote biome tiles:', ', '.join(f'{b}-{k}' for b in BIOME_TILES for k in ('ground', 'path')))
+
+    accent_dir = os.path.join(OUT_TILES, 'accents')
+    os.makedirs(accent_dir, exist_ok=True)
+    for name, img in make_ground_accents().items():
+        img.save(os.path.join(accent_dir, f'{name}.png'))
+    print('wrote ground accents:', ', '.join(GROUND_ACCENTS.keys()))
 
     make_title_logo().save(os.path.join(OUT_UI, 'title-logo.png'))
     print('wrote title-logo.png')

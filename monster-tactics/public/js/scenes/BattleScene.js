@@ -178,6 +178,7 @@ class BattleScene extends Phaser.Scene {
       }
     }
 
+    this.drawGroundAccents();
     this.drawMapDecorations();
 
     const g = this.add.graphics();
@@ -241,6 +242,31 @@ class BattleScene extends Phaser.Scene {
   seededRandom(x, y, salt) {
     const v = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453;
     return v - Math.floor(v);
+  }
+
+  // Sparse per-biome ground decals (flowers/pebbles/embers/sparkle - see
+  // data/biomes.js's groundAccents and gen_assets.py's GROUND_ACCENTS) laid
+  // across open ground cells for texture variety beyond the tileSprite's
+  // own repeat. Deterministic per-cell (seededRandom, not Math.random) for
+  // the same "looks identical on replay" reason as drawPathTransition's
+  // dirt flecks below - most cells stay bare so it reads as scattered
+  // detail, not a second texture layer.
+  drawGroundAccents() {
+    const variants = this.biome.groundAccents;
+    if (!variants || variants.length === 0) return;
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (this.isPathCell(c, r)) continue;
+        if (this.seededRandom(c, r, 601) > 0.16) continue;
+        const key = variants[Math.floor(this.seededRandom(c, r, 602) * variants.length) % variants.length];
+        const { x, y } = this.cellToPixel(c, r);
+        const jitterX = (this.seededRandom(c, r, 603) - 0.5) * CELL * 0.5;
+        const jitterY = (this.seededRandom(c, r, 604) - 0.5) * CELL * 0.5;
+        const scale = 1.2 + this.seededRandom(c, r, 605) * 0.6;
+        const rotation = this.seededRandom(c, r, 606) * Math.PI * 2;
+        this.add.image(x + jitterX, y + jitterY, key).setScale(scale).setRotation(rotation);
+      }
+    }
   }
 
   // The rim stroke above draws a clean hard edge where path meets grass -
@@ -768,6 +794,7 @@ class BattleScene extends Phaser.Scene {
       dead.forEach(e => {
         gameState.score += e.species.reward;
         gameState.earnCoins(e.species.reward);
+        this.playDeathBurst(e.x, e.y, TYPE_COLORS[e.species.type]);
         this.spawnSplitChildren(e);
         this.destroyEnemy(e);
       });
@@ -829,6 +856,26 @@ class BattleScene extends Phaser.Scene {
     const fx = this.add.sprite(x, y, 'hit-spark').setScale(scale || 1.3);
     if (tint !== undefined) fx.setTint(tint);
     fx.play('hit-spark-anim');
+    fx.once('animationcomplete', () => fx.destroy());
+  }
+
+  // A bigger expanding-puff burst on enemy death, tinted by the killed
+  // enemy's type (same TYPE_COLORS convention as playHitSpark) so it reads
+  // as "that thing just died" rather than reusing the small attack flash.
+  playDeathBurst(x, y, tint) {
+    const fx = this.add.sprite(x, y, 'death-burst').setScale(1.6).setDepth(45);
+    if (tint !== undefined) fx.setTint(tint);
+    fx.play('death-burst-anim');
+    fx.once('animationcomplete', () => fx.destroy());
+  }
+
+  // A large nova-ring burst played once at an ally's own tile when its
+  // ultimate fires - a bigger, distinct flourish for the rarer event,
+  // instead of just scaling up the regular attack-impact hit-spark.
+  playUltimateBurst(x, y, tint) {
+    const fx = this.add.sprite(x, y, 'ultimate-burst').setScale(2.2).setDepth(45);
+    if (tint !== undefined) fx.setTint(tint);
+    fx.play('ultimate-burst-anim');
     fx.once('animationcomplete', () => fx.destroy());
   }
 
@@ -1016,6 +1063,7 @@ class BattleScene extends Phaser.Scene {
       const cfg = archetype.ultimateEffect();
       this.allies.forEach(a => this.addBuff(a, 'ultimate', cfg.attackSpeedMultiplier, time + cfg.durationMs));
       this.announceUltimate(ally, archetype.ultimateLabel);
+      this.playUltimateBurst(ally.sprite.x, ally.sprite.y, tint);
       return;
     }
 
@@ -1025,6 +1073,7 @@ class BattleScene extends Phaser.Scene {
     if (targets.length === 0) return; // don't burn a rare charge swinging at nothing
 
     this.announceUltimate(ally, archetype.ultimateLabel);
+    this.playUltimateBurst(ally.sprite.x, ally.sprite.y, tint);
     const cfg = archetype.ultimateEffect(ally.attack);
     if (cfg.kind === 'chain') {
       this.applyChain(targets[0], cfg, ally.attack, tint, true);
