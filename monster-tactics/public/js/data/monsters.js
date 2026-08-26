@@ -2,13 +2,15 @@
 // Stats are early placeholder balance values, tuned to be "roughly playable"
 // rather than final - expect to retune once real waves are played.
 //
-// Art: "Retromon Big Pack 1" by Willibab (https://willibab.itch.io/) - free for
-// personal/commercial use with credit, see assets/retromon/LICENSE.txt.
-// Sheet is a 9x8 grid of 56x56 frames (frame index = row * 9 + col).
-//
-// Player species (the gacha pool) and enemy species deliberately use
-// different frames so a pulled monster never looks identical to something
-// attacking your base.
+// Art: player species (the gacha pool) use "Retromon Big Pack 1" by
+// Willibab (https://willibab.itch.io/) - free for personal/commercial use
+// with credit, see assets/retromon/LICENSE.txt. Sheet is a 9x8 grid of
+// 56x56 frames (frame index = row * 9 + col). Enemy species use a
+// completely different, animated pack (see ENEMY_REGULAR_SHEET below) -
+// a pulled monster was already guaranteed to never look identical to
+// something attacking your base even before that, since the two pools
+// used different frames of the same sheet, but now they don't even share
+// an art source.
 
 const RETROMON_SHEET = 'retromon-b1';
 // Retromon Big Pack 2, same license/author/grid as Big Pack 1 (see
@@ -17,6 +19,24 @@ const RETROMON_SHEET = 'retromon-b1';
 // this, meaning "Storm Discovery" (see data/banners.js) was a banner with a
 // single guaranteed outcome rather than a real weighted pull.
 const RETROMON2_SHEET = 'retromon-b2';
+
+// Enemy sprites: "MINI DUNGEON MONSTERS" by Beowulf (https://beowulf.itch.io/)
+// - a purchased pack, see scripts/gen_enemies.py for the license note and
+// exactly how these two sheets were built from it. Each ENEMY_SPECIES entry
+// below picks one monster by sheetKey + enemyIndex instead of a single
+// static frame like player species do (see RETROMON_SHEET above) - every
+// enemy gets a real 4-directional walk cycle (BattleScene switches anims
+// as it turns corners along the path) instead of a static pose sliding
+// along the grid. ENEMY_BOSS_SHEET's monsters are genuinely bigger native
+// art (32px vs the regular sheet's 16px), not just a bigger scale - see
+// BattleScene ENEMY_SPRITE_SCALE.
+const ENEMY_REGULAR_SHEET = 'enemies-regular';
+const ENEMY_BOSS_SHEET = 'enemies-boss';
+const ENEMY_DIRECTIONS = ['down', 'left', 'right', 'up'];
+
+function enemyAnimKey(sheetKey, enemyIndex, direction) {
+  return `${sheetKey}-${enemyIndex}-${direction}`;
+}
 
 const TYPE_COLORS = {
   FIRE: 0xe0562f,
@@ -182,19 +202,19 @@ const EVOLUTION_ESSENCE_COST = 150;
 //                       instead of a one-time burst on death), and the wave
 //                       can't end until every summoned add is also cleared.
 const ENEMY_SPECIES = [
-  { id: 'widow', name: 'Widow', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 33, maxHp: 14, attack: 1, speed: 58, reward: 4 },
-  { id: 'rollodon', name: 'Rollodon', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 2, maxHp: 40, attack: 2, speed: 26, reward: 10 },
-  { id: 'ragefang', name: 'Ragefang', type: 'FIRE', sheetKey: RETROMON_SHEET, frame: 5, maxHp: 28, attack: 3, speed: 40, reward: 9 },
-  { id: 'tuskram', name: 'Tuskram', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 8, maxHp: 34, attack: 2, speed: 30, reward: 8 },
-  { id: 'clawcrab', name: 'Clawcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 43, maxHp: 20, attack: 1, speed: 70, reward: 6 },
-  { id: 'bouldergeist', name: 'Bouldergeist', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 62, maxHp: 90, attack: 4, speed: 16, reward: 16 },
+  { id: 'widow', name: 'Widow', type: 'NORMAL', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 0, maxHp: 14, attack: 1, speed: 58, reward: 4 },
+  { id: 'rollodon', name: 'Rollodon', type: 'GRASS', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 1, maxHp: 40, attack: 2, speed: 26, reward: 10 },
+  { id: 'ragefang', name: 'Ragefang', type: 'FIRE', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 2, maxHp: 28, attack: 3, speed: 40, reward: 9 },
+  { id: 'tuskram', name: 'Tuskram', type: 'EARTH', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 3, maxHp: 34, attack: 2, speed: 30, reward: 8 },
+  { id: 'clawcrab', name: 'Clawcrab', type: 'EARTH', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 4, maxHp: 20, attack: 1, speed: 70, reward: 6 },
+  { id: 'bouldergeist', name: 'Bouldergeist', type: 'NORMAL', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 5, maxHp: 90, attack: 4, speed: 16, reward: 16 },
 
   // -- variety --
-  { id: 'ironshell', name: 'Ironshell', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 9, maxHp: 46, attack: 3, speed: 22, reward: 14, armor: 4 },
-  { id: 'zipfin', name: 'Zipfin', type: 'WATER', sheetKey: RETROMON_SHEET, frame: 12, maxHp: 12, attack: 1, speed: 100, reward: 5 },
-  { id: 'mossback', name: 'Mossback', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 15, maxHp: 50, attack: 2, speed: 20, reward: 13, regenPerSecond: 3 },
-  { id: 'splitworm', name: 'Splitworm', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 18, maxHp: 36, attack: 2, speed: 34, reward: 11, splitInto: 'wormlet', splitCount: 2 },
-  { id: 'wormlet', name: 'Wormlet', type: 'NORMAL', sheetKey: RETROMON_SHEET, frame: 21, maxHp: 10, attack: 1, speed: 46, reward: 3, spawnable: false },
+  { id: 'ironshell', name: 'Ironshell', type: 'EARTH', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 6, maxHp: 46, attack: 3, speed: 22, reward: 14, armor: 4 },
+  { id: 'zipfin', name: 'Zipfin', type: 'WATER', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 7, maxHp: 12, attack: 1, speed: 100, reward: 5 },
+  { id: 'mossback', name: 'Mossback', type: 'GRASS', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 8, maxHp: 50, attack: 2, speed: 20, reward: 13, regenPerSecond: 3 },
+  { id: 'splitworm', name: 'Splitworm', type: 'NORMAL', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 9, maxHp: 36, attack: 2, speed: 34, reward: 11, splitInto: 'wormlet', splitCount: 2 },
+  { id: 'wormlet', name: 'Wormlet', type: 'NORMAL', sheetKey: ENEMY_REGULAR_SHEET, enemyIndex: 10, maxHp: 10, attack: 1, speed: 46, reward: 3, spawnable: false },
 
   // -- bosses (see BattleScene.BOSS_WAVE_INTERVAL) - 3 genuinely different
   // fights, not 3 reskins of the same "big numbers" boss:
@@ -207,9 +227,9 @@ const ENEMY_SPECIES = [
   //               whole fight - splash/AoE towers matter far more than
   //               single-target ones, and the wave won't end from clearing
   //               just the boss.
-  { id: 'kingcrab', name: 'Kingcrab', type: 'EARTH', sheetKey: RETROMON_SHEET, frame: 24, maxHp: 400, attack: 6, speed: 20, reward: 60, armor: 5, slowImmune: true, regenPerSecond: 4, boss: true, spawnable: false },
-  { id: 'zephyrus', name: 'Zephyrus', type: 'ELECTRIC', sheetKey: RETROMON_SHEET, frame: 37, maxHp: 260, attack: 10, speed: 55, reward: 55, regenPerSecond: 2, boss: true, spawnable: false },
-  { id: 'broodmother', name: 'Broodmother', type: 'GRASS', sheetKey: RETROMON_SHEET, frame: 40, maxHp: 340, attack: 5, speed: 18, reward: 55, armor: 2, summonIntervalMs: 3000, summonSpeciesId: 'wormlet', summonCount: 2, boss: true, spawnable: false }
+  { id: 'kingcrab', name: 'Kingcrab', type: 'EARTH', sheetKey: ENEMY_BOSS_SHEET, enemyIndex: 0, maxHp: 400, attack: 6, speed: 20, reward: 60, armor: 5, slowImmune: true, regenPerSecond: 4, boss: true, spawnable: false },
+  { id: 'zephyrus', name: 'Zephyrus', type: 'ELECTRIC', sheetKey: ENEMY_BOSS_SHEET, enemyIndex: 1, maxHp: 260, attack: 10, speed: 55, reward: 55, regenPerSecond: 2, boss: true, spawnable: false },
+  { id: 'broodmother', name: 'Broodmother', type: 'GRASS', sheetKey: ENEMY_BOSS_SHEET, enemyIndex: 2, maxHp: 340, attack: 5, speed: 18, reward: 55, armor: 2, summonIntervalMs: 3000, summonSpeciesId: 'wormlet', summonCount: 2, boss: true, spawnable: false }
 ];
 
 const SPAWNABLE_ENEMY_SPECIES = ENEMY_SPECIES.filter(e => e.spawnable !== false);

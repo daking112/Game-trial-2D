@@ -39,6 +39,19 @@ class PreloadScene extends Phaser.Scene {
       frameHeight: 56
     });
 
+    // Animated enemy sprites - see data/monsters.js (ENEMY_REGULAR_SHEET/
+    // ENEMY_BOSS_SHEET) and scripts/gen_enemies.py for how these two
+    // sheets were built (one monster per 2-col x 4-row block: 2 walk
+    // frames x 4 directions, down/left/right/up in that row order).
+    this.load.spritesheet(ENEMY_REGULAR_SHEET, 'assets/enemies/enemies-regular.png', {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet(ENEMY_BOSS_SHEET, 'assets/enemies/enemies-boss.png', {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+
     // Hand-authored seamless ground tiles (see scripts note in README.md -
     // procedurally generated, not sourced from any asset pack).
     this.load.image('tile-grass', 'assets/tiles/grass.png');
@@ -149,6 +162,23 @@ class PreloadScene extends Phaser.Scene {
     this.anims.create({
       key: 'tree-4-sway', frames: this.anims.generateFrameNumbers('tree-4', { start: 0, end: 7 }),
       frameRate: 5, repeat: -1
+    });
+
+    // 4 directional walk anims per enemy species (2 frames each, see
+    // enemyAnimKey/ENEMY_DIRECTIONS in data/monsters.js and
+    // scripts/gen_enemies.py for the sheet's row layout) - built from
+    // ENEMY_SPECIES directly so this never drifts out of sync with
+    // whichever sheetKey/enemyIndex each species actually points at.
+    ENEMY_SPECIES.forEach(es => {
+      ENEMY_DIRECTIONS.forEach((dir, d) => {
+        const start = (es.enemyIndex * 4 + d) * 2;
+        this.anims.create({
+          key: enemyAnimKey(es.sheetKey, es.enemyIndex, dir),
+          frames: this.anims.generateFrameNumbers(es.sheetKey, { start, end: start + 1 }),
+          frameRate: 6,
+          repeat: -1
+        });
+      });
     });
 
     this.scene.start('MenuScene');

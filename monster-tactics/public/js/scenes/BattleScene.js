@@ -25,6 +25,12 @@ const BOSS_BAR_W = HP_BAR_W * 2.2;
 // gameState.globalWaveNumber) spawns one boss as the last enemy of that
 // wave, on top of the normal spawn count.
 const BOSS_WAVE_INTERVAL = 5;
+// Enemy sprites are native 16px (regular) / 32px (boss) pixel art (see
+// data/monsters.js ENEMY_SPECIES sheetKey/enemyIndex and
+// scripts/gen_enemies.py) - one shared scale for both sheets, so a boss's
+// bigger native art (not a bigger multiplier) is what makes it read as
+// physically bigger on the grid.
+const ENEMY_SPRITE_SCALE = 4.5;
 
 class BattleScene extends Phaser.Scene {
   constructor() {
@@ -652,9 +658,10 @@ class BattleScene extends Phaser.Scene {
   // lives here so both paths stay in sync.
   spawnEnemyOfSpecies(es, pos, waypointIndex, progress) {
     const barW = es.boss ? BOSS_BAR_W : HP_BAR_W;
-    const sprite = this.add.sprite(pos.x, pos.y, es.sheetKey, es.frame).setScale(es.boss ? 2.4 : 1.5);
+    const sprite = this.add.sprite(pos.x, pos.y, es.sheetKey).setScale(ENEMY_SPRITE_SCALE);
+    sprite.play(enemyAnimKey(es.sheetKey, es.enemyIndex, 'down'));
     const enemy = {
-      species: es, x: pos.x, y: pos.y, waypointIndex, progress,
+      species: es, x: pos.x, y: pos.y, waypointIndex, progress, facing: 'down',
       hp: es.maxHp, maxHp: es.maxHp, statusEffects: {}, barW,
       sprite,
       hpBg: this.add.rectangle(pos.x, pos.y + HP_BAR_Y_OFFSET, barW, HP_BAR_H, 0x1c202a),
@@ -718,6 +725,18 @@ class BattleScene extends Phaser.Scene {
       const dx = target.x - enemy.x, dy = target.y - enemy.y;
       const dist = Math.hypot(dx, dy);
       const step = enemy.species.speed * this.enemySpeedMultiplier(enemy) * (delta / 1000);
+
+      // Every path segment is axis-aligned (see data/stages.js), so exactly
+      // one of dx/dy is ever non-zero mid-segment - this just picks which -
+      // only switches the anim on an actual direction change, not every
+      // frame, so a walk cycle already in the middle of its 2-frame loop
+      // doesn't stutter back to frame 0 each tick.
+      const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left')
+        : dy !== 0 ? (dy > 0 ? 'down' : 'up') : enemy.facing;
+      if (dir !== enemy.facing) {
+        enemy.facing = dir;
+        enemy.sprite.play(enemyAnimKey(enemy.species.sheetKey, enemy.species.enemyIndex, dir));
+      }
 
       if (dist <= step) {
         enemy.x = target.x; enemy.y = target.y;
