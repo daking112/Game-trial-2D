@@ -138,6 +138,101 @@ const STAGES = [
       { col: 10, row: 0 }, { col: 10, row: 15 }, { col: 6, row: 15 },
       { col: 6, row: 0 }, { col: 0, row: 0 }
     ]
+  },
+
+  // -- Procedurally generated (scripts/gen_paths.py) --
+  // 2 more per biome, picked by hand from the generator's output for a mix
+  // of simple and complex layouts (same "shares a row or column" waypoint
+  // rule, just constructed by a randomized rectilinear walk instead of by
+  // hand - see the script for how it guarantees validity and avoids
+  // self-overlap by construction, and README.md "Path variation" for why
+  // this stays an offline/curated tool rather than a live per-run one).
+  {
+    id: 'thicket-maze',
+    name: 'Thicket Maze',
+    biome: 'grass',
+    pathCells: [
+      { col: 26, row: 6 }, { col: 22, row: 6 }, { col: 22, row: 12 },
+      { col: 18, row: 12 }, { col: 18, row: 0 }, { col: 9, row: 0 },
+      { col: 9, row: 15 }, { col: 3, row: 15 }, { col: 3, row: 6 },
+      { col: 0, row: 6 }
+    ]
+  },
+  {
+    id: 'wildwood-labyrinth',
+    name: 'Wildwood Labyrinth',
+    biome: 'grass',
+    pathCells: [
+      { col: 25, row: 12 }, { col: 23, row: 12 }, { col: 23, row: 15 },
+      { col: 20, row: 15 }, { col: 20, row: 1 }, { col: 18, row: 1 },
+      { col: 18, row: 11 }, { col: 14, row: 11 }, { col: 14, row: 0 },
+      { col: 10, row: 0 }, { col: 10, row: 13 }, { col: 6, row: 13 },
+      { col: 6, row: 7 }, { col: 2, row: 7 }, { col: 2, row: 15 },
+      { col: 0, row: 15 }
+    ]
+  },
+  {
+    id: 'icebound-shortcut',
+    name: 'Icebound Shortcut',
+    biome: 'snow',
+    pathCells: [
+      { col: 27, row: 15 }, { col: 15, row: 15 }, { col: 15, row: 0 },
+      { col: 0, row: 0 }
+    ]
+  },
+  {
+    id: 'blizzard-labyrinth',
+    name: 'Blizzard Labyrinth',
+    biome: 'snow',
+    pathCells: [
+      { col: 27, row: 0 }, { col: 25, row: 0 }, { col: 25, row: 15 },
+      { col: 19, row: 15 }, { col: 19, row: 9 }, { col: 13, row: 9 },
+      { col: 13, row: 13 }, { col: 10, row: 13 }, { col: 10, row: 7 },
+      { col: 7, row: 7 }, { col: 7, row: 9 }, { col: 3, row: 9 },
+      { col: 3, row: 5 }, { col: 0, row: 5 }
+    ]
+  },
+  {
+    id: 'mirage-trail',
+    name: 'Mirage Trail',
+    biome: 'desert',
+    pathCells: [
+      { col: 26, row: 7 }, { col: 18, row: 7 }, { col: 18, row: 0 },
+      { col: 11, row: 0 }, { col: 11, row: 15 }, { col: 4, row: 15 },
+      { col: 4, row: 5 }, { col: 0, row: 5 }
+    ]
+  },
+  {
+    id: 'sandstorm-gauntlet',
+    name: 'Sandstorm Gauntlet',
+    biome: 'desert',
+    pathCells: [
+      { col: 26, row: 14 }, { col: 22, row: 14 }, { col: 22, row: 0 },
+      { col: 20, row: 0 }, { col: 20, row: 11 }, { col: 12, row: 11 },
+      { col: 12, row: 0 }, { col: 6, row: 0 }, { col: 6, row: 15 },
+      { col: 3, row: 15 }, { col: 3, row: 11 }, { col: 0, row: 11 }
+    ]
+  },
+  {
+    id: 'ashfall-rift',
+    name: 'Ashfall Rift',
+    biome: 'volcanic',
+    pathCells: [
+      { col: 25, row: 5 }, { col: 15, row: 5 }, { col: 15, row: 0 },
+      { col: 7, row: 0 }, { col: 7, row: 15 }, { col: 0, row: 15 }
+    ]
+  },
+  {
+    id: 'inferno-labyrinth',
+    name: 'Inferno Labyrinth',
+    biome: 'volcanic',
+    pathCells: [
+      { col: 26, row: 9 }, { col: 22, row: 9 }, { col: 22, row: 0 },
+      { col: 19, row: 0 }, { col: 19, row: 15 }, { col: 14, row: 15 },
+      { col: 14, row: 11 }, { col: 11, row: 11 }, { col: 11, row: 5 },
+      { col: 6, row: 5 }, { col: 6, row: 8 }, { col: 2, row: 8 },
+      { col: 2, row: 10 }, { col: 0, row: 10 }
+    ]
   }
 ];
 

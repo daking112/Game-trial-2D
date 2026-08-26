@@ -59,8 +59,8 @@ the loop, or how anyone revisits it to actually manage their roster:
    different Attack/Ability).
 3. **Battle** - a run is 5 stages (`RUN_TARGET_STAGES`), each 3 waves
    (`WAVES_PER_STAGE`), for 15 waves total; a fixed winding path (one of
-   11 distinct layouts across 4 biomes, see `data/stages.js`/`data/biomes.js`
-   and "Biomes & new maps" below) crosses a 28x16 grid from a
+   19 distinct layouts across 4 biomes, see `data/stages.js`/`data/biomes.js`,
+   "Biomes & new maps", and "Path variation" below) crosses a 28x16 grid from a
    spawn edge to your base - bigger than the 1920x1080 viewport by design,
    so BattleScene runs a scrollable camera (WASD/arrow keys, mouse wheel, or
    the "Center View" link) rather than showing the whole map at once. HUD,
@@ -217,7 +217,8 @@ tints are saturated/dark enough to read as a real recolor, not a wash.
 
 6 new hand-authored maps ship across the 3 new biomes (2 each - **Frozen
 Pass**/**Glacier Switchback**, **Dune Crossing**/**Scorpion's Maze**,
-**Magma Flow**/**Cinder Trench**), bringing the pool to 11. All validated
+**Magma Flow**/**Cinder Trench**), bringing the pool to 11 at the time (see
+"Path variation" below for the 8 more that followed). All validated
 programmatically before shipping (every waypoint in bounds, every
 consecutive pair sharing a row or column per `pathCells`' own rules, no
 duplicate stage ids) in addition to being screenshotted per-map. The
@@ -245,16 +246,49 @@ look everything else in this game has.
 - No unlock/purchase gating on any map - explicit direction from the
   project owner to add this next (spend Mastery to unlock a map, unlocked
   maps pay out more but scale enemies up to match, some maps unlocking a
-  themed gacha banner) but not yet built; all 11 maps are freely available
+  themed gacha banner) but not yet built; all maps are freely available
   in the Hub's stage-choice pool today.
-- No procedural path generation - all 11 layouts (old and new) are hand-
-  placed waypoint lists. A generator was scoped in conversation (a
-  randomized rectilinear walk respecting the same "shares a row or column"
-  rule, run offline and curated rather than generating a fresh unvalidated
-  map live every run) but not built.
 - RF Catacombs (see above) is available for a future dungeon biome but
   needs real slicing work first - it's an irregular sheet, not a uniform
   grid, unlike the Tiny Swords decorations used so far.
+
+## Path variation
+
+`scripts/gen_paths.py` is the procedural path generator scoped (but not
+built) in the "Biomes & new maps" section above, now built - a randomized
+rectilinear walk from the spawn edge (col ~27) to the base edge (col 0)
+that produces `pathCells` arrays in exactly the same waypoint format as
+every hand-authored stage. Deliberately still an **offline, curated**
+tool rather than a live per-run generator, same reasoning as before: a
+bad or degenerate map should never reach a real player, so the script is
+run by hand, prints a batch of candidates, and a person picks the good
+ones - it doesn't wire into `HubScene`'s stage choice at all.
+
+The generator builds each candidate as a "staircase" of alternating
+horizontal/vertical segments with columns strictly decreasing from start
+to 0 - this makes every candidate valid *by construction* rather than by
+filtering afterward: consecutive waypoints always share a column or row
+(the one hard rule `BattleScene.buildPathBlockedCells` needs), and because
+columns never repeat, no two segments can ever cross or retrace the same
+cell. On top of that guaranteed-valid shape, the script also enforces a
+minimum segment length (2 cells, so there's no 1-cell notch too cramped to
+place a tower next to) and picks a spread of simple-to-complex layouts
+(`curate()` buckets candidates by bend count and round-robins across
+buckets rather than a flat top-N, which would only ever surface the most
+complex mazes) that are visually distinct from each other (a per-column
+row-profile compared pairwise, rejecting near-duplicates).
+
+8 of its output were hand-picked and added - 2 per biome, one simpler and
+one more maze-like each: **Thicket Maze**/**Wildwood Labyrinth** (grass),
+**Icebound Shortcut**/**Blizzard Labyrinth** (snow), **Mirage Trail**/
+**Sandstorm Gauntlet** (desert), **Ashfall Rift**/**Inferno Labyrinth**
+(volcanic) - bringing the pool to 19 (7 grass, 4 each of snow/desert/
+volcanic). All 19 stages (old and new) were re-validated with a dedicated
+script (bounds, every consecutive pair sharing a row or column, no
+duplicate ids, entry near col 27/exit at col 0, and - new this pass - no
+self-overlapping path cells) and screenshotted per new map; `getStage`/
+`pickStageChoices` were also confirmed working correctly against the
+larger pool.
 
 ## More VFX & ground flare
 
@@ -401,7 +435,7 @@ public/
     data/monsters.js       species stats, rarity/leveling, gacha roll logic
     data/archetypes.js     per-type combat kit: Attack + Ability
     data/banners.js        Monster Sanctuary discovery banners (type pools)
-    data/stages.js         the 11 path layouts, run-length constants, stage-choice logic
+    data/stages.js         the 19 path layouts, run-length constants, stage-choice logic
     data/biomes.js          per-stage ground/path/decor theme - see "Biomes & new maps" below
     data/talents.js        Mastery talent tree - see "Meta-progression" below
     state/GameState.js     roster/team/coins/essence/run+stage progress
@@ -436,6 +470,7 @@ public/
     Humble Gift - v1.3.zip                       source pack for ui/icon-*.png
 scripts/
   gen_assets.py            regenerates tiles/ and ui/ - see "Art" below
+  gen_paths.py             offline procedural path candidate generator - see "Path variation" below
 server/
   server.js                shared-world WebSocket server + static file host - see "Multiplayer World" below
 ```
@@ -817,8 +852,9 @@ banner; reconnecting again after that showed nothing further.
   waves; a monster's `hp`/`maxHp` stat is only actually at risk in a Squad
   Skirmish raid (see "Squad Skirmish Raids" above), the one place towers can
   currently take damage at all.
-- 11 path layouts now exist (`data/stages.js`, see "Biomes & new maps"
-  below) for a 5-stage run, but `pickStageChoices` only avoids repeating the
+- 19 path layouts now exist (`data/stages.js`, see "Biomes & new maps"/
+  "Path variation" below) for a 5-stage run, but `pickStageChoices` only
+  avoids repeating the
   stage just cleared, not every stage played earlier in the run - a layout
   can still resurface mid-run.
 - Leveling scales stats (+12%/level, cap level 5); every species now has an
