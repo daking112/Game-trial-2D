@@ -31,6 +31,14 @@ class PreloadScene extends Phaser.Scene {
     // procedurally generated, not sourced from any asset pack).
     this.load.image('tile-grass', 'assets/tiles/grass.png');
     this.load.image('tile-path', 'assets/tiles/path.png');
+    // Biome ground/path variants for non-grass stages - see data/biomes.js
+    // and gen_assets.py's BIOME_TILES for how these are generated/picked.
+    this.load.image('tile-snow-ground', 'assets/tiles/snow-ground.png');
+    this.load.image('tile-snow-path', 'assets/tiles/snow-path.png');
+    this.load.image('tile-desert-ground', 'assets/tiles/desert-ground.png');
+    this.load.image('tile-desert-path', 'assets/tiles/desert-path.png');
+    this.load.image('tile-volcanic-ground', 'assets/tiles/volcanic-ground.png');
+    this.load.image('tile-volcanic-path', 'assets/tiles/volcanic-path.png');
 
     // UI buttons/panels: stitched from the "Custom Border and Panels" pack's
     // green frame design into flattened textures at the exact sizes this
@@ -66,6 +74,12 @@ class PreloadScene extends Phaser.Scene {
     this.load.spritesheet('bush-2', 'assets/decor/bush-2.png', { frameWidth: 128, frameHeight: 128 });
     this.load.spritesheet('tree-1', 'assets/decor/tree-1.png', { frameWidth: 192, frameHeight: 256 });
     this.load.spritesheet('tree-2', 'assets/decor/tree-2.png', { frameWidth: 192, frameHeight: 256 });
+    // Tree3/Tree4 from the same Tiny Swords pack as tree-1/tree-2 above,
+    // already extracted in the sibling tinyswords/ project but never wired
+    // into this game - more decoration variety for free, no new art needed
+    // (copied as-is into assets/decor/, same as tree-1/tree-2 were).
+    this.load.spritesheet('tree-3', 'assets/decor/tree-3.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('tree-4', 'assets/decor/tree-4.png', { frameWidth: 192, frameHeight: 192 });
   }
 
   create() {
@@ -90,6 +104,14 @@ class PreloadScene extends Phaser.Scene {
     });
     this.anims.create({
       key: 'tree-2-sway', frames: this.anims.generateFrameNumbers('tree-2', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+    this.anims.create({
+      key: 'tree-3-sway', frames: this.anims.generateFrameNumbers('tree-3', { start: 0, end: 7 }),
+      frameRate: 5, repeat: -1
+    });
+    this.anims.create({
+      key: 'tree-4-sway', frames: this.anims.generateFrameNumbers('tree-4', { start: 0, end: 7 }),
       frameRate: 5, repeat: -1
     });
 

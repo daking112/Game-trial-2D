@@ -90,6 +90,70 @@ def make_path_tile():
     return make_speckle_tile(TILE_SIZE, (0x8a, 0x6a, 0x45), speckles, seed=13)
 
 
+# Biome ground/path tile pairs beyond the original grass/dirt one above - see
+# data/biomes.js for how BattleScene picks between these per-stage. Grass
+# keeps its original filenames/texture keys (tile-grass/tile-path) since
+# MenuScene and friends already reference those directly as their own
+# background - these are new, additive keys only used when a stage picks a
+# non-grass biome. Same make_speckle_tile technique throughout so every
+# biome stays in the same flat hand-pixel-art style as the rest of the game,
+# rather than pulling in a differently-styled tileset from another pack.
+BIOME_TILES = {
+    'snow': {
+        'ground': ((0xd8, 0xe8, 0xf0), [
+            ((0xb7, 0xd0, 0xde), 58, 3, 7),   # blue-grey shadow clumps
+            ((0xf5, 0xfb, 0xff), 66, 2, 4),   # bright snow highlight
+            ((0xff, 0xff, 0xff), 22, 2, 3),   # sparkle flecks
+            ((0x93, 0xb3, 0xc4), 18, 2, 3),   # cold shadow accents
+        ], 21),
+        'path': ((0x9f, 0xb8, 0xc4), [
+            ((0x76, 0x93, 0xa1), 48, 3, 7),   # packed-ice clumps
+            ((0xd3, 0xe6, 0xed), 48, 2, 4),   # frost highlight
+            ((0x5c, 0x78, 0x86), 30, 2, 3),   # slush shadow
+            ((0xe8, 0xf4, 0xf8), 14, 2, 3),   # bright ice fleck
+        ], 22)
+    },
+    'desert': {
+        'ground': ((0xdc, 0xc0, 0x7a), [
+            ((0xc2, 0xa2, 0x5c), 58, 3, 7),   # darker sand clumps
+            ((0xec, 0xd8, 0x9c), 66, 2, 4),   # light dune highlight
+            ((0xf5, 0xe8, 0xb8), 22, 2, 3),   # bright sun-fleck
+            ((0xa8, 0x8a, 0x4a), 18, 2, 3),   # dry shadow accents
+        ], 31),
+        'path': ((0xc9, 0xa8, 0x66), [
+            ((0xa8, 0x87, 0x4c), 48, 3, 7),   # worn-trail clumps
+            ((0x8f, 0x70, 0x3d), 30, 2, 3),   # sun-baked shadow
+            ((0xe0, 0xc9, 0x8e), 48, 2, 4),   # light dust highlight
+            ((0x6b, 0x55, 0x2e), 14, 2, 3),   # dark pebble
+        ], 32)
+    },
+    'volcanic': {
+        'ground': ((0x2b, 0x23, 0x20), [
+            ((0x1a, 0x15, 0x13), 58, 3, 7),   # near-black basalt clumps
+            ((0x45, 0x38, 0x32), 40, 2, 4),   # ash-grey highlight
+            ((0xe0, 0x56, 0x2f), 16, 2, 3),   # ember cracks
+            ((0xf5, 0xa6, 0x3d), 8, 1, 2),    # bright ember fleck
+        ], 41),
+        'path': ((0x3d, 0x2f, 0x28), [
+            ((0x24, 0x1b, 0x17), 48, 3, 7),   # scorched-soot clumps
+            ((0x5c, 0x47, 0x3a), 30, 2, 3),   # cooled-rock highlight
+            ((0xe0, 0x56, 0x2f), 20, 2, 3),   # ember fleck
+            ((0xff, 0xc4, 0x6b), 8, 1, 2),    # bright cinder
+        ], 42)
+    }
+}
+
+
+def make_biome_tiles():
+    out = {}
+    for biome, cfg in BIOME_TILES.items():
+        ground_base, ground_speckles, ground_seed = cfg['ground']
+        path_base, path_speckles, path_seed = cfg['path']
+        out[f'{biome}-ground'] = make_speckle_tile(TILE_SIZE, ground_base, ground_speckles, ground_seed)
+        out[f'{biome}-path'] = make_speckle_tile(TILE_SIZE, path_base, path_speckles, path_seed)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Part 1b: the main menu's title logo - was a plain single-color
 # Phaser Text object (flat, no depth), replaced with a pre-rendered PNG so it
@@ -285,6 +349,10 @@ def main():
     make_grass_tile().save(os.path.join(OUT_TILES, 'grass.png'))
     make_path_tile().save(os.path.join(OUT_TILES, 'path.png'))
     print('wrote grass.png, path.png')
+
+    for name, img in make_biome_tiles().items():
+        img.save(os.path.join(OUT_TILES, f'{name}.png'))
+    print('wrote biome tiles:', ', '.join(f'{b}-{k}' for b in BIOME_TILES for k in ('ground', 'path')))
 
     make_title_logo().save(os.path.join(OUT_UI, 'title-logo.png'))
     print('wrote title-logo.png')

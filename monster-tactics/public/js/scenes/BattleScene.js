@@ -159,18 +159,21 @@ class BattleScene extends Phaser.Scene {
   // ---------- setup ----------
 
   drawGrid() {
-    // Grass fills the whole grid; path tiles lay on top only on path cells -
-    // both are hand-authored 64x64 seamless textures (see README.md), so
-    // there's no visible tiling seam within either surface.
+    // Ground fills the whole grid; path tiles lay on top only on path cells -
+    // both are hand-authored 96x96 seamless textures (see README.md), so
+    // there's no visible tiling seam within either surface. Which pair gets
+    // used depends on this stage's biome (see data/biomes.js) - defaults to
+    // the original grass/dirt pair for stages with no biome set.
+    this.biome = getBiome(this.stage.biome);
     this.add.tileSprite(
       GRID_X + (GRID_COLS * CELL) / 2, GRID_Y + (GRID_ROWS * CELL) / 2,
-      GRID_COLS * CELL, GRID_ROWS * CELL, 'tile-grass'
+      GRID_COLS * CELL, GRID_ROWS * CELL, this.biome.groundKey
     );
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         if (this.isPathCell(c, r)) {
           const { x, y } = this.cellToPixel(c, r);
-          this.add.image(x, y, 'tile-path');
+          this.add.image(x, y, this.biome.pathKey);
         }
       }
     }
@@ -247,7 +250,9 @@ class BattleScene extends Phaser.Scene {
   // for a softer, hand-worn boundary instead of a ruler-straight one -
   // cheap to add without needing real per-corner autotile art.
   drawPathTransition(g) {
-    const dirtColors = [0x6b4f34, 0xa9865c, 0x5a4028];
+    // Biome-specific (see data/biomes.js) - brown dirt flecks scattered onto
+    // snow would read as mud, not a natural edge.
+    const dirtColors = this.biome.pathFleckColors;
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         if (!this.isPathCell(c, r)) continue;
@@ -292,17 +297,29 @@ class BattleScene extends Phaser.Scene {
       { key: 'rock-2', anim: null, scale: 1.3 },
       { key: 'tree-2', anim: 'tree-2-sway', scale: 0.75 },
       { key: 'rock-3', anim: null, scale: 1.3 },
-      { key: 'bush-2', anim: 'bush-2-sway', scale: 0.95 }
+      { key: 'bush-2', anim: 'bush-2-sway', scale: 0.95 },
+      { key: 'tree-3', anim: 'tree-3-sway', scale: 0.8 },
+      { key: 'rock-1', anim: null, scale: 1.2 },
+      { key: 'tree-4', anim: 'tree-4-sway', scale: 0.8 },
+      { key: 'rock-4', anim: null, scale: 1.2 }
     ];
     const rowSpacing = 240;
     const rows = Math.ceil((GRID_ROWS * CELL) / rowSpacing);
+    // A biome-specific tint (see data/biomes.js) reskins this same shared
+    // tree/bush/rock art per-biome (icy blue-white for snow, sandy tan for
+    // desert, etc.) instead of needing new decoration sprites per biome.
+    const tint = this.biome.decorTint;
     for (let i = 0; i < rows; i++) {
       const y = GRID_Y + 60 + i * rowSpacing;
       const leftDeco = pattern[i % pattern.length];
       const rightDeco = pattern[(i + 3) % pattern.length];
-      const addDeco = (x, deco) => deco.anim
-        ? this.add.sprite(x, y, deco.key).play(deco.anim).setScale(deco.scale)
-        : this.add.image(x, y, deco.key).setScale(deco.scale);
+      const addDeco = (x, deco) => {
+        const obj = deco.anim
+          ? this.add.sprite(x, y, deco.key).play(deco.anim).setScale(deco.scale)
+          : this.add.image(x, y, deco.key).setScale(deco.scale);
+        if (tint) obj.setTint(tint);
+        return obj;
+      };
       addDeco(left, leftDeco);
       addDeco(right, rightDeco);
     }

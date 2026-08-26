@@ -59,7 +59,8 @@ the loop, or how anyone revisits it to actually manage their roster:
    different Attack/Ability).
 3. **Battle** - a run is 5 stages (`RUN_TARGET_STAGES`), each 3 waves
    (`WAVES_PER_STAGE`), for 15 waves total; a fixed winding path (one of
-   5 distinct layouts, see `data/stages.js`) crosses a 28x16 grid from a
+   11 distinct layouts across 4 biomes, see `data/stages.js`/`data/biomes.js`
+   and "Biomes & new maps" below) crosses a 28x16 grid from a
    spawn edge to your base - bigger than the 1920x1080 viewport by design,
    so BattleScene runs a scrollable camera (WASD/arrow keys, mouse wheel, or
    the "Center View" link) rather than showing the whole map at once. HUD,
@@ -195,6 +196,66 @@ comment above `SPECIES` in `data/monsters.js`) rather than being tuned
 independently. Big Packs 3-4 are extracted and still available for more of
 the same treatment (see "Known limitations" below).
 
+## Biomes & new maps
+
+Every stage used to be the same grass/dirt ground - now `data/stages.js`
+entries carry a `biome` field (`data/biomes.js` looks it up, defaulting to
+`'grass'` if unset) that changes which ground/path textures `BattleScene`
+draws, what color the path-edge dirt-fleck scatter uses (see "Visual polish
+pass" above - brown flecks on snow would read as mud), and what tint gets
+applied to the shared tree/bush/rock decoration sprites. 3 new biomes exist
+- **snow**, **desert**, **volcanic** - each with its own procedurally
+generated ground/path tile pair (`scripts/gen_assets.py` `BIOME_TILES`/
+`make_biome_tiles`, same hand-pixel-art speckle technique as the original
+grass tiles, just new palettes, so nothing clashes stylistically with a
+differently-styled tileset from another pack) and its own dirt-fleck/decor
+tint. Decoration tinting is genuinely multiplicative (Phaser's `setTint` -
+verified by sampling actual rendered pixels against the hand-computed
+`original x tint / 255` result, not just checking the tint value was set),
+so a pale near-white tint barely shifts a mid-toned sprite - the chosen
+tints are saturated/dark enough to read as a real recolor, not a wash.
+
+6 new hand-authored maps ship across the 3 new biomes (2 each - **Frozen
+Pass**/**Glacier Switchback**, **Dune Crossing**/**Scorpion's Maze**,
+**Magma Flow**/**Cinder Trench**), bringing the pool to 11. All validated
+programmatically before shipping (every waypoint in bounds, every
+consecutive pair sharing a row or column per `pathCells`' own rules, no
+duplicate stage ids) in addition to being screenshotted per-map. The
+original 5 grass stages are unchanged (`biome: 'grass'` keeps them on the
+original `tile-grass`/`tile-path` texture keys, since MenuScene and other
+menu-like scenes already reference those two directly as their own
+background - a straight rename would have touched far more than just
+`BattleScene`).
+
+Also added along the way: `tree-3`/`tree-4`, two more Tiny Swords tree
+spritesheets sitting unused in the sibling `tinyswords/` project's asset
+index (same pack/license as the `tree-1`/`tree-2` already in use, just
+never wired into this game) - copied into `assets/decor/` and folded into
+`BattleScene.drawMapDecorations`'s margin rotation for more variety on
+every map, old and new. A candidate for a future dungeon/crypt biome was
+also identified and deliberately not used yet: **RF Catacombs**
+(`tinyswords/public/assets/rf-catacombs/`), a free, already-extracted, and
+genuinely pixel-art (not painterly) dungeon tileset with walls/torches/
+statues/crates - unlike Tiny Swords' own `Terrain/Tileset` sheets, which
+were also considered and rejected for ground tiles specifically because
+their painterly, thick-outlined style would clash with the flat pixel-art
+look everything else in this game has.
+
+**Not built yet:**
+- No unlock/purchase gating on any map - explicit direction from the
+  project owner to add this next (spend Mastery to unlock a map, unlocked
+  maps pay out more but scale enemies up to match, some maps unlocking a
+  themed gacha banner) but not yet built; all 11 maps are freely available
+  in the Hub's stage-choice pool today.
+- No procedural path generation - all 11 layouts (old and new) are hand-
+  placed waypoint lists. A generator was scoped in conversation (a
+  randomized rectilinear walk respecting the same "shares a row or column"
+  rule, run offline and curated rather than generating a fresh unvalidated
+  map live every run) but not built.
+- RF Catacombs (see above) is available for a future dungeon biome but
+  needs real slicing work first - it's an irregular sheet, not a uniform
+  grid, unlike the Tiny Swords decorations used so far.
+
 ## Meta-progression (Mastery)
 
 Every other reward in this game resets to nothing but roster/essence between
@@ -297,7 +358,8 @@ public/
     data/monsters.js       species stats, rarity/leveling, gacha roll logic
     data/archetypes.js     per-type combat kit: Attack + Ability
     data/banners.js        Monster Sanctuary discovery banners (type pools)
-    data/stages.js         the 5 path layouts, run-length constants, stage-choice logic
+    data/stages.js         the 11 path layouts, run-length constants, stage-choice logic
+    data/biomes.js          per-stage ground/path/decor theme - see "Biomes & new maps" below
     data/talents.js        Mastery talent tree - see "Meta-progression" below
     state/GameState.js     roster/team/coins/essence/run+stage progress
     scenes/PreloadScene.js loads every sprite/tile/UI texture, registers anims
@@ -709,9 +771,10 @@ banner; reconnecting again after that showed nothing further.
   waves; a monster's `hp`/`maxHp` stat is only actually at risk in a Squad
   Skirmish raid (see "Squad Skirmish Raids" above), the one place towers can
   currently take damage at all.
-- 5 path layouts exist (`data/stages.js`) for a 5-stage run, but
-  `pickStageChoices` only avoids repeating the stage just cleared, not every
-  stage played earlier in the run - a layout can still resurface mid-run.
+- 11 path layouts now exist (`data/stages.js`, see "Biomes & new maps"
+  below) for a 5-stage run, but `pickStageChoices` only avoids repeating the
+  stage just cleared, not every stage played earlier in the run - a layout
+  can still resurface mid-run.
 - Leveling scales stats (+12%/level, cap level 5); every species now has an
   evolution (`data/monsters.js` EVOLUTION_MAP), but kit-changing evolution
   (a genuinely different Attack/Ability, not just bigger numbers) is still
