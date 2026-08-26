@@ -61,6 +61,14 @@ class PreloadScene extends Phaser.Scene {
       frameHeight: 16
     });
 
+    // Multiplayer player avatars - see data/avatars.js and
+    // scripts/gen_avatars.py. 6 rows of 3 frames per avatar (walk then
+    // idle, each side/down/up).
+    this.load.spritesheet(AVATAR_SHEET, 'assets/avatars/avatars.png', {
+      frameWidth: 16,
+      frameHeight: 20
+    });
+
     // Hand-authored seamless ground tiles (see scripts note in README.md -
     // procedurally generated, not sourced from any asset pack).
     this.load.image('tile-grass', 'assets/tiles/grass.png');
@@ -209,6 +217,22 @@ class PreloadScene extends Phaser.Scene {
         });
       });
     });
+
+    // Walk/idle x side/down/up for every avatar. Walk runs faster than
+    // idle for the obvious reason; idle is a 3-frame A-B-A ping-pong in
+    // the source art, so a plain looping 3-frame anim already reads as a
+    // smooth breath without needing yoyo.
+    for (let a = 0; a < AVATAR_COUNT; a++) {
+      AVATAR_ROW_ORDER.forEach((kind, k) => {
+        const start = (a * AVATAR_ROWS_PER + k) * 3;
+        this.anims.create({
+          key: avatarAnimKey(a, kind),
+          frames: this.anims.generateFrameNumbers(AVATAR_SHEET, { start, end: start + 2 }),
+          frameRate: kind.startsWith('walk') ? 8 : 4,
+          repeat: -1
+        });
+      });
+    }
 
     this.scene.start('MenuScene');
   }

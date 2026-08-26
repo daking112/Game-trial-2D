@@ -258,8 +258,25 @@ function submitScore(playerName, entry) {
   broadcast({ type: 'leaderboard', leaderboard });
 }
 
+// Which of the avatar sheet's characters a player is drawn as (see
+// public/js/data/avatars.js). Derived from the persistent clientId rather
+// than assigned round-robin from a counter, so a player keeps the same
+// look across reconnects - the same reason plot ownership is keyed on
+// clientId. Cheap FNV-ish string hash; collisions just mean two players
+// share a look, which is fine.
+const AVATAR_COUNT = 14;
+
+function avatarForClientId(clientId) {
+  let h = 2166136261;
+  for (let i = 0; i < clientId.length; i++) {
+    h ^= clientId.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % AVATAR_COUNT;
+}
+
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, x: p.x, y: p.y };
+  return { id: p.id, name: p.name, x: p.x, y: p.y, avatar: p.avatar };
 }
 
 function publicPlot(p) {
@@ -333,6 +350,7 @@ wss.on('connection', (ws, request) => {
   // shouldn't already be standing inside someone's claimed base.
   const player = {
     id, clientId, name, ws,
+    avatar: avatarForClientId(clientId),
     x: WORLD_WIDTH / 2 + (Math.random() - 0.5) * 400,
     y: WORLD_HEIGHT - 150 + (Math.random() - 0.5) * 100
   };

@@ -121,7 +121,7 @@ class WorldScene extends Phaser.Scene {
     const me = snapshot.players.find(p => p.id === NetClient.id) || { x: this.worldWidth / 2, y: this.worldHeight / 2 };
     this.myX = me.x;
     this.myY = me.y;
-    this.myAvatar = this.buildAvatar(this.myX, this.myY, `${NetClient.name} (you)`, 0x4caf50);
+    this.myAvatar = this.buildAvatar(this.myX, this.myY, `${NetClient.name} (you)`, 0x4caf50, me.avatar);
     // Follows the Container, not .marker - marker is now a child positioned
     // in container-local space (always 0,0), not world space, since
     // buildAvatar bundled marker/label/shadow/glow into one Container.
@@ -173,32 +173,70 @@ class WorldScene extends Phaser.Scene {
 
   // ---------- players ----------
 
-  // A flat colored circle read as pure placeholder art (see README "Known
-  // limitations" - "not a sprite"). Short of wiring in real trainer sprites
-  // (unprocessed art, a bigger job - see retromon-raw/), this dresses the
-  // same circle up into a proper marker: a ground shadow so it doesn't look
-  // like it's floating, a soft outer glow ring, and the name on a small
-  // dark pill instead of bare stroked text. Everything lives in one
-  // Container so every caller moves the whole avatar with a single
-  // setPosition instead of repositioning marker/label separately.
-  buildAvatar(x, y, name, color) {
+  // A real animated character sprite (see data/avatars.js) rather than the
+  // flat colored circle this used to be. The circle is kept only as a soft
+  // glow ring *behind* the sprite, still tinted by `color`, because that's
+  // what distinguishes you (green) from everyone else (blue) at a glance -
+  // the sprites themselves are picked by the server per player, so color is
+  // the only reliable "which one is me" cue. Ground shadow and the name on
+  // a small dark pill are unchanged. Everything lives in one Container so
+  // every caller moves the whole avatar with a single setPosition.
+  buildAvatar(x, y, name, color, avatarIndex) {
+    const index = safeAvatarIndex(avatarIndex);
     const shadow = this.add.ellipse(0, 20, 26, 10, 0x000000, 0.35);
-    const glow = this.add.circle(0, 0, 21, color, 0.18);
-    const marker = this.add.circle(0, 0, 16, color).setStrokeStyle(2, 0x1c2530);
+    const glow = this.add.circle(0, 4, 20, color, 0.20);
+    // Native art is 16x20; scaled up to roughly the footprint the old
+    // circle marker occupied so plot-proximity distances still feel the
+    // same to walk around.
+    const sprite = this.add.sprite(0, 0, AVATAR_SHEET).setDisplaySize(38, 48);
+    sprite.play(avatarAnimKey(index, 'idle-down'));
     const labelText = this.add.text(0, 0, name, {
       fontFamily: 'monospace', fontSize: '14px', color: '#f5f7fa'
     }).setOrigin(0.5).setStroke('#1c2530', 3);
     const labelBg = this.add.rectangle(0, 0, labelText.width + 14, labelText.height + 6, 0x0b0d12, 0.55)
       .setStrokeStyle(1, 0x394258);
-    labelBg.setPosition(0, -34);
-    labelText.setPosition(0, -34);
-    const container = this.add.container(x, y, [shadow, glow, marker, labelBg, labelText]);
-    return { container, marker, label: labelText };
+    labelBg.setPosition(0, -38);
+    labelText.setPosition(0, -38);
+    const container = this.add.container(x, y, [shadow, glow, sprite, labelBg, labelText]);
+    return { container, sprite, label: labelText, avatarIndex: index, facing: 'down', moving: false };
+  }
+
+  // Switches an avatar between its walk and idle loops and turns it to face
+  // where it's going. Facing left is the side art flipped rather than its
+  // own row (see data/avatars.js).
+  //
+  // Checks what the sprite is *actually* playing rather than trusting the
+  // tracked state alone. Avatars built while handling the welcome snapshot
+  // come up unresolved - observed frozen with a __MISSING texture and no
+  // current anim, where avatars built later from a playerJoined broadcast
+  // were fine - so buildAvatar's initial play() cannot be relied on. Since
+  // this runs every frame anyway, re-asserting whenever the sprite has
+  // drifted from the intended anim heals that on the next frame with no
+  // special case, and comparing the resolved key still means a walk cycle
+  // mid-loop is never restarted.
+  setAvatarMotion(avatar, moving, facing) {
+    const key = avatarAnimKey(avatar.avatarIndex, avatarRowKind(moving, facing));
+    const current = avatar.sprite.anims.currentAnim;
+    const onCorrectAnim = current && current.key === key && avatar.sprite.anims.isPlaying;
+    if (avatar.moving === moving && avatar.facing === facing && onCorrectAnim) return;
+    avatar.moving = moving;
+    avatar.facing = facing;
+    avatar.sprite.setFlipX(facing === 'left');
+    avatar.sprite.play(key);
+  }
+
+  // Which way an avatar should face for a movement delta. Diagonals prefer
+  // the horizontal (side) art, which reads better than picking up/down for
+  // a mostly-sideways walk.
+  facingFor(dx, dy) {
+    if (dx === 0 && dy === 0) return null;
+    if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 'right' : 'left';
+    return dy > 0 ? 'down' : 'up';
   }
 
   onPlayerJoined(p) {
     if (p.id === NetClient.id || this.otherPlayers.has(p.id)) return;
-    const avatar = this.buildAvatar(p.x, p.y, p.name, 0x4a90d9);
+    const avatar = this.buildAvatar(p.x, p.y, p.name, 0x4a90d9, p.avatar);
     this.otherPlayers.set(p.id, { x: p.x, y: p.y, targetX: p.x, targetY: p.y, ...avatar });
   }
 
@@ -219,9 +257,19 @@ class WorldScene extends Phaser.Scene {
   interpolateOtherPlayers(delta) {
     const t = Math.min(1, delta / 120);
     for (const op of this.otherPlayers.values()) {
+      const prevX = op.x, prevY = op.y;
       op.x = Phaser.Math.Linear(op.x, op.targetX, t);
       op.y = Phaser.Math.Linear(op.y, op.targetY, t);
       op.container.setPosition(op.x, op.y);
+
+      // Drive walk/idle off the interpolated step rather than the raw
+      // network target: position updates only arrive every
+      // MOVE_BROADCAST_MS, so keying on those directly would make remote
+      // players stutter between walking and idling. The threshold ignores
+      // the sub-pixel drift of an easing that never quite lands.
+      const dx = op.x - prevX, dy = op.y - prevY;
+      const moving = Math.hypot(dx, dy) > 0.15;
+      this.setAvatarMotion(op, moving, moving ? this.facingFor(dx, dy) : op.facing);
     }
   }
 
@@ -598,7 +646,12 @@ class WorldScene extends Phaser.Scene {
     if (this.moveKeys.D.isDown || this.moveKeys.RIGHT.isDown) dx += 1;
     if (this.moveKeys.W.isDown || this.moveKeys.UP.isDown) dy -= 1;
     if (this.moveKeys.S.isDown || this.moveKeys.DOWN.isDown) dy += 1;
-    if (dx === 0 && dy === 0) return;
+    if (dx === 0 && dy === 0) {
+      // Keep the last facing, just drop to that direction's idle loop.
+      this.setAvatarMotion(this.myAvatar, false, this.myAvatar.facing);
+      return;
+    }
+    this.setAvatarMotion(this.myAvatar, true, this.facingFor(dx, dy));
     if (dx !== 0 && dy !== 0) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
 
     this.myX = Phaser.Math.Clamp(this.myX + dx * step, 20, this.worldWidth - 20);
