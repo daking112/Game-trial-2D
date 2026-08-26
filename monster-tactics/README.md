@@ -203,77 +203,15 @@ step) now renders as that mid-tier form - no new pack art was needed to
 add a middle stage, only new `EVOLVED_SPECIES`/`EVOLUTION_MAP` data, since
 `GameState.canEvolve`/`evolveMonster` and `RosterScene`'s evolve button
 were already generic single-hop lookups with no hardcoded chain length.
+`towers.png` holds all **54 monsters** (18 lines x 3 stages) from the
+pack.
 
-On top of the pack's 18 lines, **15 more evolution lines (45 species) are
-hand-authored pixel art** (`scripts/custom_tower_art.py`,
-`custom_tower_art2.py`, `custom_tower_art3.py`), built to fill out
-type/rarity combinations the pack alone left thin or empty (see
-`RARITY`/`TYPE_COLORS` in `data/monsters.js`) and to grow the catchable
-roster generally, not to replace anything from the original pack. The
-first two batches (9 lines) each closed cells that were completely empty;
-by the third batch every cell already had at least one catchable species,
-so that batch instead doubles up the thinnest remaining cell of each type
-(one more line each at FIRE/COMMON, WATER/COMMON, GRASS/RARE,
-ELECTRIC/COMMON, EARTH/RARE, NORMAL/EPIC) and reaches for silhouettes none
-of the earlier lines use - a legless coiled salamander, a teardrop tadpole,
-a flower sprite with a petal crown, a round-eared mouse with a zigzag bolt
-tail, a square-jawed rock pup, and a legless ghost with a wavy hem instead
-of feet - so the roster keeps growing in shape, not just in count. Each
-grid is an explicit
-16x16 character-indexed pixel array (`.` = transparent, everything else a
-per-monster palette key) rather than a generated image - the same
-code-as-art pattern `gen_assets.py`/`gen_enemies.py`/`gen_avatars.py`
-already used elsewhere in this repo. The style was matched to the pack by
-measurement, not by eye: an alpha-dump of real pack frames (Rollpup,
-Puffle) showed bodies only ~9-13px wide inside a generous transparent
-margin, with readability at 16px carried almost entirely by oversized 2px
-eyes - a first draft that filled the whole cell with 1px eyes read as a
-noisy blob next to the real art, and was redrawn to match those
-proportions. Each hand-authored line's 3 stages get visibly larger
-silhouettes and more ornamentation stage to stage (spikes, wings, crowns),
-mirroring the pack's own escalation. Frame 1 of each monster's 3-frame
-loop is the drawn grid shifted 1px down (an idle bob at the tower's 4fps
-idle rate); frames 0 and 2 are the grid as-drawn.
-
-A second style pass fixed two things a closer side-by-side comparison
-against real pack frames turned up: every hand-authored monster had been
-using the same near-black pupil regardless of species, where the pack
-varies its pupil/eye-accent color per monster (Geodrone's a red cyclops
-lens, Molecap's magenta dot-pupils); and the pack's fills aren't perfectly
-flat, they carry a lighter band along the silhouette's top edge on top of
-the dark shade every custom line already draws low. `render_grid`
-(`custom_tower_art.py`) now derives that top-edge highlight automatically
-from whichever non-outline/eye character covers the most pixels in a given
-grid - no per-monster tuning needed, and it's the reason a rebuilt
-`towers.png` was enough to apply it across all 45 hand-authored monsters
-without touching any of the 135 authored grids. Each line's palette also
-now sets its own pupil color instead of sharing one constant, picked per
-type (fire runs warm orange-red, water cyan, electric a contrasting indigo
-against its own yellow fur, and so on) so the eyes read as varied as the
-pack's rather than uniform across the whole custom roster.
-
-A third pass answered a sharper complaint: next to the pack, the custom
-monsters still read as faces rather than small creatures. A silhouette
-dump of Puffle/Molecap/Ogglord's actual alpha and color channels (not a
-guess) showed why: the pack doesn't build a separate head and body, it's
-one compact blob per monster - the "creature" feeling comes from 4-5
-scattered color tones inside that blob rather than a flat fill, plus (on
-Ogglord specifically) a solid arm-colored patch running down each side
-that breaks the blob into "body with limbs" instead of one undifferen-
-tiated shape. `render_grid` now reproduces both automatically: the body
-color gets a fixed 4x4 Bayer-dithered light/dark fleck scattered across it
-(textured material instead of flat fill) on top of the existing rim-light,
-and the palette's second-most-common color - already present in every
-line as its shade/leg tone - takes over the outer 1-2 pixels of the body
-color's own lower third on both sides, standing in as a visible limb
-stripe. Both are silhouette-preserving (no grid edits, still zero risk to
-the 135 hand-drawn shapes) and derived the same way as the rim-light: from
-whichever characters are already most common in a given grid, so a
-rebuilt `towers.png` applies it everywhere at once.
-
-Between the pack's 54 (18 lines x 3 stages) and the hand-authored 45 (15
-lines x 3 stages), `towers.png` now holds **99 monsters** across 33
-complete three-stage evolution lines.
+A hand-authored expansion (custom pixel-art species layered on top of
+these 18 pack lines, several style-matching passes, then a full geometry
+rebuild chasing a "these read as faces, not creatures" complaint) was
+tried and then removed at the user's request to start over with different
+instructions - see git history around the "hand-authored tower monsters"
+commits if picking that back up.
 
 `UiKit.speciesSprite` is now the single place a player-species sprite gets
 built, so all six screens that show a monster (battle bench + placed
@@ -294,15 +232,15 @@ its own row. The idle loop deliberately runs slower than the enemies' walk
 cycle (4fps vs 6): a tower is standing still, so it should read as an idle
 breath, not a march in place.
 
-Verified in a real browser: all 99 species/evolved forms resolve to a real
-texture with all 3 facing anims registered (no gaps, 99 unique indices),
+Verified in a real browser: all 54 species/evolved forms resolve to a real
+texture with all 3 facing anims registered (no gaps, 54 unique indices),
 the roster screen renders every one distinctly, evolving a base species
 twice (base -> mid -> final) walks the whole chain and lands on the
-intended final id for all 33 lines, every gacha-pool species is reachable
-from the standard banner, a live wave with placed towers from the newest
-hand-drawn species scored a real kill, an ally's facing was observed
-flipping from `down` to `side` mid-combat, and the gacha reveal tween lands
-at exactly its previous 112px size on the animated path.
+intended final id for all 18 lines, every gacha-pool species is reachable
+from the standard banner, a live wave with placed towers scored a real
+kill, an ally's facing was observed flipping from `down` to `side`
+mid-combat, and the gacha reveal tween lands at exactly its previous
+112px size on the animated path.
 
 ## Per-player maps in the shared world
 
