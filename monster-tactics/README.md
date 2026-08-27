@@ -290,9 +290,19 @@ Plots now carry a `stageId`:
 
 - **Claiming** a plot draws a random stage from the pool rather than
   defaulting everyone to the same one - the world should look varied
-  without every player having to go and set it.
+  without every player having to go and set it. Only drawn from stages
+  the player has actually unlocked (see below), so a brand-new player
+  doesn't randomly land on an end-game map before earning it.
 - **Entering** your plot loads *that plot's* map, which is what actually
-  makes one player's base play differently from another's.
+  makes one player's base play differently from another's. Verified with
+  Playwright end to end (claim a plot, send a real `plotStage` change,
+  enter the plot, screenshot the resulting battle) across two very
+  different biomes (grass valley vs. volcanic magma-flow) - both the
+  server round-trip and the actual rendered tiles/path came back
+  correctly distinct each time, so the live map-change path itself
+  isn't broken; if it ever looks stuck, the plot data is all in-memory
+  on the server (see `server.js`, no `fs.writeFile` anywhere) and resets
+  on every server restart, which is the more likely culprit.
 - **Pressing M** while standing in your own plot opens a picker of all 23
   stages, each card tinted by its biome. Changing the map clears the
   towers on that plot, which the picker warns about up front - towers
@@ -303,6 +313,27 @@ Plots now carry a `stageId`:
   rarely-used setting is the wrong trade. While the picker is open it
   owns input entirely, so walking and E can't fire behind it - the same
   click-through bug the daily-login modal already had to fix once.
+- **Maps are locked behind Mastery** (`data/stages.js`
+  `unlockMastery`/`isStageUnlocked`) rather than every one of the 23
+  being available from the start - the stage array's own order doubles
+  as the unlock order (25 Mastery per position, first 4 free), so a new
+  player gets a real but limited choice and the later, more elaborate
+  maps are something to work toward. A locked card in the picker renders
+  dimmed with a lock icon and its Mastery cost, and has no click handler
+  at all (not just a "denied" toast) - verified with Playwright that a
+  locked card's Phaser input component is genuinely absent, not just
+  visually disabled. The top unlock cost (550) sits in the same ballpark
+  as maxing all 3 talents (~825, see `data/talents.js`), so unlocking
+  every map is a real goal, not a rounding error next to talent
+  spending. This is client-side only, same trust model as every other
+  Mastery/essence spend in the game (see `GameState.spendMastery` and
+  friends) - Mastery is never sent to the server, so this shapes the
+  intended progression rather than cheat-proofing a cooperative game
+  against its own players. HubScene's separate in-run stage choice
+  (`pickStageChoices`, offered after every stage clear) is deliberately
+  untouched - gating the map offered mid-run behind a currency mostly
+  earned by finishing runs would be a chicken-and-egg problem the
+  permanent world-map choice doesn't have.
 - **Plot previews** now draw the stage's real path, from the same
   `pathCells` the battle grid walks, over that biome's color, with the
   map's name under the plot title. That's the visible payoff: from across

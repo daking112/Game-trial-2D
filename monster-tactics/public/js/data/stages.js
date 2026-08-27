@@ -283,6 +283,24 @@ const STAGES = [
   }
 ];
 
+// Mastery cost to build a multiplayer base on this stage (see
+// WorldScene.openMapPicker) - NOT used for HubScene's per-run stage
+// choice, which stays free and unrestricted (gating the map you're
+// offered mid-run behind a currency you mostly earn BY finishing runs
+// would be a chicken-and-egg problem; the permanent world-map choice
+// doesn't have that issue since it's a one-time pick you can save up
+// for). 25 mastery per position in this array, so the stage order above
+// doubles as the unlock order - the first 4 stay always-free (a new
+// player with 0 mastery still gets a real choice), the last stage costs
+// 550, in the same ballpark as maxing all 3 talents (~825, see
+// data/talents.js) so unlocking every map is a real but reachable goal,
+// not a rounding error next to talent spending.
+STAGES.forEach((s, i) => { s.unlockMastery = Math.max(0, i - 3) * 25; });
+
+function isStageUnlocked(stage, mastery) {
+  return mastery >= stage.unlockMastery;
+}
+
 const FIRST_STAGE_ID = 'valley';
 
 function getStage(id) {
@@ -294,6 +312,17 @@ function getStage(id) {
 function pickStageChoices(count, excludeId) {
   const pool = STAGES.filter(s => s.id !== excludeId);
   const source = pool.length >= count ? pool : STAGES;
+  const shuffled = [...source].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+// Same random draw as pickStageChoices, but only from stages the given
+// mastery total has actually unlocked - used for the multiplayer plot
+// picker/auto-claim (see WorldScene), never for HubScene's in-run choice.
+function pickUnlockedStageChoices(count, mastery, excludeId) {
+  const unlocked = STAGES.filter(s => isStageUnlocked(s, mastery));
+  const pool = unlocked.filter(s => s.id !== excludeId);
+  const source = pool.length >= count ? pool : (unlocked.length >= count ? unlocked : STAGES);
   const shuffled = [...source].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }

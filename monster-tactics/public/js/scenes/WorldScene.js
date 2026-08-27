@@ -770,8 +770,10 @@ class WorldScene extends Phaser.Scene {
     // A freshly claimed plot gets a random map rather than everyone
     // starting on the same one - the point of per-plot maps is that the
     // world looks varied without every player having to go set it.
-    // pickStageChoices already does a distinct random draw over the pool.
-    const stage = pickStageChoices(1)[0] || getStage(FIRST_STAGE_ID);
+    // Drawn only from stages this player has actually unlocked (see
+    // data/stages.js isStageUnlocked) - a brand-new player shouldn't
+    // randomly land on an end-game map before earning it.
+    const stage = pickUnlockedStageChoices(1, gameState.mastery)[0] || getStage(FIRST_STAGE_ID);
     NetClient.send('claimPlot', { plotId: panel.id, stageId: stage.id });
     this.time.delayedCall(500, () => { this.claimInFlight = false; });
   }
@@ -815,20 +817,34 @@ class WorldScene extends Phaser.Scene {
       const x = startX + (i % cols) * cardW;
       const y = startY + Math.floor(i / cols) * cardH;
       const isCurrent = stage.id === current.id;
+      // Locked stages (see data/stages.js isStageUnlocked/unlockMastery)
+      // render dimmed with a cost readout and don't respond to clicks -
+      // client-side only, matching how every other mastery/essence spend
+      // in this game already works (see GameState.spendMastery and
+      // friends - nothing here is server-validated, so this is about
+      // shaping the intended progression, not cheat-proofing a
+      // cooperative game against its own players).
+      const unlocked = isStageUnlocked(stage, gameState.mastery);
       const biome = getBiome(stage.biome);
-      const card = this.add.rectangle(x, y, cardW - 16, cardH - 14, biome.previewColor, isCurrent ? 1 : 0.8)
-        .setStrokeStyle(3, isCurrent ? 0x4caf50 : 0x394258)
-        .setScrollFactor(0).setDepth(201).setInteractive({ useHandCursor: true });
+      const alpha = isCurrent ? 1 : (unlocked ? 0.8 : 0.35);
+      const card = this.add.rectangle(x, y, cardW - 16, cardH - 14, biome.previewColor, alpha)
+        .setStrokeStyle(3, isCurrent ? 0x4caf50 : (unlocked ? 0x394258 : 0x2a2f3a))
+        .setScrollFactor(0).setDepth(201);
+      if (unlocked) card.setInteractive({ useHandCursor: true });
       const label = this.add.text(x, y - 10, stage.name, {
-        fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold'
+        fontFamily: 'monospace', fontSize: '17px', color: unlocked ? '#ffffff' : '#8a95ab', fontStyle: 'bold'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(202).setStroke('#1c2530', 4);
-      const sub = this.add.text(x, y + 14, `${stage.biome || 'grass'}${isCurrent ? '  (current)' : ''}`, {
-        fontFamily: 'monospace', fontSize: '13px', color: '#dfe6f2'
+      const subText = isCurrent ? '(current)' : unlocked ? (stage.biome || 'grass')
+        : `\u{1F512} needs ${stage.unlockMastery} mastery`;
+      const sub = this.add.text(x, y + 14, subText, {
+        fontFamily: 'monospace', fontSize: '13px', color: unlocked ? '#dfe6f2' : '#c8927a'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(202).setStroke('#1c2530', 3);
-      card.on('pointerdown', () => {
-        if (!isCurrent) NetClient.send('plotStage', { plotId: panel.id, stageId: stage.id });
-        this.closeMapPicker();
-      });
+      if (unlocked) {
+        card.on('pointerdown', () => {
+          if (!isCurrent) NetClient.send('plotStage', { plotId: panel.id, stageId: stage.id });
+          this.closeMapPicker();
+        });
+      }
       parts.push(card, label, sub);
     });
 
