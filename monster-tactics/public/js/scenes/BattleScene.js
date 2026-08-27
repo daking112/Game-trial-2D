@@ -889,7 +889,7 @@ class BattleScene extends Phaser.Scene {
     ally.facing = dir;
     ally.spriteFlipped = flip;
     ally.sprite.setFlipX(flip);
-    ally.sprite.play(towerAnimKey(ally.species.towerIndex, dir));
+    ally.sprite.play(towerAnimKey(ally.species.sheetKey, ally.species.towerIndex, dir));
   }
 
   playHitSpark(x, y, tint, scale) {

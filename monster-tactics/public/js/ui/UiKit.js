@@ -101,13 +101,14 @@ const UiKit = {
   // still renders, just unanimated.
   //
   // displayPx sizes by final on-screen pixels rather than a raw scale
-  // multiplier, because the two paths have very different native frame
-  // sizes (16px animated vs 56px static) and a shared scale number would
-  // render them at wildly different sizes on the same screen.
+  // multiplier, because the animated paths have different native frame
+  // sizes (16px on TOWER_SHEET, 32px on TOWER_BIG_SHEET, 56px for the
+  // static fallback) and a shared scale number would render them at
+  // wildly different sizes on the same screen.
   speciesSprite(scene, x, y, species, displayPx) {
     if (species.towerIndex != null) {
-      const sprite = scene.add.sprite(x, y, TOWER_SHEET);
-      sprite.play(towerAnimKey(species.towerIndex, 'down'));
+      const sprite = scene.add.sprite(x, y, species.sheetKey);
+      sprite.play(towerAnimKey(species.sheetKey, species.towerIndex, 'down'));
       sprite.setDisplaySize(displayPx, displayPx);
       return sprite;
     }

@@ -60,6 +60,13 @@ class PreloadScene extends Phaser.Scene {
       frameWidth: 16,
       frameHeight: 16
     });
+    // Original (not pack-derived) species - native 32px art, same block
+    // shape as TOWER_SHEET above, just a bigger cell (see TOWER_BIG_SHEET
+    // in data/monsters.js and scripts/gen_towers_big.py).
+    this.load.spritesheet(TOWER_BIG_SHEET, 'assets/towers/towers-big.png', {
+      frameWidth: 32,
+      frameHeight: 32
+    });
 
     // Multiplayer player avatars - see data/avatars.js and
     // scripts/gen_avatars.py. 6 rows of 3 frames per avatar (walk then
@@ -220,8 +227,8 @@ class PreloadScene extends Phaser.Scene {
       TOWER_DIRECTIONS.forEach((dir, d) => {
         const start = (sp.towerIndex * 3 + d) * 3;
         this.anims.create({
-          key: towerAnimKey(sp.towerIndex, dir),
-          frames: this.anims.generateFrameNumbers(TOWER_SHEET, { start, end: start + 2 }),
+          key: towerAnimKey(sp.sheetKey, sp.towerIndex, dir),
+          frames: this.anims.generateFrameNumbers(sp.sheetKey, { start, end: start + 2 }),
           frameRate: 4,
           repeat: -1
         });

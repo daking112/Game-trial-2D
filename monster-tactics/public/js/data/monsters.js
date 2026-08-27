@@ -51,10 +51,18 @@ function enemyAnimKey(sheetKey, enemyIndex, direction) {
 // gen_towers.py's LINE_ASSIGNMENTS). towerIndex picks the monster's block
 // on the built sheet; 3 facings x 3 frames each.
 const TOWER_SHEET = 'towers';
+// Original (not pack-derived) species get native 32px art instead of the
+// pack's 16px - same "bigger native art, not a bigger scale" pattern as
+// ENEMY_BOSS_SHEET (see BattleScene ENEMY_SPRITE_SCALE): UiKit.speciesSprite
+// already sizes every tower by final on-screen pixels, so a 32px source
+// displays at the exact same size as a 16px one, just with 4x the pixel
+// budget to draw with - see scripts/gen_towers_big.py. towerIndex is its
+// own independent 0-based range on this sheet, separate from TOWER_SHEET's.
+const TOWER_BIG_SHEET = 'towers-big';
 const TOWER_DIRECTIONS = ['down', 'up', 'side'];
 
-function towerAnimKey(towerIndex, direction) {
-  return `tower-${towerIndex}-${direction}`;
+function towerAnimKey(sheetKey, towerIndex, direction) {
+  return `tower-${sheetKey}-${towerIndex}-${direction}`;
 }
 
 const TYPE_COLORS = {

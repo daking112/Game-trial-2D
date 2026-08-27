@@ -1,4 +1,8 @@
-# Shared helpers for hand-authored 16x16 tower-monster pixel art.
+# Shared helpers for hand-authored tower-monster pixel art, at either the
+# pack-matching 16x16 (TOWER_SHEET) or the bigger 32x32 (TOWER_BIG_SHEET,
+# used for original species - see data/monsters.js) cell size. Pass `size`
+# through to every function below; it defaults to 16 so existing 16x16
+# callers (recolor/pack-derived work) don't need to change.
 #
 # The two prior from-scratch attempts (hand-typed grids, then parametric
 # coordinate generation) both produced silhouettes with parts that read as
@@ -15,23 +19,23 @@ import os
 K = (0, 0, 0, 255)
 
 
-def rows16(specs):
-    """specs: list of 16 {col_index: char} dicts -> 16 row strings."""
+def rows16(specs, size=16):
+    """specs: list of `size` {col_index: char} dicts -> `size` row strings."""
     out = []
     for spec in specs:
-        r = ['.'] * 16
+        r = ['.'] * size
         for idx, ch in spec.items():
             r[idx] = ch
         out.append(''.join(r))
     return out
 
 
-def render(rows, palette):
+def render(rows, palette, size=16):
     from PIL import Image
-    assert len(rows) == 16, f'{len(rows)} rows, want 16'
+    assert len(rows) == size, f'{len(rows)} rows, want {size}'
     for i, row in enumerate(rows):
-        assert len(row) == 16, f'row {i} is {len(row)} wide: {row!r}'
-    img = Image.new('RGBA', (16, 16), (0, 0, 0, 0))
+        assert len(row) == size, f'row {i} is {len(row)} wide, want {size}: {row!r}'
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
             if ch != '.':
@@ -84,19 +88,29 @@ def check_connected(rows, label=''):
     return False
 
 
-def check_sprite_ranges(img, stage):
-    """Numeric bar measured off the real pack (see gen_towers.py study):
-    base ~5-9 colors/30-50% opaque/25-55% outline, final ~6-12/55-82%/35-55%."""
-    RANGES = {
+def check_sprite_ranges(img, stage, size=16):
+    """Numeric bar measured off real pack/game art. opaque%/outline% are
+    fractions of the sprite so they apply at any size, but color count
+    scales with resolution - measured off the real 16px pack (base ~5-9,
+    final ~6-12) AND off this game's own real 32px art (enemies-boss.png:
+    9-12 colors even for varied complexity), so 32px gets a genuinely
+    higher ceiling rather than being held to the 16px count."""
+    RANGES_16 = {
         'base':  dict(colors=(5, 9),  opaque=(0.30, 0.50), outline=(0.25, 0.55)),
         'mid':   dict(colors=(6, 10), opaque=(0.45, 0.65), outline=(0.30, 0.55)),
         'final': dict(colors=(6, 12), opaque=(0.55, 0.82), outline=(0.35, 0.55)),
     }
-    rng = RANGES[stage]
-    colors = [(c, col) for c, col in img.getcolors(256) if col[3] > 0]
+    RANGES_32 = {
+        'base':  dict(colors=(6, 12), opaque=(0.30, 0.50), outline=(0.25, 0.55)),
+        'mid':   dict(colors=(7, 13), opaque=(0.45, 0.65), outline=(0.30, 0.55)),
+        'final': dict(colors=(8, 15), opaque=(0.55, 0.82), outline=(0.35, 0.55)),
+    }
+    rng = (RANGES_32 if size >= 32 else RANGES_16)[stage]
+    total = size * size
+    colors = [(c, col) for c, col in img.getcolors(total) if col[3] > 0]
     n = sum(c for c, _ in colors)
     black = sum(c for c, col in colors if col[:3] == (0, 0, 0))
-    opaque_frac = n / 256
+    opaque_frac = n / total
     outline_frac = black / n if n else 0
     problems = []
     if not (rng['colors'][0] <= len(colors) <= rng['colors'][1]):
