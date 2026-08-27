@@ -144,13 +144,22 @@ viperling_side = build_rows([
     row_spec(**{}),
     row_spec(**{}),
     row_spec(**{}),
-    row_spec(**{}),
-    row_spec(**{'12': 'K'}),
-    row_spec(**{'11': 'K', '12': 'a', '13': 'K'}),
-    row_spec(**{'10': 'K', '11': 'a', '12': 'x', '13': 'a', '14': 'K'}),
-    row_spec(**{'9': 'K', '10': 'a', '11': 'K', '12': 'a', '13': 'a', '14': 'a', '15': 'K'}),
+    # wide, flat-topped triangular head (a viper's head reads as
+    # distinctly WIDER than its neck - that contrast is what a worm's
+    # uniform tube shape lacks)
+    row_spec(**{'9': 'K', '10': 'K', '11': 'K', '12': 'K', '13': 'K'}),
+    row_spec(**{'8': 'K', '9': 'a', '10': 'a', '11': 'a', '12': 'a', '13': 'a', '14': 'K'}),
+    row_spec(**{'8': 'K', '9': 'a', '10': 'K', '11': 'x', '12': 'a', '13': 'a', '14': 'a', '15': 'K'}),
     row_spec(**{'8': 'K', '9': 'a', '10': 'a', '11': 'a', '12': 'a', '13': 'a', '14': 'a', '15': 'K'}),
-    row_spec(**{'3': 'K', '4': 'c', '5': 'a', '6': 'a', '7': 'a', '8': 'a', '9': 'a', '10': 'a', '11': 'a', '12': 'a', '13': 'a', '14': 'K'}),
+    # neck: pinches narrower than the head above and the body below -
+    # the head/neck/body width contrast is the other half of "viper" vs
+    # "uniform worm tube"
+    row_spec(**{'9': 'K', '10': 'a', '11': 'a', '12': 'a', '13': 'K'}),
+    # body, with an alternating dark/light zigzag scale pattern along the
+    # spine instead of flat fill - the single biggest "snake not worm"
+    # tell in pixel art
+    row_spec(**{'5': 'K', '6': 'b', '7': 'a', '8': 'b', '9': 'a', '10': 'b', '11': 'a', '12': 'b', '13': 'K'}),
+    row_spec(**{'3': 'K', '4': 'c', '5': 'a', '6': 'a', '7': 'b', '8': 'a', '9': 'a', '10': 'b', '11': 'a', '12': 'a', '13': 'a', '14': 'K'}),
     row_spec(**{'2': 'K', '3': 'a', '4': 'a', '5': 'a', '6': 'a', '7': 'a', '8': 'a', '9': 'a', '10': 'a', '11': 'a', '12': 'a', '13': 'a', '14': 'b', '15': 'K'}),
     row_spec(**{'2': 'K', '3': 'a', '4': 'a', '5': 'a', '6': 'a', '7': 'a', '8': 'a', '9': 'a', '10': 'a', '11': 'a', '12': 'a', '13': 'K'}),
     row_spec(**{'3': 'K', '4': 'b', '5': 'a', '6': 'a', '7': 'a', '8': 'a', '9': 'a', '10': 'a', '11': 'a', '12': 'K'}),
