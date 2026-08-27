@@ -40,6 +40,21 @@ class RosterScene extends Phaser.Scene {
     const startX = width / 2 - ((Math.min(cols, rosterEntries.length) - 1) * cardW) / 2;
     const startY = 260;
 
+    // Grid viewport: everything between the team label and the footer
+    // (Start Run / "head back" text, both pinned at y=990) - a roster past
+    // ~4 rows (20 monsters at 5 cols) no longer fits without scrolling, and
+    // with 27 evolution lines now live that's a real, not hypothetical,
+    // roster size. Cards go in a masked container so they scroll as a unit
+    // while the header/footer around them stay fixed.
+    const viewportTop = startY - cardH / 2 - 10;
+    const viewportBottom = 950;
+    const viewportHeight = viewportBottom - viewportTop;
+    const rows = Math.ceil(rosterEntries.length / cols);
+    const contentHeight = rows * cardH;
+    this.rosterScroll = { y: 0, max: Math.max(0, contentHeight - viewportHeight) };
+
+    this.cardContainer = this.add.container(0, 0);
+
     rosterEntries.forEach((entry, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -47,6 +62,31 @@ class RosterScene extends Phaser.Scene {
       const y = startY + row * cardH;
       this.buildCard(entry, x, y);
     });
+
+    if (this.rosterScroll.max > 0) {
+      const maskShape = this.make.graphics().fillStyle(0xffffff).fillRect(0, viewportTop, width, viewportHeight);
+      this.cardContainer.setMask(maskShape.createGeometryMask());
+
+      // Scroll affordances: mouse wheel (the actual ask) plus a thin
+      // track+thumb on the right edge of the grid so "there's more below"
+      // is visible at a glance rather than something you discover by
+      // accident. Deliberately not drag-to-scroll: an invisible zone big
+      // enough to catch drags over the grid would sit on top of the cards
+      // and eat the clicks that select/upgrade them.
+      const trackX = width / 2 + (Math.min(cols, rosterEntries.length) * cardW) / 2 + 18;
+      this.add.rectangle(trackX, viewportTop + viewportHeight / 2, 6, viewportHeight, 0x1c2530, 0.6);
+      const thumbH = Math.max(30, viewportHeight * (viewportHeight / contentHeight));
+      this.scrollThumb = this.add.rectangle(trackX, viewportTop, 6, thumbH, 0x5a6478).setOrigin(0.5, 0);
+      this.scrollTrackTop = viewportTop;
+      this.scrollTrackRange = viewportHeight - thumbH;
+
+      this.rosterViewportTop = viewportTop;
+      this.rosterViewportBottom = viewportBottom;
+      this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
+        if (pointer.y < this.rosterViewportTop || pointer.y > this.rosterViewportBottom) return;
+        this.scrollRosterBy(deltaY);
+      });
+    }
 
     if (gameState.inMultiplayerWorld) {
       this.add.text(width / 2, 990, "Head back to the World when you're ready", {
@@ -74,27 +114,31 @@ class RosterScene extends Phaser.Scene {
   buildCard(entry, x, y) {
     const species = getSpecies(entry.speciesId);
     const rarity = RARITY[species.rarity];
+    // Every card object goes into cardContainer (not straight onto the
+    // scene) so the whole grid scrolls as one unit - see the masked
+    // container set up in create().
+    const put = obj => { this.cardContainer.add(obj); return obj; };
     // Soft offset shadow so the card reads as sitting above the background
     // instead of flush with it - see UiKit.makeButton's identical trick.
-    this.add.image(x + 5, y + 7, 'panel-card-roster').setTint(0x000000).setAlpha(0.3);
-    const bg = this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true });
-    const rarityDot = this.add.circle(x - 87, y - 72, 9, rarity.color).setStrokeStyle(2, 0x1c2530);
-    const selectionRing = this.add.rectangle(x, y, 213, 183, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false);
-    const sprite = UiKit.speciesSprite(this, x, y - 60, species, 78);
-    const name = this.add.text(x, y - 15, `${species.name}  Lv.${entry.level}`, {
+    put(this.add.image(x + 5, y + 7, 'panel-card-roster').setTint(0x000000).setAlpha(0.3));
+    const bg = put(this.add.image(x, y, 'panel-card-roster').setInteractive({ useHandCursor: true }));
+    const rarityDot = put(this.add.circle(x - 87, y - 72, 9, rarity.color).setStrokeStyle(2, 0x1c2530));
+    const selectionRing = put(this.add.rectangle(x, y, 213, 183, 0xffffff, 0).setStrokeStyle(4, 0x4caf50).setVisible(false));
+    const sprite = put(UiKit.speciesSprite(this, x, y - 60, species, 78));
+    const name = put(this.add.text(x, y - 15, `${species.name}  Lv.${entry.level}`, {
       fontFamily: 'monospace', fontSize: '17px', color: '#f5f7fa'
-    }).setOrigin(0.5).setStroke('#1c2530', 4);
-    const stats = this.add.text(x, y + 8, '', {
+    }).setOrigin(0.5).setStroke('#1c2530', 4));
+    const stats = put(this.add.text(x, y + 8, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#e8ecf5'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
-    const essenceText = this.add.text(x, y + 29, '', {
+    }).setOrigin(0.5).setStroke('#1c2530', 3));
+    const essenceText = put(this.add.text(x, y + 29, '', {
       fontFamily: 'monospace', fontSize: '14px', color: '#f5c94b'
-    }).setOrigin(0.5).setStroke('#1c2530', 3);
+    }).setOrigin(0.5).setStroke('#1c2530', 3));
 
-    const upgradeBg = this.add.rectangle(x, y + 57, 174, 30, 0x394258).setStrokeStyle(2, 0x5a6478);
-    const upgradeText = this.add.text(x, y + 57, '', {
+    const upgradeBg = put(this.add.rectangle(x, y + 57, 174, 30, 0x394258).setStrokeStyle(2, 0x5a6478));
+    const upgradeText = put(this.add.text(x, y + 57, '', {
       fontFamily: 'monospace', fontSize: '14px', color: '#f5f7fa'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5));
 
     const card = { bg, selectionRing, sprite, name, stats, essenceText, upgradeBg, upgradeText, speciesId: entry.speciesId, rarityColor: rarity.color };
     this.cards.push(card);
@@ -169,6 +213,15 @@ class RosterScene extends Phaser.Scene {
       card.upgradeBg.setFillStyle(affordable ? 0x2f4a34 : 0x394258);
       card.upgradeText.setColor(affordable ? '#4caf50' : '#9aa4b8');
       card.upgradeBg.setInteractive({ useHandCursor: true });
+    }
+  }
+
+  scrollRosterBy(dy) {
+    const s = this.rosterScroll;
+    s.y = Phaser.Math.Clamp(s.y + dy, 0, s.max);
+    this.cardContainer.y = -s.y;
+    if (this.scrollThumb) {
+      this.scrollThumb.y = this.scrollTrackTop + (s.max > 0 ? (s.y / s.max) * this.scrollTrackRange : 0);
     }
   }
 
