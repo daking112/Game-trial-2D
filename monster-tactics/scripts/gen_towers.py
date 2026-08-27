@@ -8,8 +8,16 @@
 #
 # Idempotent: re-running overwrites public/assets/towers/towers.png in place.
 import os
+import sys
 import zipfile
 from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from custom_tower_art import CUSTOM_MONSTERS, render_monster  # noqa: E402
+from custom_tower_art2 import CUSTOM_MONSTERS2  # noqa: E402
+from custom_tower_art3 import CUSTOM_MONSTERS3  # noqa: E402
+
+ALL_CUSTOM_MONSTERS = CUSTOM_MONSTERS + CUSTOM_MONSTERS2 + CUSTOM_MONSTERS3
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ASSETS = os.path.join(REPO, "monster-tactics/public/assets")
@@ -65,6 +73,9 @@ LINE_ASSIGNMENTS = [
 ]
 
 DIRECTIONS = ['down', 'up', 'side']
+# Row order inside a block, shared by the pack's art and the hand-authored
+# art so both halves of the sheet read identically from Phaser.
+CUSTOM_FACING_ORDER = DIRECTIONS
 
 
 def ensure_extracted():
@@ -97,7 +108,7 @@ def main():
         for stage, species_id in enumerate(stage_ids):
             picks.append((species_id, line_index, stage))
 
-    total = len(picks)
+    total = len(picks) + len(ALL_CUSTOM_MONSTERS)
     out = Image.new('RGBA', (BLOCK * SRC_CELL, total * BLOCK * SRC_CELL), (0, 0, 0, 0))
     index = {}
     for m, (species_id, line_index, stage) in enumerate(picks):
@@ -110,8 +121,20 @@ def main():
                 out.paste(frame, (f * SRC_CELL, (m * BLOCK + d) * SRC_CELL))
         index[species_id] = m
 
+    # Hand-authored species appended after the pack's blocks, in the same
+    # block shape, so nothing downstream has to care which sheet a monster
+    # originally came from - see scripts/custom_tower_art.py.
+    for offset, (species_id, art_key, facings) in enumerate(ALL_CUSTOM_MONSTERS):
+        m = len(picks) + offset
+        frames = render_monster(art_key, facings)
+        for d, facing in enumerate(CUSTOM_FACING_ORDER):
+            for f, frame in enumerate(frames[facing]):
+                out.paste(frame, (f * SRC_CELL, (m * BLOCK + d) * SRC_CELL))
+        index[species_id] = m
+
     out.save(os.path.join(OUT_DIR, 'towers.png'))
-    print(f'wrote towers.png ({out.width}x{out.height}, {total} monsters from the pack)')
+    print(f'wrote towers.png ({out.width}x{out.height}, {total} monsters: '
+          f'{len(picks)} from the pack + {len(ALL_CUSTOM_MONSTERS)} hand-authored)')
     print()
     print('data/monsters.js towerIndex values:')
     for species_id, m in index.items():

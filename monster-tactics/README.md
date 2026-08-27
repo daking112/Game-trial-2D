@@ -203,58 +203,60 @@ step) now renders as that mid-tier form - no new pack art was needed to
 add a middle stage, only new `EVOLVED_SPECIES`/`EVOLUTION_MAP` data, since
 `GameState.canEvolve`/`evolveMonster` and `RosterScene`'s evolve button
 were already generic single-hop lookups with no hardcoded chain length.
-`towers.png` holds all **54 monsters** (18 lines x 3 stages) from the
-pack.
 
-A hand-authored expansion (custom pixel-art species layered on top of
-these 18 pack lines, several style-matching passes, then a full geometry
-rebuild chasing a "these read as faces, not creatures" complaint) was
-tried and then removed at the user's request to start over with different
-instructions - see git history around the "hand-authored tower monsters"
-commits if picking that back up.
+18 of the game's 27 evolution lines are the pack's own; the other 9 are
+hand-authored pixel art (`scripts/custom_tower_art.py`/`2.py`/`3.py`)
+built to match the pack's style (16px cells, compact silhouette, big 2px
+eyes) and used to fill type/rarity gacha cells the pack alone left thin or
+empty - see each file's own batch comment in `data/monsters.js` for which
+gap it fills. `towers.png` holds all **99 monsters** (27 lines x 3
+stages); `gen_towers.py` builds the pack's 54 and appends the
+hand-authored 45 in the same block layout.
 
-The restart uses hand-drawn art from **Piskel** (piskelapp.com, a free
-browser pixel-art editor) instead of Python-generated pixel grids, via
-`scripts/import_piskel.py`. Draw a monster as a 16x16 canvas with exactly 9
-frames in Piskel's timeline (any number of layers) - frames 0-2 are the
-down-facing idle bob, 3-5 up, 6-8 side, matching the pack's own 3-frame
-idle convention - save as `.piskel`, then run:
+This hand-authored set was fully removed partway through this project's
+history (after a "these read as faces, not creatures" complaint about an
+in-progress geometry rebuild) to try alternative approaches instead - in
+order: recoloring real pack donor lines into new species
+(`scripts/remix_tower_art.py`, 15 chains, never wired in), then several
+from-scratch original-art attempts at both 16px
+(`scripts/bulk_originals.py`, `cindertail_chain.py`) and a new 32px native
+path added specifically to give original art more room to read cleanly
+(`TOWER_BIG_SHEET` - see below; `scripts/trial_cindertail32.py`). None of
+that later work replaced the original batch in the end - it's restored
+here as-is, from before the geometry-rebuild complaint - but the tooling
+from every one of those detours is still in `scripts/` if picked back up:
+a `.piskel` import/export round-trip (`import_piskel.py`/`export_piskel.py`,
+reverse-engineered from the piskel source, not guessed from PNG export
+settings), the donor-recolor pipeline, and a connectivity-checked
+pixel-art helper library (`pixel_art_lib.py` - flood-fills a candidate
+sprite's opaque pixels and fails loudly with exact stray-pixel coordinates
+if it isn't one single connected silhouette, plus a numeric color/opacity/
+outline-fraction gate measured off real pack and boss-enemy art) that
+caught real bugs (floating disconnected limbs, stray pixels) no purely
+visual check had caught.
 
-```
-python3 scripts/import_piskel.py monster.piskel --out custom_blocks/
-```
+`TOWER_BIG_SHEET` (`assets/towers/towers-big.png`, 32px cells) is real,
+tested infrastructure - `PreloadScene` loads it, `UiKit.speciesSprite`/
+`BattleScene.faceAllyToward` pick a species' sheet via its own `sheetKey`
+rather than assuming `TOWER_SHEET`, and `towerAnimKey` takes a sheetKey so
+the two sheets' independent `towerIndex` ranges can't collide - mirrors
+the existing `ENEMY_REGULAR_SHEET`/`ENEMY_BOSS_SHEET` pattern, since
+`UiKit.speciesSprite` already sizes every tower by final on-screen pixels
+(`setDisplaySize`), so a 32px source displays at the same size as a 16px
+one, just with 4x the pixel budget to draw with. No species uses it yet.
 
-to get a 48x48 block (3 facings x 3 frames, 16px cells - the same layout
-`gen_towers.py` slices per monster out of the pack sheet). The importer
-reads the `.piskel` JSON format directly (each layer's frames are a base64
-PNG horizontal strip plus a layout index; layers composite by opacity) -
-reverse-engineered straight from the piskel source
-(github.com/piskelapp/piskel:
-`src/js/utils/serialization/{Serializer,Deserializer}.js` and
-`src/js/utils/FrameUtils.js#createFramesFromChunk`), not guessed from PNG
-export settings, so there's no ambiguity about frame order or spacing.
-
-`scripts/export_piskel.py` is the inverse: it packages generated frames
-(PIL images, built as pixel grids in code) into a real `.piskel` file
-using the same format, so hand-authored art stays openable and
-hand-tweakable in the actual Piskel app instead of only existing as a flat
-PNG. Round-trip verified pixel-exact (export -> import -> compare).
-
-Not yet wired into `gen_towers.py`'s output or `data/monsters.js` - no
-hand-drawn species exist yet, this is just the import/export tooling
-waiting for art.
-
-`UiKit.speciesSprite` is now the single place a player-species sprite gets
+`UiKit.speciesSprite` is the single place a player-species sprite gets
 built, so all six screens that show a monster (battle bench + placed
 towers, roster, gacha reveal, and the raid squad/defender/detail views)
 animate it identically instead of each re-deciding. It sizes by **final
 on-screen pixels** rather than a scale multiplier, because the animated
-path is 16px native and the fallback is 56px - a shared scale number would
-render them at wildly different sizes on the same screen. Species carrying
-a `towerIndex` get the animated sheet and its idle loop; anything without
-one still renders as a static frame off the old Retromon sheets, so a
-species added later without new art degrades to the old look instead of
-rendering nothing.
+paths have different native frame sizes (16px on `TOWER_SHEET`, 32px on
+`TOWER_BIG_SHEET`, 56px for the static fallback) and a shared scale number
+would render them at wildly different sizes on the same screen. Species
+carrying a `towerIndex` get the animated sheet and its idle loop; anything
+without one still renders as a static frame off the old Retromon sheets,
+so a species added later without new art degrades to the old look instead
+of rendering nothing.
 
 Placed towers also **turn to face what they're shooting**
 (`BattleScene.faceAllyToward`), reusing the per-facing rows the sheet
@@ -263,13 +265,17 @@ its own row. The idle loop deliberately runs slower than the enemies' walk
 cycle (4fps vs 6): a tower is standing still, so it should read as an idle
 breath, not a march in place.
 
-Verified in a real browser: all 54 species/evolved forms resolve to a real
-texture with all 3 facing anims registered (no gaps, 54 unique indices),
-the roster screen renders every one distinctly, evolving a base species
-twice (base -> mid -> final) walks the whole chain and lands on the
-intended final id for all 18 lines, every gacha-pool species is reachable
-from the standard banner, a live wave with placed towers scored a real
-kill, an ally's facing was observed flipping from `down` to `side`
+Verified in Node (`monsters.js` evaluated standalone, not a browser pass -
+see below): all 99 species/evolved forms have a unique `towerIndex`
+spanning 0-98 with no gaps or duplicates, and every `EVOLUTION_MAP` target
+resolves to a real species id. Verified in a real browser before the
+hand-authored set was first added: all 54 pack species/evolved forms
+resolve to a real texture with all 3 facing anims registered, the roster
+screen renders every one distinctly, evolving a base species twice
+(base -> mid -> final) walks the whole chain and lands on the intended
+final id for all 18 lines, every gacha-pool species is reachable from the
+standard banner, a live wave with placed towers scored a real kill, an
+ally's facing was observed flipping from `down` to `side`
 mid-combat, and the gacha reveal tween lands at exactly its previous
 112px size on the animated path.
 

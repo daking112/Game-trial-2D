@@ -37,19 +37,22 @@ function enemyAnimKey(sheetKey, enemyIndex, direction) {
   return `${sheetKey}-${enemyIndex}-${direction}`;
 }
 
-// Player species / tower sprites: the "Monster Evolution Sprites" pack by
-// the Pixel Fantasy author (https://pixel-fantasy.itch.io/ - editable and
-// usable in commercial and non-commercial projects, not resellable; see
-// the LICENSE.txt inside assets/Monster-Evolution-Sprites-1.2.zip).
-// scripts/gen_towers.py builds assets/towers/towers.png from it.
+// Player species / tower sprites: 18 lines are the "Monster Evolution
+// Sprites" pack by the Pixel Fantasy author (https://pixel-fantasy.itch.io/
+// - editable and usable in commercial and non-commercial projects, not
+// resellable; see the LICENSE.txt inside assets/Monster-Evolution-
+// Sprites-1.2.zip). The other 9 lines are hand-authored pixel art (see
+// scripts/custom_tower_art.py and custom_tower_art2.py/3.py) built to match
+// that pack's style (16px cells, compact silhouette, big 2px eyes) and
+// used to fill out type/rarity combinations the pack alone didn't cover.
+// scripts/gen_towers.py builds assets/towers/towers.png from both sources.
 //
-// The pack ships 18 three-stage evolution lines and this game's species
-// are organised into matching three-stage chains - base (SPECIES,
+// Every one of the 27 lines is a real three-stage chain - base (SPECIES,
 // gacha-catchable) -> mid -> final (both in EVOLVED_SPECIES, reached only
 // via GameState.evolveMonster) - so evolving a monster twice visibly grows
 // the same creature up instead of swapping to an unrelated sprite (see
-// gen_towers.py's LINE_ASSIGNMENTS). towerIndex picks the monster's block
-// on the built sheet; 3 facings x 3 frames each.
+// gen_towers.py's LINE_ASSIGNMENTS / ALL_CUSTOM_MONSTERS). towerIndex picks
+// the monster's block on the built sheet; 3 facings x 3 frames each.
 const TOWER_SHEET = 'towers';
 // Original (not pack-derived) species get native 32px art instead of the
 // pack's 16px - same "bigger native art, not a bigger scale" pattern as
@@ -115,7 +118,44 @@ const SPECIES = [
   // -- Legendary --
   { id: 'frostmaw', name: 'Frostmaw', type: 'WATER', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 30, maxHp: 70, attack: 18, range: 3.6, attackIntervalMs: 700, cost: 80 },
   { id: 'goldwasp', name: 'Goldwasp', type: 'ELECTRIC', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 42, maxHp: 55, attack: 22, range: 3.6, attackIntervalMs: 550, cost: 80 },
-  { id: 'ogglord', name: 'Ogglord', type: 'GRASS', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 12, maxHp: 65, attack: 20, range: 3.6, attackIntervalMs: 650, cost: 80 }
+  { id: 'ogglord', name: 'Ogglord', type: 'GRASS', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 12, maxHp: 65, attack: 20, range: 3.6, attackIntervalMs: 650, cost: 80 },
+
+  // -- Species on hand-authored art (see scripts/custom_tower_art.py) --
+  // Added to fill the thinnest cells of the gacha table rather than for
+  // their own sake: ELECTRIC and FIRE each had exactly one non-legendary
+  // catchable, GRASS had no EPIC at all, and NORMAL had no COMMON - so a
+  // type-restricted banner in those types was a near-guaranteed outcome
+  // rather than a real weighted pull (the same gap Big Pack 2 was opened
+  // for). Stats sit inside the existing per-rarity bands.
+  { id: 'mothling', name: 'Mothling', type: 'NORMAL', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 63, maxHp: 20, attack: 7, range: 1.9, attackIntervalMs: 700, cost: 20 },
+  { id: 'zapling', name: 'Zapling', type: 'ELECTRIC', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 54, maxHp: 22, attack: 8, range: 2.2, attackIntervalMs: 640, cost: 35 },
+  { id: 'emberimp', name: 'Emberimp', type: 'FIRE', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 57, maxHp: 26, attack: 9, range: 2.2, attackIntervalMs: 680, cost: 35 },
+  { id: 'thornshell', name: 'Thornshell', type: 'GRASS', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 60, maxHp: 58, attack: 11, range: 2.6, attackIntervalMs: 800, cost: 55 },
+
+  // -- Species on hand-authored art (see scripts/custom_tower_art2.py) --
+  // Batch 2: fills every type/rarity cell still empty after batch 1 above
+  // (WATER/EPIC, EARTH/LEGENDARY, FIRE/LEGENDARY, NORMAL/LEGENDARY,
+  // ELECTRIC/EPIC), designed against the same type/rarity table rather than
+  // for their own sake - these are meant to sit alongside the original pack
+  // roster, not replace any of it.
+  { id: 'dewdrip', name: 'Dewdrip', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 66, maxHp: 44, attack: 12, range: 2.8, attackIntervalMs: 750, cost: 55 },
+  { id: 'pebblet', name: 'Pebblet', type: 'EARTH', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 69, maxHp: 68, attack: 16, range: 3.6, attackIntervalMs: 720, cost: 80 },
+  { id: 'pyrelet', name: 'Pyrelet', type: 'FIRE', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 72, maxHp: 60, attack: 23, range: 3.6, attackIntervalMs: 540, cost: 80 },
+  { id: 'chimeling', name: 'Chimeling', type: 'NORMAL', rarity: 'LEGENDARY', sheetKey: TOWER_SHEET, towerIndex: 75, maxHp: 62, attack: 19, range: 3.8, attackIntervalMs: 680, cost: 80 },
+  { id: 'sparkmote', name: 'Sparkmote', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 78, maxHp: 40, attack: 15, range: 2.8, attackIntervalMs: 560, cost: 55 },
+
+  // -- Species on hand-authored art (see scripts/custom_tower_art3.py) --
+  // Batch 3: by now every type/rarity cell already had a catchable species,
+  // so this batch instead rounds out the thinnest remaining cell of each
+  // type (one more at FIRE/COMMON, WATER/COMMON, GRASS/RARE,
+  // ELECTRIC/COMMON, EARTH/RARE, NORMAL/EPIC) so every type has real pull
+  // variety at more than one rarity rather than a single guaranteed catch.
+  { id: 'emberadder', name: 'Emberadder', type: 'FIRE', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 81, maxHp: 22, attack: 9, range: 1.7, attackIntervalMs: 660, cost: 20 },
+  { id: 'tadpip', name: 'Tadpip', type: 'WATER', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 84, maxHp: 20, attack: 6, range: 1.7, attackIntervalMs: 780, cost: 20 },
+  { id: 'petaline', name: 'Petaline', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 87, maxHp: 26, attack: 8, range: 2.3, attackIntervalMs: 720, cost: 35 },
+  { id: 'voltmouse', name: 'Voltmouse', type: 'ELECTRIC', rarity: 'COMMON', sheetKey: TOWER_SHEET, towerIndex: 90, maxHp: 18, attack: 8, range: 1.6, attackIntervalMs: 620, cost: 20 },
+  { id: 'stonepup', name: 'Stonepup', type: 'EARTH', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 93, maxHp: 34, attack: 7, range: 2.2, attackIntervalMs: 820, cost: 35 },
+  { id: 'wisplet', name: 'Wisplet', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 96, maxHp: 48, attack: 13, range: 2.7, attackIntervalMs: 760, cost: 55 }
 ];
 
 // Granted to a brand-new player (empty roster) so there's something to place
@@ -136,7 +176,7 @@ const STARTER_SPECIES_IDS = ['rollpup', 'snarlpup', 'hornlet'];
 // enemy entries in getEnemySpecies() lookups. Every mid-tier form is RARE
 // and every final form is EPIC, regardless of the base species' own
 // rarity - a fixed "evolved tier" bucket rather than inherited rarity, kept
-// consistent across all 18 lines. Mid-tier stats are the base/final
+// consistent across all 27 lines. Mid-tier stats are the base/final
 // midpoint (rounded); mid-tier keeps the base species' type even on lines
 // where the final form changes type (see Rollodon below), since the type
 // change is itself part of what makes reaching the final stage a payoff.
@@ -177,6 +217,35 @@ const EVOLVED_SPECIES = [
   { id: 'oggtitan_mid', name: 'Oggtitan', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 13, maxHp: 87, attack: 27, range: 3.8, attackIntervalMs: 615, cost: 135 },
   { id: 'oggmonarch_evo', name: 'Oggmonarch', type: 'GRASS', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 14, maxHp: 108, attack: 33, range: 4.0, attackIntervalMs: 580, cost: 190 },
 
+  // Evolved forms of the hand-authored species above (batch 1, see
+  // custom_tower_art.py) - same pairing rule as every other line: each
+  // stage is the same creature grown up (Zapling's spark-chick sprouts
+  // storm wings as Zapfowl then becomes the fully-formed Voltvern,
+  // Mothling's wings widen into Duskwing then the moonlit Lunamoth), not an
+  // unrelated monster.
+  { id: 'duskwing_mid', name: 'Duskwing', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 64, maxHp: 32, attack: 10, range: 2.3, attackIntervalMs: 670, cost: 40 },
+  { id: 'lunamoth_evo', name: 'Lunamoth', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 65, maxHp: 44, attack: 13, range: 2.6, attackIntervalMs: 640, cost: 60 },
+  { id: 'zapfowl_mid', name: 'Zapfowl', type: 'ELECTRIC', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 55, maxHp: 31, attack: 12, range: 2.5, attackIntervalMs: 600, cost: 63 },
+  { id: 'voltvern_evo', name: 'Voltvern', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 56, maxHp: 40, attack: 15, range: 2.8, attackIntervalMs: 560, cost: 90 },
+  { id: 'emberbrute_mid', name: 'Emberbrute', type: 'FIRE', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 58, maxHp: 37, attack: 13, range: 2.4, attackIntervalMs: 640, cost: 63 },
+  { id: 'cinderfiend_evo', name: 'Cinderfiend', type: 'FIRE', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 59, maxHp: 48, attack: 17, range: 2.6, attackIntervalMs: 600, cost: 90 },
+  { id: 'thornguard_mid', name: 'Thornguard', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 61, maxHp: 77, attack: 15, range: 2.8, attackIntervalMs: 770, cost: 93 },
+  { id: 'bramblemaw_evo', name: 'Bramblemaw', type: 'GRASS', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 62, maxHp: 96, attack: 19, range: 3.0, attackIntervalMs: 740, cost: 130 },
+
+  // Evolved forms of the hand-authored species above (batch 2, see
+  // custom_tower_art2.py) - fills the last empty type/rarity gacha cells,
+  // same 3-stage pairing rule as every other line.
+  { id: 'tidebell_mid', name: 'Tidebell', type: 'WATER', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 67, maxHp: 71, attack: 20, range: 3.0, attackIntervalMs: 675, cost: 93 },
+  { id: 'maelstrom_evo', name: 'Maelstrom', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 68, maxHp: 98, attack: 27, range: 3.2, attackIntervalMs: 600, cost: 130 },
+  { id: 'cragfist_mid', name: 'Cragfist', type: 'EARTH', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 70, maxHp: 97, attack: 24, range: 3.8, attackIntervalMs: 690, cost: 135 },
+  { id: 'terralith_evo', name: 'Terralith', type: 'EARTH', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 71, maxHp: 125, attack: 32, range: 4.0, attackIntervalMs: 660, cost: 190 },
+  { id: 'blazeplume_mid', name: 'Blazeplume', type: 'FIRE', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 73, maxHp: 78, attack: 32, range: 3.7, attackIntervalMs: 500, cost: 135 },
+  { id: 'solaris_evo', name: 'Solaris', type: 'FIRE', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 74, maxHp: 95, attack: 40, range: 3.8, attackIntervalMs: 460, cost: 190 },
+  { id: 'tollward_mid', name: 'Tollward', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 76, maxHp: 90, attack: 25, range: 4.0, attackIntervalMs: 660, cost: 135 },
+  { id: 'carillon_evo', name: 'Carillon', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 77, maxHp: 118, attack: 30, range: 4.2, attackIntervalMs: 640, cost: 190 },
+  { id: 'arcnode_mid', name: 'Arcnode', type: 'ELECTRIC', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 79, maxHp: 63, attack: 23, range: 3.1, attackIntervalMs: 520, cost: 93 },
+  { id: 'tesladon_evo', name: 'Tesladon', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 80, maxHp: 85, attack: 30, range: 3.4, attackIntervalMs: 480, cost: 130 },
+
   // Retromon Big Pack 2 (RETROMON2_SHEET) - see the comment by its
   // definition above. Frames verified by eye against the actual sheet
   // (public/assets/retromon/big-pack-2.png), each evolved frame chosen as
@@ -189,7 +258,22 @@ const EVOLVED_SPECIES = [
   { id: 'bisonrage_mid', name: 'Bisonrage', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 7, maxHp: 51, attack: 11, range: 2.4, attackIntervalMs: 790, cost: 63 },
   { id: 'bisonlord_evo', name: 'Bisonlord', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 8, maxHp: 66, attack: 15, range: 2.6, attackIntervalMs: 780, cost: 90 },
   { id: 'tidespirit_mid', name: 'Tidespirit', type: 'WATER', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 52, maxHp: 37, attack: 13, range: 2.5, attackIntervalMs: 690, cost: 63 },
-  { id: 'tidewraith_evo', name: 'Tidewraith', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 53, maxHp: 50, attack: 18, range: 2.8, attackIntervalMs: 680, cost: 90 }
+  { id: 'tidewraith_evo', name: 'Tidewraith', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 53, maxHp: 50, attack: 18, range: 2.8, attackIntervalMs: 680, cost: 90 },
+
+  // Evolved forms of the hand-authored species above (batch 3, see
+  // custom_tower_art3.py) - same 3-stage pairing rule as every other line.
+  { id: 'cinderviper_mid', name: 'Cinderviper', type: 'FIRE', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 82, maxHp: 34, attack: 14, range: 2.2, attackIntervalMs: 610, cost: 40 },
+  { id: 'infernasp_evo', name: 'Infernasp', type: 'FIRE', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 83, maxHp: 46, attack: 19, range: 2.6, attackIntervalMs: 560, cost: 60 },
+  { id: 'ripplefin_mid', name: 'Ripplefin', type: 'WATER', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 85, maxHp: 31, attack: 9, range: 2.2, attackIntervalMs: 730, cost: 40 },
+  { id: 'tsunarine_evo', name: 'Tsunarine', type: 'WATER', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 86, maxHp: 42, attack: 12, range: 2.6, attackIntervalMs: 680, cost: 60 },
+  { id: 'petalguard_mid', name: 'Petalguard', type: 'GRASS', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 88, maxHp: 36, attack: 12, range: 2.6, attackIntervalMs: 660, cost: 62 },
+  { id: 'bloomqueen_evo', name: 'Bloomqueen', type: 'GRASS', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 89, maxHp: 46, attack: 15, range: 3.0, attackIntervalMs: 600, cost: 90 },
+  { id: 'amperat_mid', name: 'Amperat', type: 'ELECTRIC', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 91, maxHp: 28, attack: 12, range: 2.0, attackIntervalMs: 570, cost: 40 },
+  { id: 'galvatail_evo', name: 'Galvatail', type: 'ELECTRIC', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 92, maxHp: 38, attack: 16, range: 2.4, attackIntervalMs: 520, cost: 60 },
+  { id: 'boulderhound_mid', name: 'Boulderhound', type: 'EARTH', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 94, maxHp: 48, attack: 11, range: 2.5, attackIntervalMs: 770, cost: 62 },
+  { id: 'granitewolf_evo', name: 'Granitewolf', type: 'EARTH', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 95, maxHp: 62, attack: 15, range: 2.8, attackIntervalMs: 720, cost: 90 },
+  { id: 'phantorb_mid', name: 'Phantorb', type: 'NORMAL', rarity: 'RARE', sheetKey: TOWER_SHEET, towerIndex: 97, maxHp: 68, attack: 18, range: 3.0, attackIntervalMs: 700, cost: 92 },
+  { id: 'spectralord_evo', name: 'Spectralord', type: 'NORMAL', rarity: 'EPIC', sheetKey: TOWER_SHEET, towerIndex: 98, maxHp: 88, attack: 24, range: 3.4, attackIntervalMs: 640, cost: 130 }
 ];
 
 // speciesId -> speciesId it evolves into. Only species listed here (as a
@@ -217,7 +301,22 @@ const EVOLUTION_MAP = {
   boltbee: 'boltdrone_mid', boltdrone_mid: 'boltswarm_evo',
   shellcrab: 'shellguard_mid', shellguard_mid: 'shellclaw_evo',
   calfrage: 'bisonrage_mid', bisonrage_mid: 'bisonlord_evo',
-  tidewisp: 'tidespirit_mid', tidespirit_mid: 'tidewraith_evo'
+  tidewisp: 'tidespirit_mid', tidespirit_mid: 'tidewraith_evo',
+  mothling: 'duskwing_mid', duskwing_mid: 'lunamoth_evo',
+  zapling: 'zapfowl_mid', zapfowl_mid: 'voltvern_evo',
+  emberimp: 'emberbrute_mid', emberbrute_mid: 'cinderfiend_evo',
+  thornshell: 'thornguard_mid', thornguard_mid: 'bramblemaw_evo',
+  dewdrip: 'tidebell_mid', tidebell_mid: 'maelstrom_evo',
+  pebblet: 'cragfist_mid', cragfist_mid: 'terralith_evo',
+  pyrelet: 'blazeplume_mid', blazeplume_mid: 'solaris_evo',
+  chimeling: 'tollward_mid', tollward_mid: 'carillon_evo',
+  sparkmote: 'arcnode_mid', arcnode_mid: 'tesladon_evo',
+  emberadder: 'cinderviper_mid', cinderviper_mid: 'infernasp_evo',
+  tadpip: 'ripplefin_mid', ripplefin_mid: 'tsunarine_evo',
+  petaline: 'petalguard_mid', petalguard_mid: 'bloomqueen_evo',
+  voltmouse: 'amperat_mid', amperat_mid: 'galvatail_evo',
+  stonepup: 'boulderhound_mid', boulderhound_mid: 'granitewolf_evo',
+  wisplet: 'phantorb_mid', phantorb_mid: 'spectralord_evo'
 };
 
 // Monster Essence needed (on top of being at MAX_MONSTER_LEVEL) to evolve.
