@@ -142,6 +142,81 @@ function terrainMakeTexture(canvas, repeatX, repeatY) {
   return tex;
 }
 
+// Non-repeating variant for a texture meant to be mapped 1:1 across a whole
+// mesh (the path overlay, below) rather than tiled - clamped, not repeated.
+function terrainMakeClampTexture(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// A second, much-coarser ground variation layer: a handful of big blocky
+// lighter/darker patches, alpha-blended over the speckle tile, to break up
+// its visible repeat rhythm at wide pull-back. Deliberately NOT a repeating
+// tile (a small tile repeated at a coarse scale just produces a second,
+// bigger checkerboard, no better than the one it's fixing) - instead this
+// draws directly, once, at random world-space positions across the WHOLE
+// grid's extent, the same way the path overlay above avoids tiling.
+function terrainMakeGroundMacroCanvas(totalCols, totalRows, seed) {
+  const sub = 6; // coarse subpixels per cell - this layer is soft/low-detail
+  const W = totalCols * sub, H = totalRows * sub;
+  const cvs = document.createElement('canvas');
+  cvs.width = W; cvs.height = H;
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const rand = terrainMulberry32(seed);
+  const patchCount = 10;
+  for (let i = 0; i < patchCount; i++) {
+    const light = rand() < 0.5;
+    ctx.fillStyle = light ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
+    const w = Math.floor(W * (0.16 + rand() * 0.2));
+    const h = Math.floor(H * (0.16 + rand() * 0.2));
+    const x = Math.floor(rand() * W - w * 0.4);
+    const y = Math.floor(rand() * H - h * 0.4);
+    ctx.fillRect(x, y, w, h);
+  }
+  return cvs;
+}
+
+// ---- small color helpers for the path-overlay raster below ----
+function terrainHexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) };
+}
+function terrainShadeHex(hex, factor) {
+  const { r, g, b } = terrainHexToRgb(hex);
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  return { r: clamp(r * factor), g: clamp(g * factor), b: clamp(b * factor) };
+}
+// Deterministic integer-coordinate hash -> [0,1), used to drive the boundary
+// bite/dilate noise and the world-space (non-tiled) speckle color picks.
+function terrainHash2D(x, y, salt) {
+  let h = (x * 374761393 + y * 668265263 + salt * 2246822519) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
+// Approximates each speckle color's area-share of the original small tile
+// (count * average-size^2 / tile-area), so a per-pixel weighted pick can
+// stand in for the literal tiny-tile stamping and still look right.
+function terrainSpeckleWeights(speckles, tileSize) {
+  return speckles.map(([color, count, smin, smax]) => {
+    const avgSide = (smin + smax) / 2;
+    const weight = Math.min(0.9, (count * avgSide * avgSide) / (tileSize * tileSize));
+    return { rgb: terrainHexToRgb(color), weight };
+  });
+}
+function terrainPickWeighted(entries, baseRgb, r) {
+  let acc = 0;
+  for (const e of entries) { acc += e.weight; if (r < acc) return e.rgb; }
+  return baseRgb;
+}
+
 // ---- pixel-art decoration sprites (procedurally drawn, hard-edged blocks) ----
 
 // Three-tier pine tree, drawn on an integer pixel grid (no anti-aliased
@@ -214,6 +289,144 @@ function terrainMakeBushCanvas(px) {
       put(x, y, color);
     }
   }
+  return cvs;
+}
+
+// Rasterize the path cells into one canvas-drawn alpha mask covering the
+// WHOLE grid (not a tile stamped per cell), so the road reads as a single
+// walked-in road instead of a brown rectangle mask fill:
+//  - the cell-rectangle boundary is bitten/dilated a few subpixels in and
+//    out with per-pixel noise (no knife-edge straight line),
+//  - the path shape's outer (convex) corners are rounded off instead of
+//    staying hard 90 deg miters,
+//  - a 1-2 subpixel darker "worn rim" band is drawn just inside the edge,
+//  - a scatter of grass-tuft blocks spill onto the dirt right at that rim,
+//  - the dirt speckle color itself is picked per small clump from a
+//    world-space hash of its raster position (not a repeated small tile),
+//  so the pebble pattern never repeats down a straight run of path.
+function terrainBuildPathOverlayCanvas(b, pathSet, cols, rows, margin, seed) {
+  const R = 16;      // mask subpixels per grid cell (edge-detail resolution)
+  const BAND = 4;     // how many subpixels deep the boundary may bite/dilate
+  const BLOCK_EDGE = 4; // along-edge chunk size, in subpixels - the whole
+                         // chunk gets one graded bite depth, so the ragged
+                         // edge reads as a few chunky irregular teeth (like a
+                         // worn-in path) instead of per-pixel static noise
+  const CORNER_R = 5; // outer-corner rounding radius, in subpixels
+  const RIM_DEPTH = 2; // worn-rim band depth, in subpixels
+  const BLOCK = 3;    // speckle "clump" size in subpixels (keeps noise
+                       // blocky/pixel-art rather than per-pixel static)
+  const totalCols = cols + margin * 2;
+  const totalRows = rows + margin * 2;
+  const W = totalCols * R, H = totalRows * R;
+
+  const isPath = (c, r) => pathSet.has(c + ',' + r);
+  const colOf = (px) => Math.floor(px / R) - margin;
+  const rowOf = (py) => Math.floor(py / R) - margin;
+
+  // Pass 1: base rectangular cell occupancy, then bite/dilate the boundary.
+  // The bite depth is decided once per BLOCK_EDGE-wide chunk along a given
+  // straight edge run (keyed on the edge's fixed cell coordinate, so it
+  // stays continuous along that run and independent from other, unrelated
+  // boundary runs) rather than per subpixel, so the result is a handful of
+  // graded, irregular-depth notches - not salt-and-pepper fuzz.
+  const occ = new Uint8Array(W * H);
+  for (let py = 0; py < H; py++) {
+    const cr = rowOf(py), ly = py - (cr + margin) * R;
+    for (let px = 0; px < W; px++) {
+      const cc = colOf(px), lx = px - (cc + margin) * R;
+      let o = isPath(cc, cr) ? 1 : 0;
+      const dLeft = lx, dRight = R - 1 - lx, dTop = ly, dBottom = R - 1 - ly;
+      const edgeDist = Math.min(dLeft, dRight, dTop, dBottom);
+      // Corner zones (near a cell's actual corner) are left alone here and
+      // handled exclusively by the dedicated corner-rounding pass below -
+      // letting both passes act on the same pixels compounded into long
+      // diagonal spike artifacts rather than a clean rounded corner.
+      const inCornerZone = (lx < CORNER_R || lx >= R - CORNER_R) && (ly < CORNER_R || ly >= R - CORNER_R);
+      if (edgeDist < BAND && !inCornerZone) {
+        let nc = cc, nr = cr, alongBlock, otherCoord, edgeSide;
+        if (edgeDist === dLeft) { nc = cc - 1; alongBlock = Math.floor(py / BLOCK_EDGE); otherCoord = cc; edgeSide = 1; }
+        else if (edgeDist === dRight) { nc = cc + 1; alongBlock = Math.floor(py / BLOCK_EDGE); otherCoord = cc; edgeSide = 2; }
+        else if (edgeDist === dTop) { nr = cr - 1; alongBlock = Math.floor(px / BLOCK_EDGE); otherCoord = cr; edgeSide = 3; }
+        else { nr = cr + 1; alongBlock = Math.floor(px / BLOCK_EDGE); otherCoord = cr; edgeSide = 4; }
+        const neighborPath = isPath(nc, nr);
+        if (neighborPath !== !!o) {
+          const n = terrainHash2D(alongBlock, otherCoord, b.pathSeed + seed * 97 + edgeSide * 17 + 11);
+          const biteDepth = Math.floor(n * (BAND + 1)); // 0..BAND, graded per chunk
+          if (edgeDist < biteDepth) o = neighborPath ? 1 : 0;
+        }
+      }
+      occ[py * W + px] = o;
+    }
+  }
+
+  // Pass 2: round the path shape's outer (convex) corners - where a path
+  // cell's two orthogonal neighbors are both non-path (a turn or a dead
+  // end), cut a blocky quarter-circle notch instead of a hard miter.
+  for (let py = 0; py < H; py++) {
+    const cr = rowOf(py), ly = py - (cr + margin) * R;
+    for (let px = 0; px < W; px++) {
+      if (!occ[py * W + px]) continue;
+      const cc = colOf(px), lx = px - (cc + margin) * R;
+      const nearLeft = lx < CORNER_R, nearRight = lx >= R - CORNER_R;
+      const nearTop = ly < CORNER_R, nearBottom = ly >= R - CORNER_R;
+      let cx = -1, cy = -1;
+      if (nearLeft && nearTop && !isPath(cc - 1, cr) && !isPath(cc, cr - 1)) { cx = CORNER_R - 1 - lx; cy = CORNER_R - 1 - ly; }
+      else if (nearRight && nearTop && !isPath(cc + 1, cr) && !isPath(cc, cr - 1)) { cx = lx - (R - CORNER_R); cy = CORNER_R - 1 - ly; }
+      else if (nearLeft && nearBottom && !isPath(cc - 1, cr) && !isPath(cc, cr + 1)) { cx = CORNER_R - 1 - lx; cy = ly - (R - CORNER_R); }
+      else if (nearRight && nearBottom && !isPath(cc + 1, cr) && !isPath(cc, cr + 1)) { cx = lx - (R - CORNER_R); cy = ly - (R - CORNER_R); }
+      if (cx >= 0 && cy >= 0 && cx * cx + cy * cy > CORNER_R * CORNER_R) occ[py * W + px] = 0;
+    }
+  }
+
+  // Pass 3: worn rim = occupied subpixel within RIM_DEPTH of an unoccupied one.
+  const rim = new Uint8Array(W * H);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      if (!occ[py * W + px]) continue;
+      let isRim = false;
+      for (let dy = -RIM_DEPTH; dy <= RIM_DEPTH && !isRim; dy++) {
+        const ny = py + dy;
+        if (ny < 0 || ny >= H) { isRim = true; break; }
+        for (let dx = -RIM_DEPTH; dx <= RIM_DEPTH; dx++) {
+          const nx = px + dx;
+          if (nx < 0 || nx >= W || !occ[ny * W + nx]) { isRim = true; break; }
+        }
+      }
+      rim[py * W + px] = isRim ? 1 : 0;
+    }
+  }
+
+  // Pass 4: raster the actual colors.
+  const dirtWeights = terrainSpeckleWeights(b.pathSpeckles, 48);
+  const tuftRgb = terrainHexToRgb((b.groundSpeckles[1] && b.groundSpeckles[1][0]) || b.groundBase);
+  const baseRgb = terrainHexToRgb(b.pathBase);
+  const cvs = document.createElement('canvas');
+  cvs.width = W; cvs.height = H;
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const img = ctx.createImageData(W, H);
+  for (let py = 0; py < H; py++) {
+    const blockY = Math.floor(py / BLOCK);
+    for (let px = 0; px < W; px++) {
+      const i = (py * W + px) * 4;
+      if (!occ[py * W + px]) { img.data[i + 3] = 0; continue; }
+      const blockX = Math.floor(px / BLOCK);
+      const isRimPx = rim[py * W + px] === 1;
+      const tuftRoll = terrainHash2D(blockX, blockY, b.pathSeed + seed * 53 + 5);
+      let rgb;
+      if (isRimPx && tuftRoll < 0.05) {
+        rgb = tuftRgb; // a grass tuft spilling onto the dirt right at the edge
+      } else {
+        const speckleRoll = terrainHash2D(blockX, blockY, b.pathSeed + seed * 211 + 31);
+        rgb = terrainPickWeighted(dirtWeights, baseRgb, speckleRoll);
+        if (isRimPx) rgb = terrainShadeHex('#' +
+          rgb.r.toString(16).padStart(2, '0') + rgb.g.toString(16).padStart(2, '0') + rgb.b.toString(16).padStart(2, '0'),
+          0.76); // darker worn-rim band
+      }
+      img.data[i] = rgb.r; img.data[i + 1] = rgb.g; img.data[i + 2] = rgb.b; img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   return cvs;
 }
 
@@ -295,25 +508,53 @@ function buildTerrain(opts = {}) {
   ground.name = 'Ground';
   group.add(ground);
 
-  // ---- path: one small plane per path cell, laid slightly above ground ----
+  // ---- far ground skirt: a big flat low-detail plane well past the play
+  // field, so pulling the camera back reveals grass fading toward the fog/
+  // horizon color instead of the detailed ground ending in a hard slab edge
+  // against the sky. ----
+  const farColor = new THREE.Color(b.groundBase).multiplyScalar(0.92);
+  const farGeo = new THREE.PlaneGeometry(220, 220);
+  farGeo.rotateX(-Math.PI / 2);
+  const farMat = new THREE.MeshLambertMaterial({ color: farColor });
+  const farGround = new THREE.Mesh(farGeo, farMat);
+  farGround.position.y = -0.01;
+  farGround.name = 'FarGroundSkirt';
+  group.add(farGround);
+
+  // ---- ground macro variation: a second, much-coarser noise layer (a
+  // handful of big lighter/darker patches, alpha-blended) over the speckle
+  // tile so the ground doesn't resolve into an obvious repeating plaid grid
+  // at wide pull-back. Drawn once across the whole grid's world-space
+  // extent (not a small tile repeated), so it can't itself read as another,
+  // bigger repeating grid. ----
+  const macroCanvas = terrainMakeGroundMacroCanvas(totalCols, totalRows, b.groundSeed * 3 + 5);
+  const macroTex = terrainMakeClampTexture(macroCanvas);
+  const macroGeo = new THREE.PlaneGeometry(totalCols * cellSize, totalRows * cellSize);
+  macroGeo.rotateX(-Math.PI / 2);
+  const macroMat = new THREE.MeshBasicMaterial({ map: macroTex, transparent: true, depthWrite: false, toneMapped: false });
+  const macroMesh = new THREE.Mesh(macroGeo, macroMat);
+  macroMesh.position.y = 0.003;
+  macroMesh.name = 'GroundMacroVariation';
+  group.add(macroMesh);
+
+  // ---- path: one canvas-rasterized alpha-mask overlay covering the whole
+  // grid, instead of a stamped 1.02-cell quad per cell (see
+  // terrainBuildPathOverlayCanvas for why: that gave a knife-edge miter
+  // boundary and repeated the same 48px pebble tile every single cell). ----
   const pathSet = new Set(path.map(p => p.col + ',' + p.row));
   if (path.length) {
-    const pathCanvas = terrainMakeSpeckleTile(48, b.pathBase, b.pathSpeckles, b.pathSeed);
-    const pathTex = terrainMakeTexture(pathCanvas, 1, 1);
-    const pathMat = new THREE.MeshLambertMaterial({ map: pathTex });
-    // Slight overscale so adjacent path cells butt together with no hairline
-    // gap from floating-point cell-center placement.
-    const pathGeo = new THREE.PlaneGeometry(cellSize * 1.02, cellSize * 1.02);
+    const pathCanvas = terrainBuildPathOverlayCanvas(b, pathSet, cols, rows, margin, seed);
+    const pathTex = terrainMakeClampTexture(pathCanvas);
+    // alphaTest cutout (not blended transparency), same convention as
+    // PixelBillboard's sprites - a hard-edged mask with no z-sort seam.
+    const pathMat = new THREE.MeshLambertMaterial({ map: pathTex, alphaTest: 0.5, transparent: false });
+    const pathGeo = new THREE.PlaneGeometry(totalCols * cellSize, totalRows * cellSize);
     pathGeo.rotateX(-Math.PI / 2);
-    const pathGroup = new THREE.Group();
-    pathGroup.name = 'Path';
-    for (const cell of path) {
-      const m = new THREE.Mesh(pathGeo, pathMat);
-      m.position.set(cellToWorldX(cell.col), 0.008, cellToWorldZ(cell.row));
-      m.receiveShadow = true;
-      pathGroup.add(m);
-    }
-    group.add(pathGroup);
+    const pathMesh = new THREE.Mesh(pathGeo, pathMat);
+    pathMesh.position.y = 0.008;
+    pathMesh.receiveShadow = true;
+    pathMesh.name = 'Path';
+    group.add(pathMesh);
   }
 
   // ---- decorations: trees/bushes (billboards) + rocks (low-poly), margins only ----
@@ -340,6 +581,13 @@ function buildTerrain(opts = {}) {
       const wz = cellToWorldZ(row) + (rand() - 0.5) * cellSize * 0.5;
       const roll = rand();
       if (roll < 0.45) {
+        // shadow defaults to true, so this tree gets the same ground-contact
+        // blob shadow as every creature billboard (PixelBillboard.js) - it
+        // does NOT castShadow=true itself (a camera-facing plane has no
+        // lighting-stable normal to cast a real shadow from; see that
+        // file's header comment for the measured bug that fix replaced),
+        // which is why it looks different from the rocks below without
+        // being ungrounded.
         const h = 1.3 + rand() * 0.6;
         const bb = new PixelBillboard({ canvas: treeCanvas, frameCount: 1, worldHeight: h });
         if (b.decorTint != null) bb.mesh.material.color.setHex(b.decorTint);
