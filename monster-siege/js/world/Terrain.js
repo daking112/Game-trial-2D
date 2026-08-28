@@ -155,34 +155,6 @@ function terrainMakeClampTexture(canvas) {
   return tex;
 }
 
-// A second, much-coarser ground variation layer: a handful of big blocky
-// lighter/darker patches, alpha-blended over the speckle tile, to break up
-// its visible repeat rhythm at wide pull-back. Deliberately NOT a repeating
-// tile (a small tile repeated at a coarse scale just produces a second,
-// bigger checkerboard, no better than the one it's fixing) - instead this
-// draws directly, once, at random world-space positions across the WHOLE
-// grid's extent, the same way the path overlay above avoids tiling.
-function terrainMakeGroundMacroCanvas(totalCols, totalRows, seed) {
-  const sub = 6; // coarse subpixels per cell - this layer is soft/low-detail
-  const W = totalCols * sub, H = totalRows * sub;
-  const cvs = document.createElement('canvas');
-  cvs.width = W; cvs.height = H;
-  const ctx = cvs.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  const rand = terrainMulberry32(seed);
-  const patchCount = 10;
-  for (let i = 0; i < patchCount; i++) {
-    const light = rand() < 0.5;
-    ctx.fillStyle = light ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-    const w = Math.floor(W * (0.16 + rand() * 0.2));
-    const h = Math.floor(H * (0.16 + rand() * 0.2));
-    const x = Math.floor(rand() * W - w * 0.4);
-    const y = Math.floor(rand() * H - h * 0.4);
-    ctx.fillRect(x, y, w, h);
-  }
-  return cvs;
-}
-
 // ---- small color helpers for the path-overlay raster below ----
 function terrainHexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -520,22 +492,6 @@ function buildTerrain(opts = {}) {
   farGround.position.y = -0.01;
   farGround.name = 'FarGroundSkirt';
   group.add(farGround);
-
-  // ---- ground macro variation: a second, much-coarser noise layer (a
-  // handful of big lighter/darker patches, alpha-blended) over the speckle
-  // tile so the ground doesn't resolve into an obvious repeating plaid grid
-  // at wide pull-back. Drawn once across the whole grid's world-space
-  // extent (not a small tile repeated), so it can't itself read as another,
-  // bigger repeating grid. ----
-  const macroCanvas = terrainMakeGroundMacroCanvas(totalCols, totalRows, b.groundSeed * 3 + 5);
-  const macroTex = terrainMakeClampTexture(macroCanvas);
-  const macroGeo = new THREE.PlaneGeometry(totalCols * cellSize, totalRows * cellSize);
-  macroGeo.rotateX(-Math.PI / 2);
-  const macroMat = new THREE.MeshBasicMaterial({ map: macroTex, transparent: true, depthWrite: false, toneMapped: false });
-  const macroMesh = new THREE.Mesh(macroGeo, macroMat);
-  macroMesh.position.y = 0.003;
-  macroMesh.name = 'GroundMacroVariation';
-  group.add(macroMesh);
 
   // ---- path: one canvas-rasterized alpha-mask overlay covering the whole
   // grid, instead of a stamped 1.02-cell quad per cell (see
