@@ -22,16 +22,23 @@ class Engine {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap is deprecated in this three.js version and silently
+    // falls back to PCFShadowMap (confirmed by grepping the vendored build
+    // for its own deprecation-warning string) - VSMShadowMap is the actual
+    // current soft-shadow type.
+    this.renderer.shadowMap.type = THREE.VSMShadowMap;
     // No color-management smoothing tricks - keep output flat/crisp, matching
     // the pixel-art intent rather than a photoreal tone curve.
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.overflow = 'hidden';
+
     const canvas = this.renderer.domElement;
     canvas.style.imageRendering = 'pixelated';
     canvas.style.display = 'block';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
     container.appendChild(canvas);
 
     this._onResize = () => this.resize();
@@ -41,14 +48,24 @@ class Engine {
 
   resize() {
     const w = this.container.clientWidth, h = this.container.clientHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
     const internalW = Math.max(1, Math.round(w / this.pixelScale));
     const internalH = Math.max(1, Math.round(h / this.pixelScale));
-    // false = don't touch the canvas's CSS size, only its backing-buffer
-    // resolution - this is the whole trick.
+    this.camera.aspect = internalW / internalH;
+    this.camera.updateProjectionMatrix();
+    // false = don't touch the canvas's CSS size here, only its backing-buffer
+    // resolution - this is the whole trick. The CSS size is set explicitly
+    // right after, to an EXACT integer multiple of the internal resolution
+    // (internalW * pixelScale, not the raw container size) - otherwise the
+    // upscale ratio isn't a clean integer and the browser's nearest-neighbor
+    // scaling produces unevenly-sized pixel blocks (some rows/columns 1px
+    // wider than others). A few CSS pixels of letterboxing (from the
+    // flex-centered container set up in the constructor) is the trade-off,
+    // and is invisible in practice.
     this.renderer.setSize(internalW, internalH, false);
     this.renderer.setPixelRatio(1); // device pixel ratio would defeat the low-res trick
+    const canvas = this.renderer.domElement;
+    canvas.style.width = (internalW * this.pixelScale) + 'px';
+    canvas.style.height = (internalH * this.pixelScale) + 'px';
   }
 
   onUpdate(fn) { this.updateFns.push(fn); }

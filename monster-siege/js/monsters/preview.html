@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SpeciesArt preview</title>
+<style>
+  body { background:#20242a; color:#eee; font-family: sans-serif; display:flex; flex-wrap:wrap; gap:24px; padding:24px; }
+  .card { background:#2b3038; padding:12px; border-radius:8px; }
+  canvas { image-rendering: pixelated; background:#4a7a3a; display:block; }
+  h3 { margin:4px 0; }
+</style>
+</head>
+<body>
+<script src="SpeciesArt.js"></script>
+<script>
+  const PX = 10; // big preview scale
+  const builders = [
+    ['ramhorn', SpeciesArt.buildRamhorn],
+    ['emberwing', SpeciesArt.buildEmberwing],
+    ['coilfang', SpeciesArt.buildCoilfang],
+    ['sporeling', SpeciesArt.buildSporeling],
+  ];
+  for (const [id, fn] of builders) {
+    const species = fn();
+    const card = document.createElement('div');
+    card.className = 'card';
+    const h = document.createElement('h3');
+    h.textContent = `${species.id} (${species.archetype}) — ${species.width}x${species.height}, ${species.frames.length} frames`;
+    card.appendChild(h);
+    const strip = SpeciesArt.buildSpeciesCanvas(species, PX);
+    card.appendChild(strip);
+    // also an animated single-frame canvas to eyeball the cycle
+    const animCvs = document.createElement('canvas');
+    animCvs.width = species.width * PX;
+    animCvs.height = species.height * PX;
+    const actx = animCvs.getContext('2d');
+    actx.imageSmoothingEnabled = false;
+    let f = 0;
+    setInterval(() => {
+      actx.clearRect(0, 0, animCvs.width, animCvs.height);
+      actx.drawImage(strip, f * species.width * PX, 0, species.width * PX, species.height * PX, 0, 0, species.width * PX, species.height * PX);
+      f = (f + 1) % species.frames.length;
+    }, 220);
+    card.appendChild(animCvs);
+    document.body.appendChild(card);
+  }
+  window.__ready = true;
+</script>
+</body>
+</html>
