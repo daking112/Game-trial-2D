@@ -216,7 +216,7 @@ function buildRamhorn() {
   const K = 'K'; // outline
   // body tones: c = light highlight (top/head), a = mid (main coat),
   // b = dark shade (lower body/shadow side), h = horn, e = belly/muzzle,
-  // wE = eye white, pE = pupil
+  // W = eye white, P = pupil
   const palette = {
     K: '#141018', a: '#6a9944', b: '#446b2a', c: '#8fc45f',
     h: '#e8dcb0', e: '#e3d9a8', f: '#3a2c18',
@@ -340,7 +340,7 @@ function buildEmberwing() {
     acc[3][15] = 'W'; acc[3][14] = 'P';
     // chest marking
     for (let y = 6; y <= 9; y++) { acc[y][CENTER - 1] = 'd'; acc[y][CENTER] = 'd'; }
-    // legs: short stubby pair at bottom of torso, row9-10 area (hw=5 -> x0=8,x1=12 at row9... recompute)
+    // legs: short stubby pair at bottom of torso, row9-10 area
     const e9 = edge(9);
     acc[10][e9.x0 + 1] = 'a'; acc[11][e9.x0 + 1] = 'a'; acc[11][e9.x0] = 'b';
     acc[10][e9.x1 - 1] = 'a'; acc[11][e9.x1 - 1] = 'a'; acc[11][e9.x1] = 'b';
@@ -353,29 +353,36 @@ function buildEmberwing() {
     const rootY = 6, rootEdge = edge(rootY);
     const rootL = rootEdge.x0, rootR = rootEdge.x1;
     const wingSpan = 7; // how far the tip reaches from the root
+    // Wing membrane, filled per-column rather than traced as a 1px ray: an
+    // earlier version drew a single diagonal-stepping line and patched the
+    // diagonal joints with bridge pixels, but even bridged it still read as
+    // a thin twig, not a wing (visually confirmed by rendering it - the
+    // exact "thin/fragile floating appendage" anti-pattern the brief calls
+    // out). Filling each column down to where the NEXT column starts is
+    // both simpler and provably connected: column i's row-run always
+    // includes round(yCenter(i+1)), and column i+1's run always includes
+    // that same row too, so every adjacent pair of columns shares a row -
+    // no diagonal joints to bridge in the first place.
     const drawWing = (side, tipDy) => {
       // side: -1 left, +1 right. tipDy: row offset of the tip relative to root (negative = up)
       const rootX = side < 0 ? rootL : rootR;
       const dir = side;
-      let prevX = rootX, prevY = rootY;
+      const yCenterAt = i => rootY + (tipDy * i) / wingSpan;
       for (let i = 0; i <= wingSpan; i++) {
         const x = rootX + dir * i;
-        const y = rootY + Math.round((tipDy * i) / wingSpan);
-        if (y < 0 || y >= H) { prevX = x; prevY = y; continue; }
-        const col = i === wingSpan ? 'm' : (i % 2 === 0 ? 'b' : 'm');
-        acc[y][x] = col;
-        // The ray steps diagonally whenever both x and y change between
-        // consecutive i (found by the connectivity checker: this produced
-        // a chain of diagonal-only touches - "pinched"/disconnected in
-        // 4-connectivity terms, exactly the floating-limb failure mode the
-        // checker exists to catch). Bridge every such step with the corner
-        // pixel (x, prevY): it shares a row with the previous point and a
-        // column with the current one, so it's 4-adjacent to both.
-        if (i > 0 && x !== prevX && y !== prevY) acc[y][prevX] = col;
-        // thicken near the root so it reads chunky, not a 1px line -
-        // tapering to thin at the tip like a real membrane.
-        if (i <= 3) { const y2 = y + 1; if (y2 < H) acc[y2][x] = 'b'; }
-        prevX = x; prevY = y;
+        const yc0 = yCenterAt(i);
+        const yc1 = i < wingSpan ? yCenterAt(i + 1) : yc0;
+        let y0 = Math.round(Math.min(yc0, yc1));
+        let y1 = Math.round(Math.max(yc0, yc1));
+        // chunky near the root, tapering thin at the tip - a real
+        // membrane's actual proportions, not a flat-width strip.
+        const pad = i <= 2 ? 1 : 0;
+        y0 -= pad; y1 += pad;
+        for (let y = y0; y <= y1; y++) {
+          if (y < 0 || y >= H) continue;
+          const edgeRow = (y === y0 || y === y1);
+          acc[y][x] = (i === wingSpan) ? 'm' : (edgeRow ? 'b' : 'm');
+        }
       }
     };
     if (wingPhase === 'up') { drawWing(-1, -6); drawWing(1, -6); }
@@ -501,7 +508,7 @@ function buildSporeling() {
     acc[6][11] = 'W'; acc[6][10] = 'P';
     // pale belly stripe on stalk rows7-12
     for (let y = 7; y <= 12; y++) { acc[y][CENTER - 1] = 'e'; acc[y][CENTER] = 'e'; }
-    // stubby arms poking from stalk sides, row8 (hw=4 -> x0=5,x1=8... recompute)
+    // stubby arms poking from stalk sides, row8
     const e8 = edge(8);
     acc[8][e8.x0 - 1] = 'b'; acc[9][e8.x0 - 1] = 'b';
     acc[8][e8.x1 + 1] = 'b'; acc[9][e8.x1 + 1] = 'b';
