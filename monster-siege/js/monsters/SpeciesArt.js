@@ -1,4 +1,4 @@
-// Real monster pixel-art + animation pipeline (piece #45, round 2).
+// Real monster pixel-art + animation pipeline (piece #45, round 4).
 //
 // Mechanically this is the same technique as core/TestSprite.js (a
 // character grid mapped to hex colors via a palette, rendered as filled
@@ -13,10 +13,10 @@
 //   - hand-placed accents (horns/wings/tail/legs/eyes) merged on top,
 //     always OVERLAPPING the body silhouette by at least one shared edge
 //     pixel so nothing floats
-//   - a shared per-pixel shading + outline pass (shadeAndOutline / round 2)
-//     that replaces flat row-banding: every opaque "body" pixel gets a
-//     tone from a rough distance-to-edge + upper-left light bias instead of
-//     a hard y-threshold color band, and the FULL silhouette perimeter -
+//   - a shared per-pixel shading + outline pass (shadeAndOutline) that
+//     replaces flat row-banding: every opaque "body" pixel gets a tone from
+//     a rough distance-to-edge + upper-left light bias instead of a hard
+//     y-threshold color band, and the FULL silhouette perimeter -
 //     top/bottom boundaries and limb edges included, not just each row's
 //     left/right taper edge - gets outlined
 //   - a JS port of monster-tactics/scripts/pixel_art_lib.py's connectivity
@@ -32,9 +32,51 @@
 // Coilfang's S-curve reading as independent bars instead of a tube. Fixed
 // by replacing bandFor()/per-row edge outlining with shadeAndOutline()
 // below (see that function for the actual technique), giving Ramhorn a
-// real neck pinch between head and torso, and adding a 1px body bob + 1px
-// head/cap nod to the walk cycles so the torso moves too, not just the
-// legs.
+// real neck pinch between head and torso, and adding a body bob + head/cap
+// nod to the walk cycles so the torso moves too, not just the legs.
+//
+// Round 3 fix log: outlining every perimeter pixel destroyed features <= 2px
+// wide (they are ENTIRELY perimeter, so they became solid outline-colored
+// twigs). A "thin feature" special case outlined only the outermost pixel
+// of such a feature's cross-section.
+//
+// Round 4 fix log (THIS round) - resolution. The round-3 thin-feature hack
+// was treating a symptom. Measured directly: count 8-neighbour perimeter
+// pixels (what a full, correct, 1px silhouette outline costs) as a share of
+// opaque pixels, per grid scale:
+//
+//   grid    ramhorn  emberwing  coilfang  sporeling
+//   1x      53%      50%        50%       48%
+//   2x      29%      31%        26%       25%
+//   3x      19%      21%        17%       16%
+//
+// Real HGSS-era battle sprites sit at ~20-25% and are ~80x80. The old grids
+// were 18-26px wide, so a fully outlined sprite there could not physically
+// be under ~48% - and no wing, leg or tail could be more than 2px, so no
+// limb could ever hold a lit core, a shadow side AND an outline at once.
+// Every species below is therefore rebuilt at ~3x (48-80 cells per axis),
+// and:
+//   - the thin-feature special case is DELETED. At this resolution every
+//     appendage is drawn >= 3px thick, so every perimeter pixel has a
+//     genuine interior 4-neighbour and the plain full-perimeter rule of
+//     round 2 is correct again on its own. (Verified empirically: zero
+//     pixels in any frame of any species now fail that test.) The
+//     OUTLINE_PROTECTED accent list is gone with it - eyes/spots are placed
+//     well inside their host mass, so they are never perimeter and never
+//     needed protecting.
+//   - shading is per-MATERIAL, not just per-body. shadeAndOutline() takes a
+//     map of sentinel char -> tone quad, so a wing membrane, a horn, a
+//     hoof and a pale belly each get their own distance-field-shaded
+//     highlight/mid/shadow/rim ramp instead of being a flat hand-colored
+//     slab pasted on the body. That is what makes limbs at this size read
+//     as round volumes rather than colored cutouts.
+//   - profiles are built by lerping between a handful of control points
+//     (profileFrom) so tapers step by 1-2 cells per row instead of the
+//     whole-cell jumps a hand-typed 18-entry array produced at 1x.
+//   - drawing primitives (disc / ellipseFill / stroke / fillPoly) let the
+//     appendages be authored as real shapes - a ram's curled horn, a bat
+//     wing with an arm bone plus four finger bones and a scalloped
+//     trailing edge, three-lobed feet - instead of per-row runs.
 //
 // Dual-mode file: the species/geometry/validation logic below never touches
 // `document`/`window` at module-eval time, only inside the canvas-building
@@ -62,45 +104,173 @@ function mergeRow(...specs) {
 function rowsFromSpecs(specs, width) {
   return specs.map(spec => {
     const r = new Array(width).fill('.');
-    for (const [idx, ch] of Object.entries(spec)) r[Number(idx)] = ch;
+    for (const [idx, ch] of Object.entries(spec)) {
+      const x = Number(idx);
+      if (x >= 0 && x < width) r[x] = ch;
+    }
     return r.join('');
   });
 }
 
-// Sentinel fill character for "this pixel is part of a shaded body mass -
-// give it a real tone in the shadeAndOutline() pass below", as opposed to a
-// hand-placed accent (eye, horn, spot...) which keeps whatever color it was
-// authored with.
-const SENTINEL = '$';
+// Sentinel fill characters for "this pixel is part of a shaded mass of
+// material M - give it a real tone in the shadeAndOutline() pass below", as
+// opposed to a hand-placed flat accent (pupil, glint, gill line) which keeps
+// whatever color it was authored with. Round 4: one sentinel per material,
+// so a horn/wing/hoof gets its own shading ramp rather than one flat color.
+const SENTINEL = '$';   // primary body material (coat / scale / cap)
+const MAT_B = '#';      // secondary (wing membrane, gill mass...)
+const MAT_C = '%';      // keratin (horn, crest, claw)
+const MAT_D = '&';      // pale underside (belly, muzzle, throat)
+const MAT_E = '@';      // dark extremity (hoof, foot pad)
+const MAT_F = '^';      // "behind" material - far legs, tail tuft
+const MAT_G = '*';      // markings (spore-cap spots)
+const SENTINELS = [SENTINEL, MAT_B, MAT_C, MAT_D, MAT_E, MAT_F, MAT_G];
+
+// ---------------------------------------------------------------------
+// drawing primitives. Everything writes into a "frame spec" - an array of
+// H sparse {x: char} row objects - which mergeFrame() then layers.
+// ---------------------------------------------------------------------
+
+function makeSpec(H) {
+  const a = [];
+  for (let y = 0; y < H; y++) a.push({});
+  return a;
+}
+
+function put(spec, x, y, ch, W, H) {
+  const xi = Math.round(x), yi = Math.round(y);
+  if (xi >= 0 && xi < W && yi >= 0 && yi < H) spec[yi][xi] = ch;
+}
+
+function box(spec, x0, y0, x1, y1, ch, W, H) {
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(spec, x, y, ch, W, H);
+}
+
+function ellipseFill(spec, cx, cy, rx, ry, ch, W, H) {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const dx = (x - cx) / rx, dy = (y - cy) / ry;
+      if (dx * dx + dy * dy <= 1.02) put(spec, x, y, ch, W, H);
+    }
+  }
+}
+
+function disc(spec, cx, cy, r, ch, W, H) {
+  ellipseFill(spec, cx, cy, r, r, ch, W, H);
+}
+
+// Tapered thick stroke along a polyline: stamps overlapping discs whose
+// radius lerps r0 -> r1 across the whole path length. Overlapping stamps
+// (step 0.4 cells) mean the result is always 4-connected along its length,
+// which is what lets a limb be authored as a curve instead of as per-row
+// runs that have to be checked for gaps by hand.
+function stroke(spec, path, r0, r1, ch, W, H) {
+  const seg = [];
+  let total = 0;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const d = Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
+    seg.push(d); total += d;
+  }
+  if (total <= 0) { disc(spec, path[0][0], path[0][1], r0, ch, W, H); return; }
+  let done = 0;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const n = Math.max(1, Math.ceil(seg[i] / 0.4));
+    for (let k = 0; k <= n; k++) {
+      const f = k / n;
+      const t = (done + seg[i] * f) / total;
+      const x = path[i][0] + (path[i + 1][0] - path[i][0]) * f;
+      const y = path[i][1] + (path[i + 1][1] - path[i][1]) * f;
+      disc(spec, x, y, r0 + (r1 - r0) * t, ch, W, H);
+    }
+    done += seg[i];
+  }
+}
+
+// Even-odd scanline polygon fill, plus a 1-cell stroke around the boundary
+// so a sliver-thin scanline can never leave a hole that would split the
+// silhouette. Used for the wing membranes.
+function fillPoly(spec, pts, ch, W, H) {
+  const ys = pts.map(p => p[1]);
+  const y0 = Math.max(0, Math.floor(Math.min(...ys)));
+  const y1 = Math.min(H - 1, Math.ceil(Math.max(...ys)));
+  for (let y = y0; y <= y1; y++) {
+    const yc = y + 0.5;
+    const xs = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length];
+      if ((ay <= yc && by > yc) || (by <= yc && ay > yc)) {
+        xs.push(ax + ((yc - ay) / (by - ay)) * (bx - ax));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      for (let x = Math.round(xs[i]); x <= Math.round(xs[i + 1]); x++) put(spec, x, y, ch, W, H);
+    }
+  }
+  const loop = pts.concat([pts[0]]);
+  stroke(spec, loop, 0.9, 0.9, ch, W, H);
+}
+
+// Build a length-H half-width profile by linearly interpolating between
+// [row, halfWidth] control points; rows outside the control range stay 0
+// ("no body pixels here"). Round 4: authoring a 56-72 row profile as ~15
+// control points is both readable and produces 1-2 cell taper steps, which
+// is the whole visual point of the extra resolution - a hand-typed array at
+// 1x could only ever step by whole cells.
+function profileFrom(points, H) {
+  const p = new Array(H).fill(0);
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [ya, wa] = points[i], [yb, wb] = points[i + 1];
+    for (let y = ya; y <= yb; y++) {
+      const t = yb === ya ? 0 : (y - ya) / (yb - ya);
+      if (y >= 0 && y < H) p[y] = Math.round(wa + (wb - wa) * t);
+    }
+  }
+  return p;
+}
 
 // Parametric tapered silhouette: `profile[y]` is the half-width (in cells)
 // of the body at row y, 0 meaning "no body pixels this row" (used for rows
 // accents like legs fully own). `centerOffsetFn(y)` (optional) shifts that
 // row's center column, so a mass can curve sideways per row (a tail curl, a
 // serpentine S-curve, a head nod) instead of always taper around one fixed
-// vertical axis. Every opaque cell is written as SENTINEL - no color choice
-// and no outline happens here anymore; shadeAndOutline() does both once all
-// layers (body + accents) are merged, which is what lets shading/outlining
-// see the *whole* silhouette instead of one row at a time.
-function tapered(profile, centerCol, centerOffsetFn) {
+// vertical axis. Every opaque cell is written as a material sentinel - no
+// color choice and no outline happens here; shadeAndOutline() does both
+// once all layers (body + accents) are merged, which is what lets
+// shading/outlining see the *whole* silhouette instead of one row at a time.
+function tapered(profile, centerCol, centerOffsetFn, ch) {
   const off = centerOffsetFn || (() => 0);
+  const mat = ch || SENTINEL;
   return profile.map((hw, y) => {
     if (!hw || hw <= 0) return {};
     const c = centerCol + off(y);
-    return run(c - hw, c + hw - 1, SENTINEL);
+    return run(c - hw, c + hw - 1, mat);
   });
 }
 
 // Same row-edge math as tapered(), exposed standalone so accent placement
-// (eyes, ears, tail stubs...) can align itself to a specific row's actual
-// x0/x1 - including whatever center offset that row has - without
-// duplicating the offset arithmetic.
+// (eyes, ears, wing roots, tail stubs...) can align itself to a specific
+// row's actual x0/x1 - including whatever center offset that row has -
+// without duplicating the offset arithmetic.
 function taperedEdge(profile, centerCol, centerOffsetFn, y) {
   const hw = profile[y];
   if (!hw) return null;
   const off = centerOffsetFn || (() => 0);
   const c = centerCol + off(y);
   return { x0: c - hw, x1: c + hw - 1 };
+}
+
+// Head/cap nod: `dx` at row <= fullY, ramping linearly back to 0 by row
+// zeroY. Round 4: at 3x a hard step between the nodding head rows and the
+// static torso rows is a visible 2px shear in the silhouette, so the offset
+// is feathered across the neck instead of cut.
+function nodOffset(dx, fullY, zeroY) {
+  return y => {
+    if (!dx) return 0;
+    if (y <= fullY) return dx;
+    if (y >= zeroY) return 0;
+    return Math.round(dx * (zeroY - y) / (zeroY - fullY));
+  };
 }
 
 // Merge N frame-shaped row-spec arrays (all same length = height) into one,
@@ -116,9 +286,8 @@ function mergeFrame(...frameSpecArrays) {
 }
 
 // ---------------------------------------------------------------------
-// shading + outline pass (round 2 fix) - shared by all four species so the
-// volume/outline treatment is one correct implementation, not four hand
-// tuned hacks.
+// shading + outline pass - shared by all four species so the volume/outline
+// treatment is one correct implementation, not four hand-tuned hacks.
 //
 // Technique:
 //   1. Multi-source BFS distance transform from every transparent cell (and
@@ -131,16 +300,18 @@ function mergeFrame(...frameSpecArrays) {
 //      model - just "closer to the background on the upper-left side reads
 //      brighter" - which is enough to place a highlight/mid/shadow tone per
 //      pixel instead of one flat color per row.
-//   3. Every SENTINEL cell gets a tone from that (dist, lightBias) pair.
+//   3. Every sentinel cell gets a tone from that (dist, lightBias) pair,
+//      using the tone quad registered for ITS material - so the wing
+//      membrane shades through membrane tones while the body beside it
+//      shades through coat tones, off the same shared distance field.
 //   4. THEN, over the whole merged silhouette (every opaque cell, any
 //      material - body, horn, wing, leg, spot...), any cell touching a
 //      transparent 8-neighbor or the grid edge becomes outline. Running
 //      this after shading, over the full frame, is what gives a continuous
 //      outline around the ENTIRE perimeter (top/bottom of a tapered head,
-//      cap, wingtip - not just each row's left/right edge the way the old
-//      per-row taperedBody() edge coloring did), and 8-neighbor (not 4-)
-//      closes the diagonal notches a stepped taper (S-curve, ear bumps)
-//      would otherwise leave un-outlined.
+//      cap, wingtip - not just each row's left/right edge), and 8-neighbor
+//      (not 4-) closes the diagonal notches a stepped taper (S-curve, ear
+//      bumps) would otherwise leave un-outlined.
 // ---------------------------------------------------------------------
 
 function computeDistanceField(mask, W, H) {
@@ -176,38 +347,34 @@ function computeDistanceField(mask, W, H) {
   return D;
 }
 
-// Pick a tone for one SENTINEL cell from its (distance-to-edge, light-bias)
+// Pick a tone for one sentinel cell from its (distance-to-edge, light-bias)
 // pair. `tones` = { shadow, mid, highlight, rim } palette-key chars.
+//
+// Round 4: at 3x the masses actually HAVE interiors (distances up to ~12
+// instead of ~4), so the ramp is spread over a real range: a 1px rim just
+// inside the outline on the lit side, a lit slope behind it, a calm mid
+// core, and an ambient-occlusion shadow band hugging the lower-right edge.
+// At 1x these bands all collapsed into each other, which is part of why the
+// old sprites read as flat.
 function shadeChar(d, dot, tones) {
-  if (d <= 2) {
-    // Near-edge ring: a rim highlight on the lit (upper-left-facing) side,
-    // ambient-occlusion shadow on the rest - the "dark band inside the
-    // outline" treatment that reads as a rounded surface instead of a flat
-    // fill running straight into the outline.
-    if (dot >= 2) return tones.rim;
-    if (dot <= 0) return tones.shadow;
+  if (d <= 1) {
+    if (dot >= 3) return tones.rim;        // brightest sliver on the lit edge
+    if (dot >= 0) return tones.highlight;
+    return tones.shadow;                   // dark edge on the shadow side
+  }
+  if (d <= 3) {
+    if (dot >= 2) return tones.highlight;
+    if (dot <= -1) return tones.shadow;    // AO band inside the lower-right edge
     return tones.mid;
   }
-  // Interior: a gentle highlight for pixels still close-ish to the surface
-  // on the lit side; otherwise a calm mid tone so the core of the mass
-  // doesn't speckle.
-  if (d <= 4 && dot >= 2) return tones.highlight;
+  if (d <= 6 && dot >= 3) return tones.highlight; // broad lit slope on big masses
   return tones.mid;
 }
 
-// Tiny accents - eye white/pupil, spore-cap spots, horn tips, hooves - are
-// only ever 1-2 cells wide in these grids, so under an 8-neighbor "touches
-// background" rule they'd ALWAYS qualify as perimeter (a 1px-wide mark
-// can't have an interior pixel) and get fully swallowed into the outline
-// color every single frame, silently deleting the detail's own hue (an
-// earlier version of this pass did exactly that - horn tan and hoof brown
-// vanished on every frame, verified by dumping per-frame color counts).
-// These stay their authored color untouched; every other material (wings,
-// tail, ears, legs, the body itself) still participates normally,
-// including getting outlined at its own perimeter.
-const OUTLINE_PROTECTED = new Set(['W', 'P', 's', 'h', 'f']);
-
+// `tones` is either one tone quad (applies to SENTINEL only) or a map of
+// sentinel char -> tone quad.
 function shadeAndOutline(rows, outlineCh, tones) {
+  const materials = tones && tones.mid ? { [SENTINEL]: tones } : tones;
   const H = rows.length, W = rows[0].length;
   const grid = rows.map(r => r.split(''));
   const mask = grid.map(row => row.map(ch => ch !== '.'));
@@ -215,92 +382,39 @@ function shadeAndOutline(rows, outlineCh, tones) {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      if (grid[y][x] !== SENTINEL) continue;
+      const mat = materials[grid[y][x]];
+      if (!mat) continue;
       const d = D[y][x];
       const dL = x > 0 ? D[y][x - 1] : 0;
       const dR = x < W - 1 ? D[y][x + 1] : 0;
       const dU = y > 0 ? D[y - 1][x] : 0;
       const dN = y < H - 1 ? D[y + 1][x] : 0;
       const dot = (dR - dL) + (dN - dU); // >0 = upper-left-facing (lit), <0 = lower-right-facing (shadow)
-      grid[y][x] = shadeChar(d, dot, tones);
+      grid[y][x] = shadeChar(d, dot, mat);
     }
   }
 
+  // Full-perimeter outline. Round 4 deleted the round-3 "thin feature"
+  // carve-out: with every appendage authored >= 3 cells thick, every
+  // perimeter pixel has a genuine interior 4-neighbour to fall back on, so
+  // the blanket rule no longer eats any feature's own color - which is
+  // exactly the condition round 3 was hacking around at 1x.
   const dirs8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-  const dirs4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const inB = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
-
-  // Which pixels are perimeter candidates (8-neighbour, so diagonal notches
-  // close up rather than leaking background through a corner).
-  const isPerim = grid.map((row, y) => row.map((_, x) => {
-    if (!mask[y][x]) return false;
-    if (x === 0 || x === W - 1 || y === 0 || y === H - 1) return true;
-    return dirs8.some(([dx, dy]) => !mask[y + dy][x + dx]);
-  }));
-
-  // Outlining EVERY perimeter candidate is correct for thick masses but
-  // destroys thin ones: any feature <= 2px wide is *entirely* perimeter (it
-  // has no interior pixel by definition), so the blanket rule turned wings,
-  // legs and tail tips into solid blocks of outline colour with none of
-  // their own hue left - measured at 45-53% of opaque pixels, against the
-  // ~20-25% real HGSS-era sprites sit at, and visually "bare twigs" rather
-  // than a membrane.
-  //
-  // So a perimeter pixel is only converted when the feature it belongs to
-  // can afford it: it must have a 4-neighbour that is genuine interior
-  // (D >= 2, i.e. not itself perimeter). In a thick mass every edge pixel
-  // has one, so the full silhouette outline of round 2 is preserved exactly.
-  // In a <= 2px strip none do, so the strip keeps its own colour and instead
-  // gets outlined only where it meets open space along its length - handled
-  // by the second pass below, which walks the strip and outlines the single
-  // outermost pixel per cross-section rather than all of them.
   const out = grid.map(r => r.slice());
-  const thin = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      if (!mask[y][x] || OUTLINE_PROTECTED.has(grid[y][x]) || !isPerim[y][x]) continue;
-      const hasInterior = dirs4.some(([dx, dy]) => inB(x + dx, y + dy) && mask[y + dy][x + dx] && !isPerim[y + dy][x + dx]);
-      if (hasInterior) out[y][x] = outlineCh;
-      else thin.push([x, y]);
+      if (!mask[y][x]) continue;
+      const edge = x === 0 || x === W - 1 || y === 0 || y === H - 1 ||
+        dirs8.some(([dx, dy]) => !mask[y + dy][x + dx]);
+      if (edge) out[y][x] = outlineCh;
     }
-  }
-
-  // Thin-feature pass: for each pixel of a <=2px structure, outline it only
-  // if it is the outermost of its cross-section along the axis the structure
-  // is thin in. Measuring thinness per-axis (how far opaque runs left/right
-  // vs up/down) means a horizontal 2px-tall strip gets a top/bottom rim
-  // while keeping its colour across, and a vertical one gets a left/right
-  // rim - either way at least one fill pixel always survives per cross
-  // section, which is exactly what stops the feature reading as a black
-  // stick.
-  const runLen = (x, y, dx, dy) => {
-    let n = 0, cx = x + dx, cy = y + dy;
-    while (inB(cx, cy) && mask[cy][cx]) { n++; cx += dx; cy += dy; }
-    return n;
-  };
-  for (const [x, y] of thin) {
-    const spanX = 1 + runLen(x, y, 1, 0) + runLen(x, y, -1, 0);
-    const spanY = 1 + runLen(x, y, 0, 1) + runLen(x, y, 0, -1);
-    // Outline across the *thin* axis only; along the long axis the pixel is
-    // interior to the feature and must keep its colour.
-    const thinAxis = spanX <= spanY ? 'x' : 'y';
-    const probes = thinAxis === 'x' ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]];
-    const span = thinAxis === 'x' ? spanX : spanY;
-    // A 1px-wide feature has nothing to spare - keep its colour entirely,
-    // it reads as a highlight line rather than a limb.
-    if (span <= 1) continue;
-    const touchesBg = probes.some(([dx, dy]) => !inB(x + dx, y + dy) || !mask[y + dy][x + dx]);
-    // Alternate which side gets the rim so a 2px strip ends up outline on
-    // one side, fill on the other, instead of both sides eating each other.
-    if (touchesBg && (x + y) % 2 === 0) out[y][x] = outlineCh;
   }
   return out.map(r => r.join(''));
 }
 
-// Standard tone-role -> palette-key mapping every species palette below
-// follows: a = mid, b = shadow/AO, c = highlight, d (if present) = rim /
-// lightest. Keeping this convention shared means shadeAndOutline() needs no
-// per-species special-casing.
+// Standard tone-role -> palette-key mapping the primary body material of
+// every species palette below follows: a = mid, b = shadow/AO, c =
+// highlight, d = rim/lightest.
 function defaultTones(palette) {
   return { shadow: 'b', mid: 'a', highlight: 'c', rim: palette.d ? 'd' : 'c' };
 }
@@ -308,8 +422,8 @@ function defaultTones(palette) {
 // Whole-sprite vertical translate for the walk-cycle body bob - shifts
 // every pixel down by `dy` rows (0 = no bob), leaving the vacated row(s)
 // transparent. Always shifts DOWN (never up) into the spare blank row(s)
-// every grid below has at the bottom, so nothing at the top (horns, cap)
-// ever clips off.
+// every walking grid below keeps at the bottom, so nothing at the top
+// (horns, cap) ever clips off.
 function bobFrame(rows, dy) {
   if (!dy) return rows;
   const W = rows[0].length, H = rows.length;
@@ -385,48 +499,13 @@ function checkConnected(rows, label) {
 }
 
 // Numeric sanity bar, adapted from check_sprite_ranges in pixel_art_lib.py.
-// That function measured real target ranges off actual reference pixel art
-// at 16px/32px; our grids are hand/parametrically authored at varying
-// sizes, so rather than hard-code a resolution-specific color-count table
-// we use the same *shape* of check (opaque fraction of the sprite, outline
-// fraction of the opaque pixels, distinct non-outline color count) with
-// ranges chosen to match that project's measured "final tier" creature
-// bar (richly colored, mostly-filled silhouette, moderate outlining) since
-// every species here is meant to be shippable roster art, not a base-tier
-// sketch.
 //
-// Round 2: outlineFrac's upper bound was raised 0.45 -> 0.55. Outlining the
-// full silhouette perimeter (not just each row's left/right taper edge)
-// measurably increases outline-pixel share on these small (18-26px wide)
-// grids, especially on thin parts (legs, wingtips, the coilfang tail) that
-// are now outlined nearly all the way around. Confirmed by eye via
-// preview.html this reads as a correctly-outlined sprite, not over-inked -
-// the old 0.45 cap was measured against the round-1 per-row-only outlining,
-// which under-outlined on purpose (no top/bottom edges at all), so it was
-// never a bar this art should have stayed under.
-// Round-4 recalibration. The 0.55 outline cap above was not a quality bar,
-// it was the ceiling forced by the grid size. Measured directly: take each
-// species silhouette and count 8-neighbour perimeter pixels (i.e. what a
-// full, correct, 1px silhouette outline costs) as a share of opaque pixels:
-//
-//   grid    ramhorn  emberwing  coilfang  sporeling
-//   1x      53%      50%        50%       48%
-//   2x      29%      31%        26%       25%
-//   3x      19%      21%        17%       16%
-//
-// So on the 18-26px-wide grids the art used to live on, a fully outlined
-// sprite CANNOT be under ~48% - the ~20-25% share real HGSS-era battle
-// sprites sit at is unreachable at that resolution, and the round-3
-// thin-feature rule only got to 32-42% by declining to outline parts of
-// the perimeter. That is fighting the symptom. HGSS battle sprites are
-// ~80x80; these were ~24x18, roughly 3x too small in each axis, which is
-// also why wings/legs/tails had no room to be more than 2px and why there
-// was never space for a colored core inside a limb.
-//
-// The gate is therefore now the real target (12-28% outline) plus a
-// minimum grid size, so the range can only be met by giving the art enough
-// resolution to carry a proper outline - never by under-outlining or by
-// shrinking the sprite until the ratio flatters itself.
+// Round-4 calibration (see the header fix log for the measurements): the
+// outline share is the REAL target of ~12-28% that HGSS-era battle sprites
+// sit at, plus a minimum grid size, so the range can only be met by giving
+// the art enough resolution to carry a proper full-perimeter outline -
+// never by under-outlining, and never by shrinking the sprite until the
+// ratio flatters itself.
 const SPRITE_RANGE = { opaque: [0.22, 0.75], outlineFrac: [0.12, 0.28], minColors: 5, minGrid: [48, 40] };
 
 const pct = v => `${Math.round(v * 100)}%`;
@@ -467,6 +546,20 @@ function checkSpriteRanges(rows, outlineCh, label) {
   return ok;
 }
 
+// Round 4: with several material sentinels in play, a sentinel that never
+// got a tone registered would silently reach the renderer as an undefined
+// fillStyle (invisible in-game, but still counted as a "color" by the range
+// check). Prove every char in every frame is a real palette key.
+function checkPaletteCoverage(rows, palette, label) {
+  const bad = new Set();
+  for (const row of rows) for (const ch of row) {
+    if (ch !== '.' && !palette[ch]) bad.add(ch);
+  }
+  if (!bad.size) return true;
+  console.warn(`[SpeciesArt] ${label}: FAIL unmapped chars ${[...bad].join(' ')} (unshaded sentinel or typo)`);
+  return false;
+}
+
 // Validate every frame of a built species (all poses) and return true only
 // if every single frame is both a single connected silhouette AND in the
 // numeric sanity range. Called for every species at module load (in Node
@@ -477,104 +570,154 @@ function validateSpecies(species) {
   species.frames.forEach((rows, i) => {
     const label = `${species.id} frame${i}`;
     ok = checkConnected(rows, label) && ok;
+    ok = checkPaletteCoverage(rows, species.palette, label) && ok;
     ok = checkSpriteRanges(rows, species.outline, label) && ok;
   });
   return ok;
 }
 
 // ---------------------------------------------------------------------
-// Species 1: RAMHORN - chunky quadruped (grass/earth beast). Front-facing
-// with a pseudo-3D leg stance (front legs centered/inner, back legs
-// peeking wider at the sides) so a 3-frame diagonal-gait walk cycle
-// (front-left+back-right vs front-right+back-left) reads clearly as
-// motion instead of a body bob.
+// Species 1: RAMHORN - chunky quadruped (grass/earth beast), 72x56.
+// Front-facing with a pseudo-3D leg stance (front legs centered/inner, back
+// legs peeking wider at the sides and painted in a darker "behind"
+// material) so a 3-frame diagonal-gait walk cycle (front-left+back-right vs
+// front-right+back-left) reads clearly as motion instead of a body bob.
 // ---------------------------------------------------------------------
 
 function buildRamhorn() {
-  const W = 24, H = 18, CENTER = 12;
+  const W = 72, H = 56, CENTER = 36, GROUND = 52;
   const outline = 'K';
-  // body tones: c = highlight (upper-left lit side), a = mid coat,
-  // b = shadow/AO, h = horn, e = belly/muzzle, f = hoof,
-  // W = eye white, P = pupil
   const palette = {
-    K: '#141018', a: '#6a9944', b: '#446b2a', c: '#8fc45f',
-    h: '#e8dcb0', e: '#e3d9a8', f: '#3a2c18',
-    W: '#f4f7ee', P: '#161418'
+    K: '#141018',
+    a: '#6a9944', b: '#446b2a', c: '#8fc45f', d: '#b7e389',   // coat
+    n: '#2f4a1c',                                             // deepest coat (far legs)
+    h: '#e8dcb0', i: '#ab9c70', j: '#f8f3d8',                 // horn keratin
+    e: '#e3d9a8', o: '#ada173', p: '#f6f0cd',                 // muzzle / belly
+    f: '#3a2c18', g: '#241a0e', q: '#5c4426',                 // hoof
+    W: '#f4f7ee', P: '#161418', L: '#ffffff'                  // eye
+  };
+  // Per-material tone quads (shadow / mid / highlight / rim).
+  const tones = {
+    [SENTINEL]: defaultTones(palette),
+    [MAT_F]: { shadow: 'n', mid: 'b', highlight: 'a', rim: 'a' },
+    [MAT_C]: { shadow: 'i', mid: 'h', highlight: 'j', rim: 'j' },
+    [MAT_D]: { shadow: 'o', mid: 'e', highlight: 'p', rim: 'p' },
+    [MAT_E]: { shadow: 'g', mid: 'f', highlight: 'q', rim: 'q' },
   };
 
-  // Half-width per row. Head (rows1-4) ramps up, then a genuine NECK PINCH
-  // (rows5-6 narrow sharply) before the torso (rows7-12) widens back out
-  // into the shoulders - a real waist in the silhouette so shadeAndOutline
-  // wraps a distinct head mass with its own outline, instead of one smooth
-  // triangular taper straight into the body (round-2 fix for the "mound on
-  // sticks" complaint).
-  const profile = [0, 2, 4, 5, 5, 3, 4, 8, 9, 9, 9, 8, 7, 0, 0, 0, 0, 0];
-  const headOffset = headDx => y => (y <= 6 ? headDx : 0);
-  const bodyLayer = headDx => tapered(profile, CENTER, headOffset(headDx));
-  const edgeAt = (y, headDx) => taperedEdge(profile, CENTER, headOffset(headDx), y);
+  // Head rows 6-25 (widest at the cheeks, narrowing into the muzzle), a
+  // genuine NECK PINCH at rows 26-28, then the barrel torso rows 29-46 - a
+  // real waist in the silhouette so shadeAndOutline wraps a distinct head
+  // mass with its own outline, instead of one smooth triangular taper.
+  const profile = profileFrom([
+    [6, 5], [8, 9], [10, 13], [13, 16], [16, 18], [19, 18], [21, 17], [23, 14],
+    [25, 11], [27, 9], [28, 10], [30, 16], [32, 21], [35, 25], [38, 26], [41, 25],
+    [43, 22], [45, 18], [46, 13]
+  ], H);
+  const headOff = headDx => nodOffset(headDx, 24, 30);
 
-  function accents(legPhase, headDx) {
-    const acc = new Array(H).fill(null).map(() => ({}));
-    // horns (head silhouette - shift with the head nod)
-    acc[0][9 + headDx] = 'h'; acc[0][14 + headDx] = 'h';
-    acc[1][9 + headDx] = 'h'; acc[1][10 + headDx] = 'h';
-    acc[1][13 + headDx] = 'h'; acc[1][14 + headDx] = 'h';
-    // eyes on head row3 (row4 sits diagonally against the neck pinch at
-    // row5, which would make its own pixels read as perimeter and, since
-    // eyes are protected-but-still-positioned there, look oddly close to
-    // the notch - row3 keeps clear headroom on both sides)
-    acc[3][9 + headDx] = 'W'; acc[3][10 + headDx] = 'P';
-    acc[3][15 + headDx] = 'W'; acc[3][14 + headDx] = 'P';
-    // muzzle/belly patch, rows5-9 center strip (rows5-6 are still the neck,
-    // so they follow the head nod; rows7-9 are torso, fixed)
-    for (let y = 5; y <= 9; y++) {
-      const dx = y <= 6 ? headDx : 0;
-      acc[y][CENTER - 1 + dx] = 'e'; acc[y][CENTER + dx] = 'e';
-    }
-    // ears: 2px bumps just outside row3's edge
-    const e3 = edgeAt(3, headDx);
-    acc[2][e3.x0] = 'a'; acc[3][e3.x0 - 1] = 'a';
-    acc[2][e3.x1] = 'a'; acc[3][e3.x1 + 1] = 'a';
-    // tail stub off the back, row9-11 near right edge (torso, no head offset)
-    const e9 = edgeAt(9, 0);
-    acc[9][e9.x1 + 1] = 'b'; acc[10][e9.x1 + 1] = 'b'; acc[10][e9.x1 + 2] = 'b'; acc[11][e9.x1 + 1] = 'f';
+  function accents(legPhase, headDx, bob) {
+    const off = headOff(headDx);
+    const acc = makeSpec(H);
+    const edgeAt = y => taperedEdge(profile, CENTER, off, y);
+    const hx = y => off(y); // head-follow offset for hand-placed face parts
 
-    // legs: attach at row12/13 (torso, no head offset). Front legs inner,
-    // back legs outer. legPhase shifts which diagonal pair is "forward"
-    // (extended, 1 row longer) vs "back" (retracted, 1 row shorter).
-    const legRows = { fwd: [13, 14, 15, 16], back: [13, 14, 15] };
-    const frontL = [10, 11], frontR = [14, 15], backL = [6, 7], backR = [17, 18];
-    const pairA = legPhase === 'A';
-    const drawLeg = (cols, forward) => {
-      const rows = forward ? legRows.fwd : legRows.back;
-      const lastRow = rows[rows.length - 1];
-      for (const y of rows) {
-        const isFoot = y === lastRow;
-        acc[y][cols[0]] = isFoot ? 'f' : SENTINEL;
-        acc[y][cols[1]] = isFoot ? 'f' : SENTINEL;
-      }
+    // --- far (back) legs first, so the near pair overlaps them ---
+    const foot = (x, y, mat) => {
+      ellipseFill(acc, x, y - 1.4, 4.6, 2.7, MAT_E, W, H);
+      if (mat === MAT_F) ellipseFill(acc, x, y - 1.4, 3.2, 1.7, MAT_E, W, H);
     };
-    if (legPhase === 'N') {
-      drawLeg(frontL, false); drawLeg(frontR, false); drawLeg(backL, false); drawLeg(backR, false);
-    } else {
-      drawLeg(frontL, pairA); drawLeg(frontR, !pairA);
-      drawLeg(backL, !pairA); drawLeg(backR, pairA);
+    const drawLeg = (x, topY, state, mat) => {
+      const lift = state === 'plant' ? 0 : state === 'mid' ? 3 : 6;
+      const bottom = GROUND - bob - lift;
+      const swing = state === 'plant' ? 0 : state === 'mid' ? 1.5 : 3;
+      stroke(acc, [
+        [x, topY],
+        [x + swing * 0.4, (topY + bottom) / 2],
+        [x + swing, bottom - 3]
+      ], 4.3, 3.3, mat, W, H);
+      foot(x + swing, bottom, mat);
+    };
+    const phase = {
+      // diagonal gait: FL+BR vs FR+BL
+      A: { fl: 'plant', br: 'plant', fr: 'lift', bl: 'lift' },
+      N: { fl: 'mid', br: 'mid', fr: 'mid', bl: 'mid' },
+      B: { fl: 'lift', br: 'lift', fr: 'plant', bl: 'plant' },
+    }[legPhase];
+    drawLeg(CENTER - 21, 39, phase.bl, MAT_F);
+    drawLeg(CENTER + 21, 39, phase.br, MAT_F);
+
+    // --- tail, behind the torso on the right ---
+    const eTail = edgeAt(33);
+    stroke(acc, [[eTail.x1 - 1, 33], [eTail.x1 + 6, 36], [eTail.x1 + 9, 42], [eTail.x1 + 7, 47]],
+      3.6, 2.3, SENTINEL, W, H);
+    disc(acc, eTail.x1 + 7, 48.5, 3.2, MAT_F, W, H);
+
+    // --- near (front) legs ---
+    drawLeg(CENTER - 11, 42, phase.fl, SENTINEL);
+    drawLeg(CENTER + 11, 42, phase.fr, SENTINEL);
+
+    // --- belly patch ---
+    ellipseFill(acc, CENTER, 42, 10, 6, MAT_D, W, H);
+
+    // --- ears: leaf-shaped, tucked below the horn curl ---
+    const eEar = edgeAt(17);
+    stroke(acc, [[eEar.x0 + 2, 17], [eEar.x0 - 5, 17], [eEar.x0 - 10, 19]], 3.6, 1.8, SENTINEL, W, H);
+    stroke(acc, [[eEar.x1 - 2, 17], [eEar.x1 + 5, 17], [eEar.x1 + 10, 19]], 3.6, 1.8, SENTINEL, W, H);
+
+    // --- horns: a real ram curl (up, back, around, forward) with ridging ---
+    const eHorn = edgeAt(8);
+    const hornPath = (rootX, s) => [
+      [rootX, 8], [rootX + s * 4, 4], [rootX + s * 11, 2], [rootX + s * 16, 6], [rootX + s * 13, 11]
+    ];
+    for (const [rootX, s] of [[eHorn.x0 + 2, -1], [eHorn.x1 - 2, 1]]) {
+      const path = hornPath(rootX, s);
+      stroke(acc, path, 4.6, 2.0, MAT_C, W, H);
+      // ridge bands: short darker ticks across the horn every few cells,
+      // sampled along the same polyline so they follow the curl.
+      for (let t = 0.18; t < 0.92; t += 0.16) {
+        const seg = t * (path.length - 1);
+        const i = Math.min(path.length - 2, Math.floor(seg));
+        const f = seg - i;
+        const px = path[i][0] + (path[i + 1][0] - path[i][0]) * f;
+        const py = path[i][1] + (path[i + 1][1] - path[i][1]) * f;
+        const dx = path[i + 1][0] - path[i][0], dy = path[i + 1][1] - path[i][1];
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len, ny = dx / len;
+        const r = 3.6 - 2.2 * t;
+        for (let k = -r; k <= r; k += 0.5) put(acc, px + nx * k, py + ny * k, 'i', W, H);
+      }
+    }
+
+    // --- muzzle + nostrils + mouth ---
+    ellipseFill(acc, CENTER + hx(23), 23, 8.5, 5.5, MAT_D, W, H);
+    ellipseFill(acc, CENTER + hx(21) - 3.5, 21, 1.6, 1.2, 'g', W, H);
+    ellipseFill(acc, CENTER + hx(21) + 3.5, 21, 1.6, 1.2, 'g', W, H);
+    box(acc, CENTER + hx(26) - 4, 26, CENTER + hx(26) + 3, 26, 'g', W, H);
+
+    // --- brow ridge, then eyes (sclera / pupil / glint) ---
+    for (const s of [-1, 1]) {
+      const ex = CENTER + hx(17) + s * 11;
+      ellipseFill(acc, ex, 14.5, 4.5, 1.6, 'b', W, H);
+      ellipseFill(acc, ex, 17.5, 3.6, 3.2, 'W', W, H);
+      ellipseFill(acc, ex + s * 0.6, 18.4, 2.2, 2.4, 'P', W, H);
+      box(acc, ex - 1.5, 15.8, ex - 0.5, 16.8, 'L', W, H);
     }
     return acc;
   }
 
-  // Walk cycle motion (round 2 fix): the old cycle only changed leg length
-  // frame to frame - body and head were pixel-identical across all 3
-  // frames. Now the torso settles 1px lower on each weight-bearing
-  // (extended-leg) frame and rises back on the passing/neutral frame, with
-  // a 1px head nod opposite the forward leg pair, so the upper body
-  // visibly moves too.
+  // Walk cycle motion: the torso settles lower on each weight-bearing frame
+  // and rises back on the passing/neutral frame, with a head nod opposite
+  // the forward leg pair, so the upper body visibly moves too. Leg lengths
+  // are measured DOWN FROM a fixed ground row (GROUND - bob), so planted
+  // feet stay planted while the body bobs over them and lifted feet clear
+  // the ground - rather than the whole foot sliding with the bob.
   function frame(legPhase) {
-    const headDx = legPhase === 'A' ? -1 : legPhase === 'B' ? 1 : 0;
-    const bob = legPhase === 'N' ? 0 : 1;
-    const raw = rowsFromSpecs(mergeFrame(bodyLayer(headDx), accents(legPhase, headDx)), W);
-    const shaded = shadeAndOutline(raw, outline, defaultTones(palette));
-    return bobFrame(shaded, bob);
+    const headDx = legPhase === 'A' ? -2 : legPhase === 'B' ? 2 : 0;
+    const bob = legPhase === 'N' ? 0 : 2;
+    const off = headOff(headDx);
+    const raw = rowsFromSpecs(mergeFrame(tapered(profile, CENTER, off), accents(legPhase, headDx, bob)), W);
+    return bobFrame(shadeAndOutline(raw, outline, tones), bob);
   }
 
   const frames = [frame('A'), frame('N'), frame('B')];
@@ -582,94 +725,128 @@ function buildRamhorn() {
 }
 
 // ---------------------------------------------------------------------
-// Species 2: EMBERWING - small winged wyvern. Body+head silhouette is
-// slim/upright (very different mass distribution than the quadruped), with
-// a pair of wings that are the actual animated part (up / level / down)
-// instead of legs - reads as a flap cycle, not a walk cycle.
+// Species 2: EMBERWING - small winged wyvern, 80x64. Body+head silhouette
+// is slim/upright (very different mass distribution than the quadruped),
+// with a pair of bat-structured wings that are the actual animated part
+// (up / level / down) instead of legs - reads as a flap cycle, not a walk
+// cycle.
 // ---------------------------------------------------------------------
 
 function buildEmberwing() {
-  const W = 26, H = 20, CENTER = 13;
+  const W = 80, H = 64, CENTER = 40;
   const outline = 'K';
   const palette = {
-    K: '#1c0e12', a: '#c95a2e', b: '#8f3a1c', c: '#ef8a48', d: '#f7c26a',
-    m: '#3a1a12', // wing membrane (dark, translucent-read)
-    W: '#fff3dc', P: '#241016'
+    K: '#1c0e12',
+    a: '#c95a2e', b: '#8f3a1c', c: '#ef8a48', d: '#ffb877',   // scale hide
+    m: '#3a1a12', u: '#24100a', v: '#6d3620',                 // wing membrane
+    y: '#f7c26a', z: '#bf8b3c', x: '#ffe6b0',                 // chest / throat gold
+    h: '#f0d7a6', i: '#ab9067', j: '#fff4d8',                 // crest keratin
+    W: '#fff3dc', P: '#241016', L: '#ffffff'
+  };
+  const tones = {
+    [SENTINEL]: defaultTones(palette),
+    [MAT_B]: { shadow: 'u', mid: 'm', highlight: 'v', rim: 'v' },
+    [MAT_C]: { shadow: 'i', mid: 'h', highlight: 'j', rim: 'j' },
+    [MAT_D]: { shadow: 'z', mid: 'y', highlight: 'x', rim: 'x' },
+    [MAT_F]: { shadow: 'b', mid: 'b', highlight: 'a', rim: 'a' },
   };
 
-  // Slim upright body: narrow head, chest slightly wider, tail tapers away
-  // below (a per-row center offset curls the tail to one side so it isn't
-  // just a straight rectangle down).
-  const profile = [0, 2, 3, 4, 4, 5, 5, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0];
-  const tailCurlTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
-  const tailCurl = y => tailCurlTable[y];
+  // Slim upright body: narrow snouted head, a neck, a broad chest at the
+  // shoulders (where the wings root), then a long tail tapering away below.
+  const profile = profileFrom([
+    [4, 4], [6, 8], [8, 10], [11, 12], [14, 12], [16, 11], [18, 9], [20, 7],
+    [21, 6], [23, 7], [25, 11], [28, 16], [31, 16], [34, 14], [37, 11], [40, 9],
+    [43, 8], [46, 7], [49, 6], [52, 5], [55, 4], [58, 4]
+  ], H);
+  // Tail curl: the lower body slides right as it descends so the tail reads
+  // as a sweeping curve rather than a straight plank.
+  const tailCurl = y => (y <= 38 ? 0 : Math.round((y - 38) * 0.62));
   const bodyRows = tapered(profile, CENTER, tailCurl);
   const edgeAt = y => taperedEdge(profile, CENTER, tailCurl, y);
 
-  function accents(wingPhase) {
-    const acc = new Array(H).fill(null).map(() => ({}));
-    // horn/crest spikes on head
-    acc[0][12] = 'b'; acc[0][14] = 'b';
-    acc[1][12] = 'b'; acc[1][14] = 'b';
-    // eyes row3, symmetric
-    acc[3][11] = 'W'; acc[3][12] = 'P';
-    acc[3][15] = 'W'; acc[3][14] = 'P';
-    // chest marking
-    for (let y = 6; y <= 9; y++) { acc[y][CENTER - 1] = 'd'; acc[y][CENTER] = 'd'; }
-    // legs: short stubby pair at bottom of torso, row9-10 area
-    const e9 = edgeAt(9);
-    acc[10][e9.x0 + 1] = SENTINEL; acc[11][e9.x0 + 1] = SENTINEL; acc[11][e9.x0] = 'b';
-    acc[10][e9.x1 - 1] = SENTINEL; acc[11][e9.x1 - 1] = SENTINEL; acc[11][e9.x1] = 'b';
+  // One wing, authored in local coordinates (origin = shoulder root, +x
+  // outward, +y down) then rotated by the flap angle and mirrored per side.
+  // Real bat-wing structure: arm bone root->elbow->wrist, four finger bones
+  // fanning from the wrist, and a scalloped trailing edge between them.
+  const WING = {
+    elbow: [7, -4], wrist: [15, -6], tip: [23, -2],
+    fingers: [[19, 7], [12, 12], [5, 13]],
+    trail: [[21, 3], [16, 10], [9, 13.5]], // scallop control points
+    back: [0, 10],
+  };
 
-    // wings: attach at row6/7 shoulder (widest point). Wing root always
-    // touches the body edge; the flap animation swings the tip through
-    // three positions (up-swept / level-spread / down-swept) by moving the
-    // OUTER tip pixels while the root pixels (which guarantee connectivity)
-    // never move.
-    const rootY = 6, rootEdge = edgeAt(rootY);
-    const rootL = rootEdge.x0, rootR = rootEdge.x1;
-    const wingSpan = 7; // how far the tip reaches from the root
-    // Wing membrane, filled per-column rather than traced as a 1px ray: an
-    // earlier version drew a single diagonal-stepping line and patched the
-    // diagonal joints with bridge pixels, but even bridged it still read as
-    // a thin twig, not a wing (visually confirmed by rendering it - the
-    // exact "thin/fragile floating appendage" anti-pattern the brief calls
-    // out). Filling each column down to where the NEXT column starts is
-    // both simpler and provably connected: column i's row-run always
-    // includes round(yCenter(i+1)), and column i+1's run always includes
-    // that same row too, so every adjacent pair of columns shares a row -
-    // no diagonal joints to bridge in the first place.
-    const drawWing = (side, tipDy) => {
-      // side: -1 left, +1 right. tipDy: row offset of the tip relative to root (negative = up)
-      const rootX = side < 0 ? rootL : rootR;
-      const dir = side;
-      const yCenterAt = i => rootY + (tipDy * i) / wingSpan;
-      for (let i = 0; i <= wingSpan; i++) {
-        const x = rootX + dir * i;
-        const yc0 = yCenterAt(i);
-        const yc1 = i < wingSpan ? yCenterAt(i + 1) : yc0;
-        let y0 = Math.round(Math.min(yc0, yc1));
-        let y1 = Math.round(Math.max(yc0, yc1));
-        // chunky near the root, tapering thin at the tip - a real
-        // membrane's actual proportions, not a flat-width strip.
-        const pad = i <= 2 ? 1 : 0;
-        y0 -= pad; y1 += pad;
-        for (let y = y0; y <= y1; y++) {
-          if (y < 0 || y >= H) continue;
-          const edgeRow = (y === y0 || y === y1);
-          acc[y][x] = (i === wingSpan) ? 'm' : (edgeRow ? 'b' : 'm');
-        }
+  function drawWing(acc, rootX, rootY, side, angle) {
+    const ca = Math.cos(angle), sa = Math.sin(angle);
+    const P = ([lx, ly]) => [rootX + side * (lx * ca - ly * sa), rootY + (lx * sa + ly * ca)];
+    const S = [rootX, rootY];
+    const E = P(WING.elbow), Wr = P(WING.wrist), T = P(WING.tip);
+    const F = WING.fingers.map(P);
+    const Tr = WING.trail.map(P);
+    const B = P(WING.back);
+    // membrane panel: leading edge S-E-Wr-T, then scalloped trailing edge
+    // back through the finger tips to the body.
+    fillPoly(acc, [S, E, Wr, T, Tr[0], F[0], Tr[1], F[1], Tr[2], F[2], B], MAT_B, W, H);
+    // finger bones - lighter membrane tone, drawn INSIDE the panel so they
+    // stay their own color (interior pixels are never outlined).
+    for (const f of [T, F[0], F[1], F[2]]) stroke(acc, [Wr, f], 1.1, 1.1, 'v', W, H);
+    // arm bone along the leading edge, in hide material so the wing's front
+    // edge reads as a limb with a lit top face, not as membrane.
+    stroke(acc, [S, E, Wr], 3.2, 2.2, SENTINEL, W, H);
+    // wrist claw
+    disc(acc, Wr[0] + side * 1.5, Wr[1] - 1.5, 1.8, MAT_C, W, H);
+  }
+
+  function accents(wingPhase) {
+    const acc = makeSpec(H);
+
+    // --- tail fin (a spade tip, so the tail ends in a shape not a spike) ---
+    const eT = edgeAt(56);
+    const tipX = CENTER + tailCurl(58);
+    ellipseFill(acc, tipX + 2, 58, 6, 4.5, SENTINEL, W, H);
+    ellipseFill(acc, tipX + 4, 60.5, 4, 3, MAT_D, W, H);
+    if (eT) box(acc, eT.x0, 56, eT.x1, 56, SENTINEL, W, H);
+
+    // --- legs: short, stubby, three-lobed feet ---
+    for (const s of [-1, 1]) {
+      const lx = CENTER + s * 8;
+      stroke(acc, [[lx, 33], [lx + s * 2, 40], [lx + s * 3, 45]], 4.0, 3.2, SENTINEL, W, H);
+      for (const t of [-4, 0, 4]) {
+        ellipseFill(acc, lx + s * 3 + t, 47.5, 2.3, 2.6, MAT_F, W, H);
       }
-    };
-    if (wingPhase === 'up') { drawWing(-1, -6); drawWing(1, -6); }
-    else if (wingPhase === 'down') { drawWing(-1, 5); drawWing(1, 5); }
-    else { drawWing(-1, -1); drawWing(1, -1); } // level/spread mid pose
+    }
+
+    // --- chest / throat plate ---
+    ellipseFill(acc, CENTER, 29, 7, 8.5, MAT_D, W, H);
+    for (let y = 22; y <= 36; y += 4) box(acc, CENTER - 5, y, CENTER + 4, y, 'z', W, H);
+
+    // --- wings (drawn over the chest, under nothing) ---
+    const rootY = 28, rootEdge = edgeAt(rootY);
+    const angle = wingPhase === 'up' ? -0.44 : wingPhase === 'down' ? 0.46 : 0.04;
+    drawWing(acc, rootEdge.x0 + 1, rootY, -1, angle);
+    drawWing(acc, rootEdge.x1 - 1, rootY, 1, angle);
+
+    // --- head crest spikes ---
+    const spikes = [[CENTER - 5, 7, CENTER - 9, 1], [CENTER, 5, CENTER, 0], [CENTER + 5, 7, CENTER + 9, 1]];
+    for (const [x0, y0, x1, y1] of spikes) stroke(acc, [[x0, y0], [x1, y1]], 2.8, 1.3, MAT_C, W, H);
+
+    // --- brow, eyes, snout ---
+    for (const s of [-1, 1]) {
+      const ex = CENTER + s * 6;
+      ellipseFill(acc, ex, 10.5, 3.6, 1.4, 'b', W, H);
+      ellipseFill(acc, ex, 13.5, 3.2, 2.8, 'W', W, H);
+      ellipseFill(acc, ex + s * 0.5, 14.2, 2.0, 2.1, 'P', W, H);
+      box(acc, ex - 1.4, 12.0, ex - 0.6, 12.9, 'L', W, H);
+    }
+    ellipseFill(acc, CENTER, 19, 4.5, 2.6, MAT_D, W, H);       // snout
+    box(acc, CENTER - 4, 20, CENTER + 3, 20, 'b', W, H);       // mouth line
+    ellipseFill(acc, CENTER - 2, 17.5, 0.9, 0.7, 'b', W, H);   // nostrils
+    ellipseFill(acc, CENTER + 2, 17.5, 0.9, 0.7, 'b', W, H);
     return acc;
   }
 
   function frame(wingPhase) {
     const raw = rowsFromSpecs(mergeFrame(bodyRows, accents(wingPhase)), W);
-    return shadeAndOutline(raw, outline, defaultTones(palette));
+    return shadeAndOutline(raw, outline, tones);
   }
 
   const frames = [frame('up'), frame('level'), frame('down')];
@@ -681,49 +858,98 @@ function buildEmberwing() {
 // row's center column shifts left/right across the height, not a straight
 // vertical column), with the curve's phase shifting between frames for a
 // sidewinding-undulation animation - visually nothing like the other two
-// archetypes' silhouettes.
+// archetypes' silhouettes. 56x72: the one TALL grid in the roster.
 // ---------------------------------------------------------------------
 
 function buildCoilfang() {
-  const W = 22, H = 20, CENTER = 11;
+  const W = 56, H = 72, CENTER = 28;
   const outline = 'K';
   const palette = {
-    K: '#0e1512', a: '#2f8f6e', b: '#1d6249', c: '#57c79a', d: '#bfe9c9',
-    r: '#e0483a', // belly/throat accent
-    W: '#f2fff6', P: '#101410'
+    K: '#0e1512',
+    a: '#2f8f6e', b: '#1d6249', c: '#57c79a', d: '#a3e6c6',   // scales
+    r: '#e0483a', q: '#9d2f26', p: '#f5836e',                 // belly / throat
+    F: '#f2fff6', G: '#b4ccbe',                               // fangs
+    M: '#4a1018',                                             // mouth interior
+    W: '#f2fff6', P: '#101410', L: '#ffffff'
+  };
+  const tones = {
+    [SENTINEL]: defaultTones(palette),
+    [MAT_D]: { shadow: 'q', mid: 'r', highlight: 'p', rim: 'p' },
+    [MAT_G]: { shadow: 'q', mid: 'd', highlight: 'd', rim: 'd' },
   };
 
-  // Half-width per row: wide "hood/head" at top tapering smoothly down the
-  // whole body length to a thin tail tip - genuine per-row tapering across
-  // the ENTIRE body (not just head vs a flat-width torso).
-  const profile = [4, 5, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 3, 3, 2, 2, 2, 2, 1];
+  // Wide "hood/head" at top, a neck pinch, then a body that tapers smoothly
+  // over the whole remaining length to a thin (but never 1-cell) tail.
+  const profile = profileFrom([
+    [0, 4], [2, 9], [4, 12], [6, 13], [9, 13], [11, 12], [13, 10], [15, 8],
+    [17, 7], [19, 8], [22, 10], [26, 10], [30, 10], [34, 9], [40, 8], [46, 7],
+    [52, 6], [58, 5], [64, 4], [70, 3], [71, 3]
+  ], H);
 
   function sCurve(phase) {
     // sine-based center offset per row -> S-curve; phase shifts the wave
     // so consecutive frames read as the body sliding through the curve
     // (sidewinding), not just sliding sideways as a rigid shape.
     const out = [];
-    for (let y = 0; y < H; y++) out.push(Math.round(3.4 * Math.sin(y / 3.1 + phase)));
+    for (let y = 0; y < H; y++) out.push(Math.round(9 * Math.sin(y / 9.3 + phase)));
     return out;
   }
 
   function accents(offs) {
-    const acc = new Array(H).fill(null).map(() => ({}));
-    const c0 = CENTER + offs[0];
-    // eyes on the head row (row1), symmetric about c1
-    const c1 = CENTER + offs[1];
-    acc[1][c1 - 2] = 'W'; acc[1][c1 - 1] = 'P';
-    acc[1][c1 + 1] = 'W'; acc[1][c1 + 0] = 'P';
-    // forked tongue flicking out past the head silhouette top-front
-    acc[0][c0] = 'r';
-    // throat/belly accent stripe running down the underside
-    for (let y = 4; y <= 18; y++) {
-      const cy = CENTER + offs[y];
-      acc[y][cy] = 'r';
+    const acc = makeSpec(H);
+    const cAt = y => CENTER + offs[y];
+
+    // --- belly stripe, following the curve; clamped inside the silhouette
+    // so it can never widen the body or land on the perimeter. ---
+    for (let y = 17; y <= 68; y++) {
+      const hw = profile[y];
+      if (!hw) continue;
+      const bw = Math.max(1, Math.min(3, hw - 2));
+      const c = cAt(y);
+      for (let x = c - bw; x <= c + bw - 1; x++) put(acc, x, y, MAT_D, W, H);
+      // ventral scute ticks on the green flanks either side of the stripe
+      if (y % 6 === 2) {
+        for (let x = c - hw + 2; x <= c - bw - 1; x++) put(acc, x, y, 'b', W, H);
+        for (let x = c + bw; x <= c + hw - 3; x++) put(acc, x, y, 'b', W, H);
+      }
     }
-    // small rattle/tail tip flourish at the very bottom, touching last body row
-    const cLast = CENTER + offs[19];
-    acc[19][cLast] = 'd';
+
+    // --- rattle-ish segmented tail tip ---
+    for (let y = 64; y <= 70; y++) {
+      const hw = profile[y];
+      if (!hw) continue;
+      const c = cAt(y);
+      if ((y - 64) % 2 === 0) for (let x = c - hw + 1; x <= c + hw - 2; x++) put(acc, x, y, MAT_G, W, H);
+    }
+
+    // --- open mouth with fangs, authored per-row so it follows the curve ---
+    const mouthHw = { 11: 4, 12: 5, 13: 5, 14: 5, 15: 4, 16: 3 };
+    for (const [ys, hw] of Object.entries(mouthHw)) {
+      const y = Number(ys), c = cAt(y);
+      for (let x = c - hw; x <= c + hw - 1; x++) put(acc, x, y, 'M', W, H);
+    }
+    for (const s of [-1, 1]) {
+      for (let y = 12; y <= 15; y++) {
+        const c = cAt(y);
+        const wdt = y <= 12 ? 2 : y <= 13 ? 1 : 0;
+        const base = c + (s < 0 ? -4 : 3);
+        for (let k = 0; k <= wdt; k++) put(acc, base + (s < 0 ? k : -k), y, y >= 14 ? 'G' : 'F', W, H);
+      }
+    }
+    // tongue inside the mouth
+    for (let y = 14; y <= 16; y++) put(acc, cAt(y), y, 'r', W, H);
+    put(acc, cAt(15) - 1, 15, 'r', W, H);
+
+    // --- brow + eyes on the hood ---
+    for (const s of [-1, 1]) {
+      const ex = cAt(6) + s * 6;
+      ellipseFill(acc, ex, 3.6, 3.8, 1.4, 'b', W, H);
+      ellipseFill(acc, ex, 6.4, 3.3, 2.9, 'W', W, H);
+      ellipseFill(acc, ex + s * 0.5, 7.0, 1.3, 2.4, 'P', W, H);  // slit pupil
+      box(acc, ex - 1.5, 4.9, ex - 0.6, 5.8, 'L', W, H);
+    }
+    // hood crest markings
+    for (const s of [-1, 1]) ellipseFill(acc, cAt(9) + s * 9, 9, 2.2, 3.2, 'b', W, H);
     return acc;
   }
 
@@ -731,7 +957,7 @@ function buildCoilfang() {
     const offs = sCurve(phase);
     const bodyLayer = tapered(profile, CENTER, y => offs[y]);
     const raw = rowsFromSpecs(mergeFrame(bodyLayer, accents(offs)), W);
-    return shadeAndOutline(raw, outline, defaultTones(palette));
+    return shadeAndOutline(raw, outline, tones);
   }
 
   const frames = [frame(0), frame(0.9), frame(1.8)];
@@ -739,70 +965,114 @@ function buildCoilfang() {
 }
 
 // ---------------------------------------------------------------------
-// Species 4: SPORELING - stout biped (mushroom/toad-like). Big rounded
-// head-cap, short thick body, two legs that alternate stepping (unlike the
-// quadruped's diagonal gait, a biped step is a simple left/right
-// alternation) - a fourth distinct mass distribution (top-heavy, wide cap)
-// so the roster isn't four variations on one silhouette.
+// Species 4: SPORELING - stout biped (mushroom/toad-like), 56x56. Big
+// rounded spore cap with a gilled underside, a short thick stalk-body
+// carrying the face, stubby arms, and two legs that alternate stepping
+// (unlike the quadruped's diagonal gait, a biped step is a simple
+// left/right alternation) - a fourth distinct mass distribution
+// (top-heavy, wide cap) so the roster isn't four variations on one
+// silhouette.
 // ---------------------------------------------------------------------
 
 function buildSporeling() {
-  const W = 18, H = 18, CENTER = 9;
+  const W = 56, H = 56, CENTER = 28, GROUND = 52;
   const outline = 'K';
   const palette = {
-    K: '#1a1420', a: '#8a4fae', b: '#5f3380', c: '#c184e0', d: '#e9c6f5',
-    s: '#f4e6a8', // spore-cap spots
-    e: '#dfe8d8', // pale underbelly
-    W: '#fbf7ff', P: '#191420'
+    K: '#1a1420',
+    a: '#8a4fae', b: '#5f3380', c: '#c184e0', d: '#ecd0f8',   // cap / body
+    g: '#3b2056', G: '#7c4f9e',                               // gill dark / gill rib
+    s: '#f4e6a8', t: '#c0ac6f', u: '#fdf6d4',                 // cap spots
+    e: '#dfe8d8', n: '#a4b09e', o: '#f4faf0',                 // pale belly
+    v: '#2a1540', w: '#6b3f8c',                               // foot / dark extremity
+    W: '#fbf7ff', P: '#191420', L: '#ffffff'
+  };
+  const tones = {
+    [SENTINEL]: defaultTones(palette),
+    [MAT_D]: { shadow: 'n', mid: 'e', highlight: 'o', rim: 'o' },
+    [MAT_G]: { shadow: 't', mid: 's', highlight: 'u', rim: 'u' },
+    [MAT_F]: { shadow: 'v', mid: 'g', highlight: 'w', rim: 'w' },
   };
 
-  // Wide mushroom-cap head, narrow stalk-like body, stubby legs. The
-  // profile already narrows from the cap's widest point (row3/4, hw=7) down
-  // to the stalk (row7+, hw=4) before widening slightly again lower down,
-  // which reads as a natural cap/stalk neck once outlined.
-  const profile = [0, 4, 6, 7, 7, 6, 4, 4, 4, 5, 5, 5, 5, 0, 0, 0, 0, 0];
-  const capOffset = capDx => y => (y <= 6 ? capDx : 0);
-  const bodyLayer = capDx => tapered(profile, CENTER, capOffset(capDx));
-  const edgeAt = (y, capDx) => taperedEdge(profile, CENTER, capOffset(capDx), y);
+  // Wide dome cap (rows 2-18) with a hard rim step down to the stalk, then
+  // a stalk that swells slightly at the face and narrows to the feet.
+  const profile = profileFrom([
+    [2, 7], [4, 13], [6, 17], [9, 20], [12, 21], [15, 21], [17, 20], [18, 19],
+    [19, 12], [22, 13], [26, 14], [30, 14], [34, 13], [38, 12], [41, 11], [43, 9]
+  ], H);
+  const capOff = capDx => nodOffset(capDx, 19, 27);
 
-  function accents(legPhase, capDx) {
-    const acc = new Array(H).fill(null).map(() => ({}));
-    // cap spots (cap rows, follow the cap nod)
-    acc[2][5 + capDx] = 's'; acc[2][13 + capDx] = 's'; acc[3][9 + capDx] = 's';
-    // eyes row6 (still cap/neck), symmetric
-    acc[6][6 + capDx] = 'W'; acc[6][7 + capDx] = 'P';
-    acc[6][11 + capDx] = 'W'; acc[6][10 + capDx] = 'P';
-    // pale belly stripe on stalk rows7-12 (fixed, stalk doesn't nod)
-    for (let y = 7; y <= 12; y++) { acc[y][CENTER - 1] = 'e'; acc[y][CENTER] = 'e'; }
-    // stubby arms poking from stalk sides, row8
-    const e8 = edgeAt(8, 0);
-    acc[8][e8.x0 - 1] = 'b'; acc[9][e8.x0 - 1] = 'b';
-    acc[8][e8.x1 + 1] = 'b'; acc[9][e8.x1 + 1] = 'b';
+  function accents(legPhase, capDx, bob) {
+    const off = capOff(capDx);
+    const acc = makeSpec(H);
+    const edgeAt = y => taperedEdge(profile, CENTER, off, y);
 
-    // legs attach at row12. Biped alternation: one leg extended
-    // (longer/forward-read), the other retracted, swapping which side is
-    // which across the 3 frames (extended/neutral/extended-other).
-    const legL = [6, 7], legR = [10, 11];
-    const drawLeg = (cols, extended) => {
-      const rows = extended ? [13, 14, 15, 16] : [13, 14, 15];
-      const lastRow = rows[rows.length - 1];
-      for (const y of rows) for (const x of cols) acc[y][x] = (y === lastRow) ? 'b' : SENTINEL;
+    // --- legs ---
+    const drawLeg = (x, state) => {
+      const lift = state === 'plant' ? 0 : state === 'mid' ? 2 : 5;
+      const bottom = GROUND - bob - lift;
+      const swing = state === 'plant' ? 0 : state === 'mid' ? 1 : 2.5;
+      stroke(acc, [[x, 39], [x + swing * 0.4, (39 + bottom) / 2], [x + swing, bottom - 3]], 4.6, 3.6, SENTINEL, W, H);
+      ellipseFill(acc, x + swing, bottom - 1.5, 5.2, 2.8, MAT_F, W, H);
     };
-    if (legPhase === 'L') { drawLeg(legL, true); drawLeg(legR, false); }
-    else if (legPhase === 'R') { drawLeg(legL, false); drawLeg(legR, true); }
-    else { drawLeg(legL, false); drawLeg(legR, false); }
+    const st = {
+      L: ['plant', 'lift'], N: ['mid', 'mid'], R: ['lift', 'plant']
+    }[legPhase];
+    drawLeg(CENTER - 7, st[0]);
+    drawLeg(CENTER + 7, st[1]);
+
+    // --- stubby arms with rounded hands ---
+    const eArm = edgeAt(29);
+    stroke(acc, [[eArm.x0 + 2, 29], [eArm.x0 - 5, 32], [eArm.x0 - 8, 36]], 3.6, 2.9, SENTINEL, W, H);
+    disc(acc, eArm.x0 - 8, 37, 3.3, SENTINEL, W, H);
+    stroke(acc, [[eArm.x1 - 2, 29], [eArm.x1 + 5, 32], [eArm.x1 + 8, 36]], 3.6, 2.9, SENTINEL, W, H);
+    disc(acc, eArm.x1 + 8, 37, 3.3, SENTINEL, W, H);
+
+    // --- pale belly ---
+    ellipseFill(acc, CENTER, 35, 6.5, 6.5, MAT_D, W, H);
+
+    // --- gilled cap underside: a dark band under the rim with lighter
+    // radial ribs, which is what makes the cap read as a mushroom rather
+    // than a dome hat. ---
+    for (let y = 15; y <= 18; y++) {
+      const e = edgeAt(y);
+      if (!e) continue;
+      for (let x = e.x0 + 2; x <= e.x1 - 2; x++) put(acc, x, y, 'g', W, H);
+    }
+    const eG = edgeAt(16);
+    for (let x = eG.x0 + 3; x <= eG.x1 - 3; x += 3) {
+      for (let y = 15; y <= 18; y++) {
+        const e = edgeAt(y);
+        if (e && x >= e.x0 + 2 && x <= e.x1 - 2) put(acc, x, y, 'G', W, H);
+      }
+    }
+
+    // --- cap spots ---
+    ellipseFill(acc, CENTER + off(8) - 11, 8, 4.5, 3.2, MAT_G, W, H);
+    ellipseFill(acc, CENTER + off(11) + 9, 11, 5.0, 3.4, MAT_G, W, H);
+    ellipseFill(acc, CENTER + off(4) + 1, 4.5, 4.2, 2.4, MAT_G, W, H);
+
+    // --- face on the upper stalk ---
+    for (const s of [-1, 1]) {
+      const ex = CENTER + s * 7;
+      ellipseFill(acc, ex, 21.5, 3.8, 1.4, 'b', W, H);
+      ellipseFill(acc, ex, 24.5, 3.4, 3.0, 'W', W, H);
+      ellipseFill(acc, ex + s * 0.5, 25.2, 2.1, 2.2, 'P', W, H);
+      box(acc, ex - 1.5, 22.9, ex - 0.6, 23.8, 'L', W, H);
+    }
+    ellipseFill(acc, CENTER, 29.5, 3.6, 1.6, 'g', W, H);   // mouth
     return acc;
   }
 
-  // Walk cycle motion (round 2 fix, same idea as Ramhorn): body settles 1px
-  // lower on each weight-bearing (extended-leg) frame, rises on the
-  // neutral/passing frame, with a 1px cap nod opposite the stepping leg.
+  // Walk cycle motion (same idea as Ramhorn): body settles lower on each
+  // weight-bearing frame, rises on the neutral/passing frame, with a cap
+  // nod opposite the stepping leg, feathered across the stalk rows so the
+  // nod doesn't shear the silhouette.
   function frame(legPhase) {
-    const capDx = legPhase === 'L' ? -1 : legPhase === 'R' ? 1 : 0;
-    const bob = legPhase === 'N' ? 0 : 1;
-    const raw = rowsFromSpecs(mergeFrame(bodyLayer(capDx), accents(legPhase, capDx)), W);
-    const shaded = shadeAndOutline(raw, outline, defaultTones(palette));
-    return bobFrame(shaded, bob);
+    const capDx = legPhase === 'L' ? -2 : legPhase === 'R' ? 2 : 0;
+    const bob = legPhase === 'N' ? 0 : 2;
+    const off = capOff(capDx);
+    const raw = rowsFromSpecs(mergeFrame(tapered(profile, CENTER, off), accents(legPhase, capDx, bob)), W);
+    return bobFrame(shadeAndOutline(raw, outline, tones), bob);
   }
 
   const frames = [frame('L'), frame('N'), frame('R')];
@@ -829,7 +1099,13 @@ function drawGrid(ctx, rows, palette, offsetX, px) {
 // exact convention PixelBillboard expects (frameCount frames side by side,
 // each canvas.width/frameCount wide, same height) - same mechanism as
 // TestSprite.js's makeTestSlimeCanvas.
-function buildSpeciesCanvas(species, px = 4) {
+//
+// Round 4: the source grids tripled, so the default px dropped 4 -> 2. The
+// strip is still comfortably larger than the sprite's on-screen size (and
+// PixelBillboard uses NearestFilter, so px only sets texture resolution,
+// never the apparent pixel size) - this just keeps a 4-species roster from
+// allocating ~3MB of texture for no visible gain.
+function buildSpeciesCanvas(species, px = 2) {
   const cvs = document.createElement('canvas');
   cvs.width = species.width * px * species.frames.length;
   cvs.height = species.height * px;
@@ -863,7 +1139,8 @@ const SpeciesArtAPI = {
   buildRamhorn, buildEmberwing, buildCoilfang, buildSporeling,
   buildAllSpecies,
   // validation (pure, no DOM)
-  connectedComponents, checkConnected, checkSpriteRanges, validateSpecies, validateAllSpecies,
+  connectedComponents, checkConnected, checkSpriteRanges, checkPaletteCoverage,
+  validateSpecies, validateAllSpecies,
   // rendering (browser-only, needs document)
   buildSpeciesCanvas,
 };

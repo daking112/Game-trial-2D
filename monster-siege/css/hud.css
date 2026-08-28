@@ -1,0 +1,129 @@
+/* Tower-defense HUD. A DOM overlay rather than in-scene geometry: the game
+   renders at a low internal resolution and is nearest-neighbour upscaled
+   (see core/Engine.js), so anything drawn into the WebGL canvas inherits
+   that chunk size. Text at 3x pixel scale is unreadable, and rasterising
+   crisp UI would mean fighting the very trick that makes the world look
+   like pixel art. DOM sits above it at full device resolution, so the world
+   stays chunky and the interface stays sharp. */
+
+.hud {
+  position: fixed; inset: 0; pointer-events: none;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  color: #eef3f8; z-index: 10;
+  -webkit-font-smoothing: antialiased;
+}
+.hud button, .hud .shop-card { pointer-events: auto; }
+
+/* The `hidden` attribute must actually hide. Every panel below sets its own
+   `display`, and a class selector outranks the user-agent `[hidden]{display:none}`
+   rule - without this the game-over scrim (.banner, display:flex) paints over
+   the entire board from the first frame, which is exactly what happened. */
+.hud [hidden] { display: none !important; }
+
+/* ---- top status ---- */
+.hud-top {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px;
+}
+.stat {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(12, 17, 24, 0.82); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 9px; padding: 7px 14px;
+  font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px;
+  backdrop-filter: blur(6px);
+}
+.stat-icon { font-size: 13px; line-height: 1; }
+.stat:nth-child(1) .stat-icon { color: #e1553a; }
+.stat:nth-child(2) .stat-icon { color: #f0c04a; }
+.stat-wave { letter-spacing: 0.09em; font-size: 12px; color: #9fb0c4; }
+.stat-wave span { color: #eef3f8; font-size: 15px; margin-left: 5px; }
+
+/* ---- shop ---- */
+.hud-shop {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 10px; width: 216px;
+}
+.shop-card {
+  position: relative; text-align: left; cursor: pointer;
+  background: rgba(12, 17, 24, 0.86); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 11px; padding: 11px 13px 12px; color: inherit; font: inherit;
+  transition: border-color 0.15s, transform 0.12s, background 0.15s;
+  backdrop-filter: blur(6px);
+}
+.shop-card:hover { border-color: rgba(94,230,200,0.5); transform: translateX(-3px); }
+.shop-card.selected { border-color: #5ee6c8; background: rgba(20,42,40,0.9); }
+.shop-card.unaffordable { opacity: 0.45; }
+.shop-card.unaffordable:hover { transform: none; border-color: rgba(255,255,255,0.10); }
+.shop-key {
+  position: absolute; top: 10px; right: 11px;
+  font-size: 10px; color: #7d8b9c; border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 4px; padding: 1px 5px;
+}
+.shop-name { font-weight: 700; font-size: 14.5px; margin-bottom: 3px; }
+.shop-blurb { font-size: 11.5px; line-height: 1.42; color: #9fb0c4; margin-bottom: 8px; }
+.shop-stats { display: flex; gap: 9px; font-size: 10px; color: #7d8b9c; letter-spacing: 0.04em; }
+.shop-cost {
+  margin-top: 9px; font-weight: 700; font-size: 14px; color: #f0c04a;
+  font-variant-numeric: tabular-nums;
+}
+.shop-cost::before { content: "◍ "; font-size: 11px; }
+
+/* ---- bottom bar ---- */
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 16px;
+  display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap;
+  padding: 0 16px;
+}
+.hint {
+  font-size: 12.5px; color: #9fb0c4; background: rgba(12,17,24,0.72);
+  padding: 6px 13px; border-radius: 7px; transition: color 0.2s;
+}
+.hint.flash { color: #ff8f78; }
+.controls { display: flex; gap: 9px; }
+
+.btn {
+  font: inherit; font-weight: 700; font-size: 12.5px; letter-spacing: 0.05em;
+  border-radius: 8px; padding: 9px 17px; cursor: pointer; border: 1px solid transparent;
+  transition: filter 0.14s, opacity 0.14s;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.16); }
+.btn:disabled { opacity: 0.42; cursor: default; }
+.btn.primary { background: #2fae8b; color: #06120f; }
+.btn.ghost { background: rgba(12,17,24,0.86); border-color: rgba(255,255,255,0.14); color: #cfd9e5; }
+.btn.ghost.on { border-color: #5ee6c8; color: #5ee6c8; }
+.btn.danger { background: rgba(70,22,16,0.9); border-color: rgba(225,85,58,0.45); color: #ff9c85; }
+
+/* ---- selected-tower inspector ---- */
+.hud-inspect {
+  position: absolute; left: 16px; bottom: 16px; width: 208px;
+  background: rgba(12,17,24,0.88); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 11px; padding: 13px; display: flex; flex-direction: column; gap: 9px;
+  backdrop-filter: blur(6px);
+}
+.inspect-name { font-weight: 700; font-size: 14.5px; }
+.inspect-rows { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.inspect-rows div { display: flex; justify-content: space-between; color: #9fb0c4; }
+.inspect-rows b { color: #eef3f8; font-variant-numeric: tabular-nums; }
+
+/* ---- end-of-run banner ---- */
+.banner {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(6,9,14,0.74); backdrop-filter: blur(3px); pointer-events: auto;
+}
+.banner-inner { text-align: center; }
+.banner h2 {
+  margin: 0 0 10px; font-size: 27px; letter-spacing: 0.11em; color: #ff8f78;
+}
+.banner p { margin: 0; color: #9fb0c4; font-size: 14px; }
+
+/* Narrow viewports: the side shop would cover most of the board, so it
+   becomes a horizontal strip above the bottom bar instead. */
+@media (max-width: 760px) {
+  .hud-shop {
+    right: 10px; left: 10px; top: auto; bottom: 72px; transform: none;
+    width: auto; flex-direction: row;
+  }
+  .shop-card { flex: 1; }
+  .shop-blurb { display: none; }
+  .hud-inspect { bottom: 72px; left: 10px; width: 180px; }
+}
