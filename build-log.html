@@ -1,0 +1,294 @@
+<title>Monster Siege Build Log</title>
+<style>
+  :root {
+    --bg: #10151c;
+    --surface: #1a212b;
+    --surface-2: #212a36;
+    --border: #2c3644;
+    --text: #e9edf3;
+    --text-dim: #8c98ab;
+    --accent: #5ee6c8;
+    --accent-dim: #3a5c56;
+    --good: #4fae7e;
+    --good-bg: #1a2b22;
+    --warn: #eab64a;
+    --warn-bg: #2b2413;
+    --bad: #e15c3a;
+    --bad-bg: #2c1c17;
+    --idle: #5a6478;
+    --idle-bg: #1c2128;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f1ea;
+      --surface: #ffffff;
+      --surface-2: #ece8dc;
+      --border: #d9d3c2;
+      --text: #201d17;
+      --text-dim: #6b6455;
+      --accent: #0e8c76;
+      --accent-dim: #cdeae4;
+      --good: #2f8f5e;
+      --good-bg: #e3f2e9;
+      --warn: #a5760a;
+      --warn-bg: #faefd6;
+      --bad: #b8401f;
+      --bad-bg: #fbe6df;
+      --idle: #8b8577;
+      --idle-bg: #eae6da;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f1ea;
+    --surface: #ffffff;
+    --surface-2: #ece8dc;
+    --border: #d9d3c2;
+    --text: #201d17;
+    --text-dim: #6b6455;
+    --accent: #0e8c76;
+    --accent-dim: #cdeae4;
+    --good: #2f8f5e;
+    --good-bg: #e3f2e9;
+    --warn: #a5760a;
+    --warn-bg: #faefd6;
+    --bad: #b8401f;
+    --bad-bg: #fbe6df;
+    --idle: #8b8577;
+    --idle-bg: #eae6da;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+  body { padding: 0 0 64px; }
+  ::selection { background: var(--accent-dim); }
+
+  .pixel { font-family: 'Press Start 2P', 'IBM Plex Mono', monospace; }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 22px 28px 20px;
+  }
+  .title-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  h1 {
+    font-size: 15px; line-height: 1.6; margin: 0; letter-spacing: 0.5px;
+    color: var(--text); text-wrap: balance;
+  }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-top: 8px; max-width: 65ch; }
+
+  .meter-wrap { margin-top: 18px; }
+  .meter-label {
+    display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+  }
+  .meter-label .count { color: var(--text); font-family: 'IBM Plex Mono', monospace; }
+  .meter {
+    display: flex; gap: 3px; height: 10px;
+  }
+  .meter-seg {
+    flex: 1; border-radius: 2px; background: var(--idle-bg); border: 1px solid var(--border);
+    transition: background 0.4s ease;
+  }
+  .meter-seg[data-state="approved"] { background: var(--good); border-color: var(--good); }
+  .meter-seg[data-state="building"], .meter-seg[data-state="critique"] { background: var(--warn); border-color: var(--warn); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+
+  .section-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim);
+    margin: 0 0 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .card-name { font-size: 14.5px; font-weight: 600; text-wrap: balance; }
+  .pill {
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 9px; border-radius: 100px; white-space: nowrap; flex-shrink: 0;
+  }
+  .pill[data-state="idle"] { background: var(--idle-bg); color: var(--idle); }
+  .pill[data-state="building"] { background: var(--warn-bg); color: var(--warn); }
+  .pill[data-state="critique"] { background: var(--warn-bg); color: var(--warn); }
+  .pill[data-state="approved"] { background: var(--good-bg); color: var(--good); }
+  .pill[data-state="rejected"] { background: var(--bad-bg); color: var(--bad); }
+
+  .card-meta { display: flex; gap: 14px; font-size: 11.5px; color: var(--text-dim); }
+  .card-meta .mono { color: var(--text); }
+
+  .verdict {
+    font-size: 12.5px; line-height: 1.5; color: var(--text-dim); border-left: 2px solid var(--border);
+    padding-left: 10px; font-style: italic;
+  }
+  .verdict.bad { border-color: var(--bad); color: var(--text); }
+  .verdict.good { border-color: var(--good); color: var(--text); }
+
+  .log {
+    display: flex; flex-direction: column; gap: 0;
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface);
+  }
+  .log-row {
+    display: grid; grid-template-columns: 84px 90px 1fr; gap: 14px; align-items: start;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12.5px;
+  }
+  .log-row:last-child { border-bottom: none; }
+  .log-time { color: var(--text-dim); }
+  .log-tag {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 2px 7px; border-radius: 5px; white-space: nowrap; height: fit-content;
+  }
+  .log-tag.build { background: var(--accent-dim); color: var(--accent); }
+  .log-tag.critic-pass { background: var(--good-bg); color: var(--good); }
+  .log-tag.critic-fail { background: var(--bad-bg); color: var(--bad); }
+  .log-tag.system { background: var(--idle-bg); color: var(--idle); }
+  .log-text { color: var(--text); }
+  .log-text b { color: var(--accent); font-weight: 600; }
+
+  .empty-note {
+    font-size: 12.5px; color: var(--text-dim); padding: 20px; text-align: center;
+    border: 1px dashed var(--border); border-radius: 10px;
+  }
+
+  footer {
+    max-width: 1180px; margin: 0 auto; padding: 0 28px; color: var(--text-dim); font-size: 11.5px;
+  }
+</style>
+
+<header>
+  <div class="title-row">
+    <h1 class="pixel">MONSTER<span>SIEGE</span> // BUILD LOG</h1>
+    <div class="subtitle" style="margin:0">Hybrid monster-collector + tower-defense, built in Three.js. Piece by piece, each one built and then judged by a fresh critic against HeartGold/SoulSilver and Bloons TD 6.</div>
+  </div>
+  <div class="meter-wrap">
+    <div class="meter-label">
+      <span>Overall progress</span>
+      <span class="count mono" id="meter-count">0 / 8 pieces approved</span>
+    </div>
+    <div class="meter" id="meter"></div>
+  </div>
+</header>
+
+<main>
+  <div class="section-label">Pieces</div>
+  <div class="grid" id="pieces"></div>
+
+  <div class="section-label">Activity log</div>
+  <div class="log" id="log"></div>
+</main>
+
+<footer>Updated as work happens — not on a timer. Reload to see the latest.</footer>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script>
+// ---- data: edit this array + LOG on each redeploy ----
+const PIECES = [
+  { id: 'core',    name: 'Core rendering foundation', state: 'approved', rounds: 2, note: 'APPROVED. Round-2 critic measured pixel colors + shadow area across 8 camera angles and 6 viewport sizes \u2014 byte-identical, confirmed the unlit-sprite fix holds. Minor backlog: THREE.Clock deprecation warning, no minPolarAngle clamp, 1-2px canvas overflow at odd viewport sizes.' },
+  { id: 'terrain', name: 'Battle grid + terrain art',  state: 'approved', rounds: 3, note: 'APPROVED. Irregular worn path with world-space non-repeating dirt texture, rounded corners, tree/bush/rock decorations. The plaid-grid "fix" that regressed into rectangle seams was removed entirely once A/B testing showed the problem never manifests at the game\'s real camera limits.' },
+  { id: 'monsters',name: 'Monster pixel-art + animation', state: 'building', rounds: 4, verdictGood: false, note: 'Round 4, and the diagnosis changed. Rounds 2-3 chased the outline share down from 53% to 32-42% against an HGSS target of ~20-25%. Measuring the silhouette perimeter directly showed why that could never land: on a 24x18 grid a fully outlined sprite costs 48-53% of its opaque pixels, so the target was geometrically unreachable and round 3 only got under it by declining to outline part of the perimeter. HGSS battle sprites are ~80x80; these were ~3x too small in each axis \u2014 also why wings and legs never had room for a colored core. Rebuilding all four species at 3x resolution.' },
+  { id: 'gameplay',name: 'Tower-defense gameplay core', state: 'critique', rounds: 1, note: 'BUILT and running. Lane pathing with bezier corners derived from the same waypoints the drawn path uses; 10 authored waves with overlapping groups then compounding endless scaling; BTD6 first/last/strong/close targeting; homing shots that retarget instead of wasting themselves on a corpse; ghost preview with range ring before you spend; inspect/sell/retarget; fast-forward and autostart. Verified in-browser: wave 1 spawned 6, towers killed 4, 2 leaked, lives 20\u219218, cash exact, wave self-terminated. Awaiting a fresh critic.' },
+  { id: 'combat',  name: 'Combat feel / juice', state: 'critique', rounds: 1, note: 'BUILT. Pooled particles in one draw call, species-tinted hit and death bursts, floating damage numbers, muzzle flash, placement burst, screen shake on leaks and big kills. Square unfiltered points and hard-outlined DOM text rather than soft sprites, so nothing on screen is the one anti-aliased thing in a hard-pixel world. Verified by reading rendered frames. Awaiting a fresh critic.' },
+  { id: 'gacha',   name: 'Gacha / collecting flow', state: 'idle', rounds: 0, note: 'Egg reveal, roster, evolution \u2014 polished gacha feel.' },
+  { id: 'ui',      name: 'UI / menus polish', state: 'idle', rounds: 0, note: 'HUD, menus, transitions, typography, iconography.' },
+  { id: 'audio',   name: 'Audio pass', state: 'idle', rounds: 0, verdictGood: false, note: 'WebAudio-synthesized SFX for hits, placement, UI, waves.' },
+  { id: 'coherence', name: 'Whole-game coherence pass', state: 'idle', rounds: 0, note: 'A fresh agent plays the entire game end to end and smooths it into one thing.' },
+];
+
+const LOG = [
+  { time: 'earlier', tag: 'system', text: 'Build log started. Piece breakdown locked in \u2014 builder\u2192fresh-critic loop on each, bar is "best we can reasonably reach" judged against HGSS and BTD6.' },
+  { time: 'earlier', tag: 'build', text: '<b>Core rendering foundation</b> built: low-res-then-upscale pixel-art pipeline, camera-facing billboard sprites.' },
+  { time: 'earlier', tag: 'critic-fail', text: 'Critic: sprite brightness swings ~1.6x and shadow area swings ~40x purely from camera orbit angle \u2014 dynamic lighting on a camera-facing plane has no stable normal to shade or shadow-cast from.' },
+  { time: 'earlier', tag: 'build', text: 'Fixed at the root: sprites now unlit (real 2D-sprite games do not dynamically light sprites either), shadows via a stable non-billboarded blob decal. Verified across 8 camera azimuths.' },
+  { time: 'earlier', tag: 'build', text: '<b>Battle grid terrain</b> landed: pixel-speckle grass/snow/desert ground, path rendering, tree/bush/rock decorations.' },
+  { time: 'earlier', tag: 'build', text: '<b>Monster pixel-art</b> landed: 4 distinct creatures (Ramhorn, Emberwing, Coilfang, Sporeling), all passing the connectivity/range checker.' },
+  { time: 'earlier', tag: 'critic-fail', text: 'Critic: all 4 creatures shaded as flat horizontal row-bands with only left/right outlines \u2014 stacked slabs, not volume. Walk cycle legs-only, body static.' },
+  { time: 'earlier', tag: 'critic-fail', text: 'Terrain critic: path reads as a "brown rectangle stamped on grass" \u2014 knife-edge boundary, 90\u00b0 miter corners, per-cell dirt texture visibly repeating down the road.' },
+  { time: 'earlier', tag: 'critic-pass', text: '<b>Core rendering foundation: APPROVED.</b> Round-2 critic independently measured pixel colors and shadow area across 8 azimuths and 6 viewport sizes \u2014 byte-identical at every angle.' },
+  { time: 'earlier', tag: 'build', text: 'Round-2 fixes landed for both: worn irregular path with world-space non-repeating dirt; monster art gets per-pixel shading, full outlines, a Ramhorn neck, a Coilfang tube body, real walk-cycle body motion.' },
+  { time: 'earlier', tag: 'critic-pass', text: 'Terrain critic: path fix genuinely good. But the plaid-grid "fix" itself regressed into hard rectangle seams \u2014 and an A/B test showed no plaid grid exists at the game\'s real max zoom anyway. Deleted outright.' },
+  { time: 'earlier', tag: 'critic-fail', text: 'Monster critic: shading/outline/neck/tube/walk-motion all verified correct. But the full-outline rule swallows anything \u2264 2px wide whole \u2014 Emberwing\'s wings 100% black, zero interior color; legs are black sticks.' },
+  { time: 'earlier', tag: 'critic-pass', text: '<b>Battle grid + terrain: APPROVED</b> after 3 rounds. Verified clean at 6 camera setups including grazing angle and true max pull-back.' },
+  { time: 'earlier', tag: 'build', text: 'Round-3 monster fix: two-stage outline rule stops thin appendages being swallowed. Outline share 45-53% \u2192 32-42%. Still above the ~25% HGSS target.' },
+  { time: 'now', tag: 'system', text: 'Measured the real cause instead of tuning further. Counting 8-neighbour perimeter pixels as a share of opaque pixels \u2014 what a <i>correct</i> full 1px outline actually costs \u2014 gives <b>48-53% at 24\u00d718, 25-31% at 2\u00d7, 16-21% at 3\u00d7</b>. The HGSS target was unreachable at that grid size; round 3 only got under it by under-outlining. Resolution was the bug.' },
+  { time: 'now', tag: 'build', text: 'Sprite gate retargeted to the real 12-28% outline share <b>plus a minimum grid size</b>, so it can only be satisfied by adding resolution \u2014 never by under-outlining or by shrinking the sprite until the ratio flatters itself. All four species now correctly fail, naming resolution.' },
+  { time: 'now', tag: 'build', text: 'Builder rebuilding all four species at ~3\u00d7 resolution: limbs wide enough for a lit core, a shadow side <i>and</i> an outline; wing membranes with internal structure; real eyes.' },
+  { time: 'now', tag: 'system', text: 'Audit while that runs: the <b>tower-defense half of the game does not exist yet</b> \u2014 main.js is still a render demo with four idle sprites, no waves, towers, targeting or economy. Added as its own piece and started, since no amount of art polish substitutes for the BTD6 comparison point.' },
+  { time: 'now', tag: 'build', text: '<b>Tower-defense core landed and runs.</b> Lane pathing, waves, placement, targeting, projectiles, economy, lives, fast-forward. Two bugs caught by reading frames rather than trusting a clean console: the game-over scrim covered the board from frame one (a class <code>display:flex</code> outranks the browser\'s own <code>[hidden]</code> rule), and enemies overlapped their own column because a billboard\'s world width exceeded the spawn spacing.' },
+  { time: 'now', tag: 'build', text: '<b>Combat juice landed.</b> Pooled particles in a single draw call, species-tinted bursts, damage numbers, muzzle flash, screen shake. Shake is stripped before OrbitControls reads the camera and re-applied after \u2014 otherwise it feeds back into the orbit and walks the camera away from where you left it.' },
+  { time: 'now', tag: 'system', text: 'Two measurement traps worth recording, since both would have been reported as bugs: effects looked <i>invisible</i> only because headless software-GL frames clamp to 0.25s each and burned a 0.62s lifetime between spawn and screenshot; and an apparent sub-pixel particle was a reading of an almost-dead particle\'s shrunk size, not its base. Froze the clock to capture, and kept a minimum point size anyway because dying particles really do shrink below a pixel.' },
+  { time: 'now', tag: 'critic-fail', text: '<b>All three parallel builders killed mid-task</b> \u2014 HTTP 429, monthly spend limit, resets 10:20am UTC. The art rebuild, audio and gacha agents each got partway and stopped. Fan-out is the most expensive pattern available, so work continues single-threaded until the limit resets.' },
+];
+
+// ---- end data ----
+
+const STATE_LABEL = { idle: 'Not started', building: 'Building', critique: 'In critique', approved: 'Approved', rejected: 'Sent back' };
+
+function renderMeter() {
+  const wrap = document.getElementById('meter');
+  wrap.innerHTML = '';
+  PIECES.forEach(p => {
+    const seg = document.createElement('div');
+    seg.className = 'meter-seg';
+    seg.dataset.state = p.state;
+    seg.title = p.name;
+    wrap.appendChild(seg);
+  });
+  const approved = PIECES.filter(p => p.state === 'approved').length;
+  document.getElementById('meter-count').textContent = `${approved} / ${PIECES.length} pieces approved`;
+}
+
+function renderPieces() {
+  const grid = document.getElementById('pieces');
+  grid.innerHTML = '';
+  PIECES.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-name">${p.name}</div>
+        <div class="pill" data-state="${p.state}">${STATE_LABEL[p.state]}</div>
+      </div>
+      <div class="card-meta"><span>Rounds: <span class="mono">${p.rounds}</span></span></div>
+      <div class="verdict ${p.verdictGood === true ? 'good' : p.verdictGood === false ? 'bad' : ''}">${p.note}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderLog() {
+  const log = document.getElementById('log');
+  if (LOG.length === 0) {
+    log.innerHTML = '<div class="empty-note">Nothing logged yet.</div>';
+    return;
+  }
+  log.innerHTML = '';
+  LOG.slice().reverse().forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'log-row';
+    row.innerHTML = `
+      <div class="log-time mono">${entry.time}</div>
+      <div class="log-tag ${entry.tag}">${entry.tag.replace('-', ' ')}</div>
+      <div class="log-text">${entry.text}</div>
+    `;
+    log.appendChild(row);
+  });
+}
+
+renderMeter();
+renderPieces();
+renderLog();
+</script>
