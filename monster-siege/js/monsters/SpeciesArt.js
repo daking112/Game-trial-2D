@@ -404,11 +404,37 @@ function checkConnected(rows, label) {
 // the old 0.45 cap was measured against the round-1 per-row-only outlining,
 // which under-outlined on purpose (no top/bottom edges at all), so it was
 // never a bar this art should have stayed under.
-const SPRITE_RANGE = { opaque: [0.28, 0.75], outlineFrac: [0.12, 0.55], minColors: 5 };
+// Round-4 recalibration. The 0.55 outline cap above was not a quality bar,
+// it was the ceiling forced by the grid size. Measured directly: take each
+// species silhouette and count 8-neighbour perimeter pixels (i.e. what a
+// full, correct, 1px silhouette outline costs) as a share of opaque pixels:
+//
+//   grid    ramhorn  emberwing  coilfang  sporeling
+//   1x      53%      50%        50%       48%
+//   2x      29%      31%        26%       25%
+//   3x      19%      21%        17%       16%
+//
+// So on the 18-26px-wide grids the art used to live on, a fully outlined
+// sprite CANNOT be under ~48% - the ~20-25% share real HGSS-era battle
+// sprites sit at is unreachable at that resolution, and the round-3
+// thin-feature rule only got to 32-42% by declining to outline parts of
+// the perimeter. That is fighting the symptom. HGSS battle sprites are
+// ~80x80; these were ~24x18, roughly 3x too small in each axis, which is
+// also why wings/legs/tails had no room to be more than 2px and why there
+// was never space for a colored core inside a limb.
+//
+// The gate is therefore now the real target (12-28% outline) plus a
+// minimum grid size, so the range can only be met by giving the art enough
+// resolution to carry a proper outline - never by under-outlining or by
+// shrinking the sprite until the ratio flatters itself.
+const SPRITE_RANGE = { opaque: [0.22, 0.75], outlineFrac: [0.12, 0.28], minColors: 5, minGrid: [48, 40] };
+
+const pct = v => `${Math.round(v * 100)}%`;
 
 function checkSpriteRanges(rows, outlineCh, label) {
   const width = rows[0].length;
   const total = width * rows.length;
+  const gridOk = width >= SPRITE_RANGE.minGrid[0] && rows.length >= SPRITE_RANGE.minGrid[1];
   const colorCounts = new Map();
   let opaque = 0, outline = 0;
   for (const row of rows) {
@@ -424,13 +450,16 @@ function checkSpriteRanges(rows, outlineCh, label) {
   const colors = colorCounts.size;
   const problems = [];
   if (opaqueFrac < SPRITE_RANGE.opaque[0] || opaqueFrac > SPRITE_RANGE.opaque[1]) {
-    problems.push(`${(opaqueFrac * 100).toFixed(0)}% opaque, want ${SPRITE_RANGE.opaque[0] * 100}-${SPRITE_RANGE.opaque[1] * 100}%`);
+    problems.push(`${(opaqueFrac * 100).toFixed(0)}% opaque, want ${pct(SPRITE_RANGE.opaque[0])}-${pct(SPRITE_RANGE.opaque[1])}`);
   }
   if (outlineFrac < SPRITE_RANGE.outlineFrac[0] || outlineFrac > SPRITE_RANGE.outlineFrac[1]) {
-    problems.push(`${(outlineFrac * 100).toFixed(0)}% outline, want ${SPRITE_RANGE.outlineFrac[0] * 100}-${SPRITE_RANGE.outlineFrac[1] * 100}%`);
+    problems.push(`${(outlineFrac * 100).toFixed(0)}% outline, want ${pct(SPRITE_RANGE.outlineFrac[0])}-${pct(SPRITE_RANGE.outlineFrac[1])}`);
   }
   if (colors < SPRITE_RANGE.minColors) {
     problems.push(`${colors} non-outline colors, want >= ${SPRITE_RANGE.minColors}`);
+  }
+  if (!gridOk) {
+    problems.push(`grid ${width}x${rows.length}, want >= ${SPRITE_RANGE.minGrid[0]}x${SPRITE_RANGE.minGrid[1]} (an outline under ${pct(SPRITE_RANGE.outlineFrac[1])} is geometrically impossible below that)`);
   }
   const ok = problems.length === 0;
   console.log(`[SpeciesArt] ${label}: ${ok ? 'OK' : 'FAIL'} colors=${colors} opaque=${(opaqueFrac * 100).toFixed(0)}% outline=${(outlineFrac * 100).toFixed(0)}%` +
