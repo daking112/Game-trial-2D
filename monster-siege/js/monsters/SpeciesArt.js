@@ -227,18 +227,72 @@ function shadeAndOutline(rows, outlineCh, tones) {
   }
 
   const dirs8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const dirs4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const inB = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
+
+  // Which pixels are perimeter candidates (8-neighbour, so diagonal notches
+  // close up rather than leaking background through a corner).
+  const isPerim = grid.map((row, y) => row.map((_, x) => {
+    if (!mask[y][x]) return false;
+    if (x === 0 || x === W - 1 || y === 0 || y === H - 1) return true;
+    return dirs8.some(([dx, dy]) => !mask[y + dy][x + dx]);
+  }));
+
+  // Outlining EVERY perimeter candidate is correct for thick masses but
+  // destroys thin ones: any feature <= 2px wide is *entirely* perimeter (it
+  // has no interior pixel by definition), so the blanket rule turned wings,
+  // legs and tail tips into solid blocks of outline colour with none of
+  // their own hue left - measured at 45-53% of opaque pixels, against the
+  // ~20-25% real HGSS-era sprites sit at, and visually "bare twigs" rather
+  // than a membrane.
+  //
+  // So a perimeter pixel is only converted when the feature it belongs to
+  // can afford it: it must have a 4-neighbour that is genuine interior
+  // (D >= 2, i.e. not itself perimeter). In a thick mass every edge pixel
+  // has one, so the full silhouette outline of round 2 is preserved exactly.
+  // In a <= 2px strip none do, so the strip keeps its own colour and instead
+  // gets outlined only where it meets open space along its length - handled
+  // by the second pass below, which walks the strip and outlines the single
+  // outermost pixel per cross-section rather than all of them.
   const out = grid.map(r => r.slice());
+  const thin = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      if (!mask[y][x] || OUTLINE_PROTECTED.has(grid[y][x])) continue;
-      let onEdge = x === 0 || x === W - 1 || y === 0 || y === H - 1;
-      if (!onEdge) {
-        for (const [dx, dy] of dirs8) {
-          if (!mask[y + dy][x + dx]) { onEdge = true; break; }
-        }
-      }
-      if (onEdge) out[y][x] = outlineCh;
+      if (!mask[y][x] || OUTLINE_PROTECTED.has(grid[y][x]) || !isPerim[y][x]) continue;
+      const hasInterior = dirs4.some(([dx, dy]) => inB(x + dx, y + dy) && mask[y + dy][x + dx] && !isPerim[y + dy][x + dx]);
+      if (hasInterior) out[y][x] = outlineCh;
+      else thin.push([x, y]);
     }
+  }
+
+  // Thin-feature pass: for each pixel of a <=2px structure, outline it only
+  // if it is the outermost of its cross-section along the axis the structure
+  // is thin in. Measuring thinness per-axis (how far opaque runs left/right
+  // vs up/down) means a horizontal 2px-tall strip gets a top/bottom rim
+  // while keeping its colour across, and a vertical one gets a left/right
+  // rim - either way at least one fill pixel always survives per cross
+  // section, which is exactly what stops the feature reading as a black
+  // stick.
+  const runLen = (x, y, dx, dy) => {
+    let n = 0, cx = x + dx, cy = y + dy;
+    while (inB(cx, cy) && mask[cy][cx]) { n++; cx += dx; cy += dy; }
+    return n;
+  };
+  for (const [x, y] of thin) {
+    const spanX = 1 + runLen(x, y, 1, 0) + runLen(x, y, -1, 0);
+    const spanY = 1 + runLen(x, y, 0, 1) + runLen(x, y, 0, -1);
+    // Outline across the *thin* axis only; along the long axis the pixel is
+    // interior to the feature and must keep its colour.
+    const thinAxis = spanX <= spanY ? 'x' : 'y';
+    const probes = thinAxis === 'x' ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]];
+    const span = thinAxis === 'x' ? spanX : spanY;
+    // A 1px-wide feature has nothing to spare - keep its colour entirely,
+    // it reads as a highlight line rather than a limb.
+    if (span <= 1) continue;
+    const touchesBg = probes.some(([dx, dy]) => !inB(x + dx, y + dy) || !mask[y + dy][x + dx]);
+    // Alternate which side gets the rim so a 2px strip ends up outline on
+    // one side, fill on the other, instead of both sides eating each other.
+    if (touchesBg && (x + y) % 2 === 0) out[y][x] = outlineCh;
   }
   return out.map(r => r.join(''));
 }
