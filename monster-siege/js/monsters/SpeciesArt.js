@@ -605,16 +605,19 @@ function buildRamhorn() {
     [MAT_E]: { shadow: 'g', mid: 'f', highlight: 'q', rim: 'q' },
   };
 
-  // Head rows 6-25 (widest at the cheeks, narrowing into the muzzle), a
-  // genuine NECK PINCH at rows 26-28, then the barrel torso rows 29-46 - a
+  // Head rows 5-22 (widest at the cheeks, narrowing into the muzzle), a
+  // genuine NECK PINCH at rows 23-26, then the barrel torso rows 27-44 - a
   // real waist in the silhouette so shadeAndOutline wraps a distinct head
   // mass with its own outline, instead of one smooth triangular taper.
+  // Proportions are deliberately head ~1/3, barrel ~1/3, legs ~1/4 of the
+  // height: the first 3x draft gave the head 20 of 56 rows AND put the leg
+  // tops at row 42, which left the legs as 6-row stubs under a giant head.
   const profile = profileFrom([
-    [6, 5], [8, 9], [10, 13], [13, 16], [16, 18], [19, 18], [21, 17], [23, 14],
-    [25, 11], [27, 9], [28, 10], [30, 16], [32, 21], [35, 25], [38, 26], [41, 25],
-    [43, 22], [45, 18], [46, 13]
+    [5, 5], [7, 9], [9, 12], [11, 14], [14, 15], [17, 15], [19, 14], [21, 12],
+    [22, 10], [24, 8], [26, 9], [28, 14], [30, 19], [33, 23], [36, 25], [39, 25],
+    [41, 23], [43, 20], [44, 16]
   ], H);
-  const headOff = headDx => nodOffset(headDx, 24, 30);
+  const headOff = headDx => nodOffset(headDx, 21, 27);
 
   function accents(legPhase, headDx, bob) {
     const off = headOff(headDx);
@@ -623,10 +626,6 @@ function buildRamhorn() {
     const hx = y => off(y); // head-follow offset for hand-placed face parts
 
     // --- far (back) legs first, so the near pair overlaps them ---
-    const foot = (x, y, mat) => {
-      ellipseFill(acc, x, y - 1.4, 4.6, 2.7, MAT_E, W, H);
-      if (mat === MAT_F) ellipseFill(acc, x, y - 1.4, 3.2, 1.7, MAT_E, W, H);
-    };
     const drawLeg = (x, topY, state, mat) => {
       const lift = state === 'plant' ? 0 : state === 'mid' ? 3 : 6;
       const bottom = GROUND - bob - lift;
@@ -636,7 +635,7 @@ function buildRamhorn() {
         [x + swing * 0.4, (topY + bottom) / 2],
         [x + swing, bottom - 3]
       ], 4.3, 3.3, mat, W, H);
-      foot(x + swing, bottom, mat);
+      ellipseFill(acc, x + swing, bottom - 1.4, 4.6, 2.7, MAT_E, W, H);
     };
     const phase = {
       // diagonal gait: FL+BR vs FR+BL
@@ -644,35 +643,37 @@ function buildRamhorn() {
       N: { fl: 'mid', br: 'mid', fr: 'mid', bl: 'mid' },
       B: { fl: 'lift', br: 'lift', fr: 'plant', bl: 'plant' },
     }[legPhase];
-    drawLeg(CENTER - 21, 39, phase.bl, MAT_F);
-    drawLeg(CENTER + 21, 39, phase.br, MAT_F);
+    drawLeg(CENTER - 20, 36, phase.bl, MAT_F);
+    drawLeg(CENTER + 20, 36, phase.br, MAT_F);
 
-    // --- tail, behind the torso on the right ---
-    const eTail = edgeAt(33);
-    stroke(acc, [[eTail.x1 - 1, 33], [eTail.x1 + 6, 36], [eTail.x1 + 9, 42], [eTail.x1 + 7, 47]],
-      3.6, 2.3, SENTINEL, W, H);
-    disc(acc, eTail.x1 + 7, 48.5, 3.2, MAT_F, W, H);
+    // --- tail: a short perky goat tail off the top of the rump, kept ABOVE
+    // the leg band so it can never merge with the back-right leg into one
+    // ambiguous blob (the first 3x draft hung it down beside that leg and
+    // it read as a fifth limb). ---
+    const eTail = edgeAt(31);
+    stroke(acc, [[eTail.x1 - 2, 31], [eTail.x1 + 3, 28], [eTail.x1 + 4, 24]], 3.6, 2.6, SENTINEL, W, H);
+    disc(acc, eTail.x1 + 4, 22.5, 3.0, MAT_F, W, H);
 
     // --- near (front) legs ---
-    drawLeg(CENTER - 11, 42, phase.fl, SENTINEL);
-    drawLeg(CENTER + 11, 42, phase.fr, SENTINEL);
+    drawLeg(CENTER - 11, 39, phase.fl, SENTINEL);
+    drawLeg(CENTER + 11, 39, phase.fr, SENTINEL);
 
     // --- belly patch ---
-    ellipseFill(acc, CENTER, 42, 10, 6, MAT_D, W, H);
+    ellipseFill(acc, CENTER, 40, 9.5, 5.5, MAT_D, W, H);
 
-    // --- ears: leaf-shaped, tucked below the horn curl ---
-    const eEar = edgeAt(17);
-    stroke(acc, [[eEar.x0 + 2, 17], [eEar.x0 - 5, 17], [eEar.x0 - 10, 19]], 3.6, 1.8, SENTINEL, W, H);
-    stroke(acc, [[eEar.x1 - 2, 17], [eEar.x1 + 5, 17], [eEar.x1 + 10, 19]], 3.6, 1.8, SENTINEL, W, H);
+    // --- ears: short leaf shapes angled down, tucked under the horn curl ---
+    const eEar = edgeAt(16);
+    stroke(acc, [[eEar.x0 + 2, 16], [eEar.x0 - 4, 17], [eEar.x0 - 8, 20]], 3.4, 1.9, SENTINEL, W, H);
+    stroke(acc, [[eEar.x1 - 2, 16], [eEar.x1 + 4, 17], [eEar.x1 + 8, 20]], 3.4, 1.9, SENTINEL, W, H);
 
     // --- horns: a real ram curl (up, back, around, forward) with ridging ---
-    const eHorn = edgeAt(8);
+    const eHorn = edgeAt(7);
     const hornPath = (rootX, s) => [
-      [rootX, 8], [rootX + s * 4, 4], [rootX + s * 11, 2], [rootX + s * 16, 6], [rootX + s * 13, 11]
+      [rootX, 7], [rootX + s * 4, 3], [rootX + s * 10, 2], [rootX + s * 15, 5], [rootX + s * 12, 10]
     ];
     for (const [rootX, s] of [[eHorn.x0 + 2, -1], [eHorn.x1 - 2, 1]]) {
       const path = hornPath(rootX, s);
-      stroke(acc, path, 4.6, 2.0, MAT_C, W, H);
+      stroke(acc, path, 4.4, 2.0, MAT_C, W, H);
       // ridge bands: short darker ticks across the horn every few cells,
       // sampled along the same polyline so they follow the curl.
       for (let t = 0.18; t < 0.92; t += 0.16) {
@@ -684,24 +685,25 @@ function buildRamhorn() {
         const dx = path[i + 1][0] - path[i][0], dy = path[i + 1][1] - path[i][1];
         const len = Math.hypot(dx, dy) || 1;
         const nx = -dy / len, ny = dx / len;
-        const r = 3.6 - 2.2 * t;
+        const r = 3.4 - 2.1 * t;
         for (let k = -r; k <= r; k += 0.5) put(acc, px + nx * k, py + ny * k, 'i', W, H);
       }
     }
 
     // --- muzzle + nostrils + mouth ---
-    ellipseFill(acc, CENTER + hx(23), 23, 8.5, 5.5, MAT_D, W, H);
-    ellipseFill(acc, CENTER + hx(21) - 3.5, 21, 1.6, 1.2, 'g', W, H);
-    ellipseFill(acc, CENTER + hx(21) + 3.5, 21, 1.6, 1.2, 'g', W, H);
-    box(acc, CENTER + hx(26) - 4, 26, CENTER + hx(26) + 3, 26, 'g', W, H);
+    ellipseFill(acc, CENTER + hx(20), 20, 7.5, 5, MAT_D, W, H);
+    ellipseFill(acc, CENTER + hx(18) - 3, 18, 1.5, 1.1, 'g', W, H);
+    ellipseFill(acc, CENTER + hx(18) + 3, 18, 1.5, 1.1, 'g', W, H);
+    box(acc, CENTER + hx(23) - 4, 23, CENTER + hx(23) + 3, 23, 'g', W, H);
 
-    // --- brow ridge, then eyes (sclera / pupil / glint) ---
+    // --- brow ridge, then eyes (dark rim / sclera / pupil / glint) ---
     for (const s of [-1, 1]) {
-      const ex = CENTER + hx(17) + s * 11;
-      ellipseFill(acc, ex, 14.5, 4.5, 1.6, 'b', W, H);
-      ellipseFill(acc, ex, 17.5, 3.6, 3.2, 'W', W, H);
-      ellipseFill(acc, ex + s * 0.6, 18.4, 2.2, 2.4, 'P', W, H);
-      box(acc, ex - 1.5, 15.8, ex - 0.5, 16.8, 'L', W, H);
+      const ex = CENTER + hx(14) + s * 9;
+      ellipseFill(acc, ex, 11.5, 4.2, 1.5, 'b', W, H);
+      ellipseFill(acc, ex, 14.3, 4.1, 3.6, 'P', W, H);
+      ellipseFill(acc, ex, 14.5, 3.2, 2.8, 'W', W, H);
+      ellipseFill(acc, ex + s * 0.6, 15.2, 2.0, 2.2, 'P', W, H);
+      box(acc, ex - 1.5, 12.9, ex - 0.6, 13.8, 'L', W, H);
     }
     return acc;
   }

@@ -94,6 +94,10 @@ class Enemy {
 
     const species = def.species();
     const canvas = speciesCanvasFor(species, px);
+    // Hit/death particles are tinted from the creature's own mid-body colour,
+    // so a burst reads as "that thing came apart" rather than as a generic
+    // white spark that could have come from anything on the board.
+    this.tint = new THREE.Color(species.palette.a || '#ffffff');
     this.sprite = new PixelBillboard({
       canvas, frameCount: species.frames.length, fps: def.fps || 6, worldHeight: def.worldHeight
     });
@@ -179,11 +183,13 @@ class Enemy {
 // nearest live enemy within a short radius, so kills don't waste the shot.
 // ---------------------------------------------------------------------
 class Projectile {
-  constructor({ origin, target, damage, speed, color, scene, radius = 0.075 }) {
+  constructor({ origin, target, damage, speed, color, scene, onHit, radius = 0.075 }) {
     this.target = target;
     this.damage = damage;
     this.speed = speed;
     this.scene = scene;
+    this.onHit = onHit;
+    this.color = color;
     this.done = false;
     this.life = 2.5;
     const geo = new THREE.SphereGeometry(radius, 6, 5);
@@ -205,7 +211,8 @@ class Projectile {
     const dist = this._dir.length();
     const step = this.speed * dt;
     if (dist <= step) {
-      this.target.damage(this.damage);
+      const dealt = this.target.damage(this.damage);
+      if (this.onHit) this.onHit(this.target, dealt, this.color);
       this.done = true;
       return;
     }

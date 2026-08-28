@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Siege - audio bench</title>
+<style>
+  body { background:#15121c; color:#e8e2f0; font:14px/1.5 ui-monospace,Menlo,Consolas,monospace; margin:0; padding:20px; }
+  h1 { font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:#c184e0; margin:0 0 4px; }
+  p.sub { color:#8b81a0; margin:0 0 18px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  button { background:#2a2338; color:#e8e2f0; border:1px solid #453a5c; border-radius:6px;
+           padding:8px 12px; font:inherit; cursor:pointer; }
+  button:hover { background:#3a2f4d; border-color:#7a5fa8; }
+  button.hot { border-color:#c184e0; color:#f0d9ff; }
+  fieldset { border:1px solid #332a44; border-radius:8px; margin:0 0 16px; padding:12px 14px; }
+  legend { color:#57c79a; letter-spacing:.1em; text-transform:uppercase; font-size:11px; }
+  label { display:inline-flex; align-items:center; gap:8px; margin-right:18px; }
+  pre { background:#0f0c15; border:1px solid #2a2338; border-radius:8px; padding:12px;
+        overflow:auto; max-height:52vh; color:#a8e6c8; }
+</style>
+</head>
+<body>
+<h1>Monster Siege audio bench</h1>
+<p class="sub">Click any sound to hear it. "Measure all" renders every sound through the
+production bus chain in an OfflineAudioContext and prints peak / RMS.</p>
+
+<fieldset><legend>transport</legend>
+  <div class="row">
+    <button id="init" class="hot">init() (user gesture)</button>
+    <button data-music="start">start music</button>
+    <button data-music="stop">stop music</button>
+    <button id="mute">toggle mute</button>
+  </div>
+  <div class="row">
+    <label>master <input id="vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+    <label>intensity <input id="int" type="range" min="0" max="1" step="0.01" value="0.1"></label>
+    <span id="state">not started</span>
+  </div>
+</fieldset>
+
+<fieldset><legend>sounds</legend><div class="row" id="pads"></div></fieldset>
+
+<fieldset><legend>stress</legend>
+  <div class="row">
+    <button id="burst">live burst: wave-20 stampede (4s)</button>
+    <button id="measure">measure all (offline)</button>
+  </div>
+</fieldset>
+
+<pre id="out">ready</pre>
+
+<script src="./Audio.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('out');
+  function log(x) { out.textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); }
+
+  var pads = document.getElementById('pads');
+  GameAudio.names().forEach(function (n) {
+    var b = document.createElement('button');
+    b.textContent = n;
+    b.onclick = function () { GameAudio.init(); GameAudio.play(n); };
+    pads.appendChild(b);
+  });
+
+  document.getElementById('init').onclick = function () {
+    GameAudio.init();
+    document.getElementById('state').textContent = 'ctx: ' + (GameAudio.ctx && GameAudio.ctx.state);
+  };
+  document.getElementById('mute').onclick = function () { log('muted=' + GameAudio.toggleMute()); };
+  document.getElementById('vol').oninput = function (e) { GameAudio.setMasterVolume(+e.target.value); };
+  document.getElementById('int').oninput = function (e) { GameAudio.setMusicIntensity(+e.target.value); };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-music]'), function (b) {
+    b.onclick = function () {
+      GameAudio.init();
+      if (b.dataset.music === 'start') GameAudio.startMusic(); else GameAudio.stopMusic();
+    };
+  });
+
+  // ---- the wave-20 stampede: what the limiter actually has to survive ----
+  // Ten Sporelings at 1.6 shots/s + four Coilfangs at 0.75/s all firing for
+  // four seconds, every shot landing a hit, one kill per ~3 hits, plus a
+  // brute death and a leak in the middle. ~200 events in 4s.
+  function stampede(seconds) {
+    var ev = [], t;
+    for (var s = 0; s < 10; s++) {
+      for (t = 0.05 + s * 0.017; t < seconds; t += 1 / 1.6) {
+        ev.push({ name: 'fire_light', at: t });
+        ev.push({ name: 'enemy_hit', at: t + 0.06 });
+      }
+    }
+    for (var c = 0; c < 4; c++) {
+      for (t = 0.1 + c * 0.09; t < seconds; t += 1 / 0.75) {
+        ev.push({ name: 'fire_heavy', at: t });
+        ev.push({ name: 'enemy_hit', at: t + 0.09 });
+      }
+    }
+    for (t = 0.3; t < seconds; t += 0.42) ev.push({ name: 'enemy_killed', at: t });
+    ev.push({ name: 'big_enemy_killed', at: seconds * 0.45 });
+    ev.push({ name: 'life_lost', at: seconds * 0.6 });
+    ev.push({ name: 'wave_start', at: 0.02 });
+    ev.sort(function (a, b) { return a.at - b.at; });
+    return ev;
+  }
+  window.__stampede = stampede;
+
+  document.getElementById('burst').onclick = function () {
+    GameAudio.init();
+    var t0 = GameAudio.ctx.currentTime;
+    stampede(4).forEach(function (e) { GameAudio.play(e.name, { when: t0 + e.at }); });
+    log('fired ' + stampede(4).length + ' events into the live context');
+  };
+
+  // ---- offline measurement (the real verification) ----
+  window.__measureAll = async function () {
+    var results = { sounds: [], bursts: [], music: [] };
+    for (const n of GameAudio.names()) {
+      const a = await GameAudio.renderOffline(n, { seed: 1234 });
+      results.sounds.push({ name: n, peak: a.peak, rms: a.rms, peakDb: a.peakDb, rmsDb: a.rmsDb,
+                            seconds: a.buffer.duration });
+    }
+    // repeat-variation check: same sound twice from one player must differ
+    results.variation = await (async function () {
+      const two = await GameAudio.renderOfflineSequence(
+        [{ name: 'fire_light', at: 0.05 }, { name: 'fire_light', at: 0.55 }], 1.1, { seed: 7 });
+      const d = two.buffer.getChannelData(0);
+      const sr = two.buffer.sampleRate;
+      let diff = 0, energy = 0;
+      const n = Math.floor(0.25 * sr);
+      for (let i = 0; i < n; i++) {
+        const a = d[Math.floor(0.05 * sr) + i], b = d[Math.floor(0.55 * sr) + i];
+        diff += (a - b) * (a - b); energy += a * a + b * b;
+      }
+      return { relativeDifference: energy > 0 ? Math.sqrt(diff / energy) : 0 };
+    })();
+    for (const secs of [4]) {
+      const ev = stampede(secs);
+      const a = await GameAudio.renderOfflineSequence(ev, secs + 1.2, { seed: 99 });
+      results.bursts.push({ label: 'wave-20 stampede ' + secs + 's', requested: ev.length,
+                            accepted: a.accepted, dropped: a.dropped,
+                            peak: a.peak, rms: a.rms, peakDb: a.peakDb, rmsDb: a.rmsDb });
+    }
+    for (const I of [0, 0.25, 0.6, 1]) {
+      const a = await GameAudio.renderOfflineMusic(12, I, { seed: 5, musicSeed: 5 });
+      results.music.push({ intensity: I, peak: a.peak, rms: a.rms, peakDb: a.peakDb, rmsDb: a.rmsDb });
+    }
+    return results;
+  };
+
+  // ---- live-context probe: proves a real AudioContext emits real samples ----
+  window.__liveProbe = async function (names) {
+    GameAudio.init({ music: false });
+    if (GameAudio.ctx.state !== 'running') { try { await GameAudio.ctx.resume(); } catch (e) {} }
+    const an = GameAudio.ctx.createAnalyser();
+    an.fftSize = 2048;
+    GameAudio.player.master.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const res = [];
+    for (const n of names) {
+      let peak = 0;
+      GameAudio.play(n);
+      const until = performance.now() + 700;
+      while (performance.now() < until) {
+        an.getFloatTimeDomainData(buf);
+        for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > peak) peak = a; }
+        await new Promise(r => setTimeout(r, 12));
+      }
+      res.push({ name: n, livePeak: peak });
+    }
+    return { ctxState: GameAudio.ctx.state, sampleRate: GameAudio.ctx.sampleRate, probes: res };
+  };
+
+  document.getElementById('measure').onclick = function () {
+    log('rendering...');
+    window.__measureAll().then(log, function (e) { log('ERROR ' + e); });
+  };
+})();
+</script>
+</body>
+</html>

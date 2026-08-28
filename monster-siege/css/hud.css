@@ -127,3 +127,22 @@
   .shop-blurb { display: none; }
   .hud-inspect { bottom: 72px; left: 10px; width: 180px; }
 }
+
+/* ---- floating combat numbers ----
+   Positioned with a transform rather than left/top so each frame's move is a
+   compositor transform instead of a layout invalidation - at wave 20 there
+   can be a couple of dozen of these updating every frame. */
+.fx-numbers { position: fixed; inset: 0; pointer-events: none; z-index: 9; }
+.fx-num {
+  position: fixed; top: 0; left: 0; will-change: transform, opacity;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em; white-space: nowrap;
+  /* A hard 4-way outline instead of a blurred shadow: the world behind these
+     is hard-edged pixel art, and a soft glow is the one thing on screen that
+     would not belong to it. */
+  text-shadow: 1px 0 0 #0b0f14, -1px 0 0 #0b0f14, 0 1px 0 #0b0f14, 0 -1px 0 #0b0f14;
+}
+.fx-num.fx-hit { color: #ffe9a8; }
+.fx-num.fx-crit { color: #ffd23f; font-size: 19px; }
+.fx-num.fx-leak { color: #ff6a55; font-size: 17px; letter-spacing: 0.12em; }

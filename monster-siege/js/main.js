@@ -57,8 +57,15 @@ engine.scene.add(terrain);
 const game = new Game({ engine, terrain, waypoints: PATH_WAYPOINTS });
 
 engine.onUpdate((delta) => {
+  // Order matters. OrbitControls derives its spherical coordinates by reading
+  // camera.position at the top of update(), so the screen-shake offset has to
+  // be removed before it runs and re-applied after - otherwise the shake
+  // feeds back into the orbit and slowly walks the camera away from wherever
+  // the player left it.
+  game.fx.shake.restore(engine.camera);
   controls.update();
   game.update(delta);
+  game.fx.shake.apply(engine.camera, delta);
   terrain.userData.terrain.updateBillboards(engine.camera.position);
 });
 

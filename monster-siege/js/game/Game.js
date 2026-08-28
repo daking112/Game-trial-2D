@@ -50,6 +50,8 @@ class Game {
     this._pointer = new THREE.Vector2();
     this._hitPoint = new THREE.Vector3();
 
+    this.fx = new Effects({ scene: this.scene, camera: this.camera, canvas: engine.renderer.domElement });
+
     this._buildHud();
     this._bindInput();
     this._refreshHud();
@@ -89,6 +91,7 @@ class Game {
     this.towers.push(tower);
     this.occupied.add(this.cellKey(col, row));
     this.cash -= type.cost;
+    this.fx.place(tower.pos);
     this._refreshHud();
     return true;
   }
@@ -163,10 +166,18 @@ class Game {
     // enemies
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
+      // The death burst has to fire on the frame HP reaches zero, not when
+      // the corpse is reaped ~0.22s later once its fade finishes - otherwise
+      // the particles arrive after the thing they came from has vanished.
+      if (e.dead && !e._burst) {
+        e._burst = true;
+        this.fx.kill(e.position, e.def.worldHeight, e.tint.getHex(), e.maxHp >= 200);
+      }
       const finished = e.update(dt, cameraPos);
       if (!finished) continue;
       if (e.leaked) {
         this.lives -= e.leakDamage;
+        this.fx.leak(e.position, e.def.worldHeight);
         if (this.lives <= 0) { this.lives = 0; this._gameOver(); }
       } else {
         this.cash += e.bounty;
@@ -177,8 +188,12 @@ class Game {
     }
 
     // towers
+    const onHit = (enemy, dealt, color) => {
+      if (dealt > 0) this.fx.hit(enemy.position, enemy.def.worldHeight, dealt, enemy.tint.getHex());
+    };
     const spawnProjectile = (opts) => {
-      this.projectiles.push(new Projectile(Object.assign({ scene: this.scene }, opts)));
+      this.fx.muzzle(opts.origin, opts.color);
+      this.projectiles.push(new Projectile(Object.assign({ scene: this.scene, onHit }, opts)));
     };
     for (const t of this.towers) t.update(dt, this.enemies, spawnProjectile, cameraPos);
 
@@ -192,6 +207,11 @@ class Game {
     if (this.phase === GAME_PHASE.WAVE && this._spawnQueue.length === 0 && this.enemies.length === 0) {
       this._endWave();
     }
+
+    // Effects run on RAW dt, not the fast-forwarded dt: at 3x the whole
+    // point of a 0.24s spark is that it is still legible, and scaling its
+    // lifetime with the simulation makes late waves a strobe.
+    this.fx.update(rawDt);
 
     if (this._ghost) this._ghost.sprite.update(dt, cameraPos);
   }
