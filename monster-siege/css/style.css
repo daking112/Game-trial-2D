@@ -1,0 +1,3 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0b0f1a; overflow: hidden; }
+#viewport { position: fixed; inset: 0; }

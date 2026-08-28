@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Siege</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="viewport"></div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module">
+  import * as THREE_NS from './vendor/three.module.min.js';
+  import { OrbitControls as OC } from './vendor/OrbitControls.js';
+  window.THREE = THREE_NS;
+  window.OrbitControls = OC;
+  window.dispatchEvent(new Event('three-ready'));
+</script>
+<script>
+  // Classic scripts below need window.THREE, set by the module script above.
+  // Module scripts are deferred until after parsing (same timing class as
+  // classic scripts here), so wrap the app scripts in this listener instead
+  // of assuming plain load order - see monster-siege's README for why.
+  window.addEventListener('three-ready', () => {
+    const scripts = [
+      'js/core/Engine.js',
+      'js/core/PixelBillboard.js',
+      'js/core/TestSprite.js',
+      'js/main.js'
+    ];
+    function loadNext(i) {
+      if (i >= scripts.length) return;
+      const s = document.createElement('script');
+      s.src = scripts[i];
+      s.onload = () => loadNext(i + 1);
+      document.body.appendChild(s);
+    }
+    loadNext(0);
+  });
+</script>
+</body>
+</html>
