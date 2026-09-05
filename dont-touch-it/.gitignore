@@ -1,2 +1,11 @@
 shots/
 tools/node_modules
+
+# Throwaway diagnostics. Critics and debugging sessions write one-off
+# scripts in tools/; the keepers are named for what they do (harness,
+# playtest, audit, perf, still, statediff, audio-lab, play-l*).
+tools/diag*.mjs
+tools/dbg*.mjs
+tools/crit*.mjs
+tools/tmp*.mjs
+tools/zoom.mjs
