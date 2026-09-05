@@ -75,7 +75,7 @@ if (ch === '2') {
 }
 
 if (ch === '3') {
-  const c = await s.page.evaluate(() => { const g = window.__DTI__.game.level.g; return { x: g.cx, y: g.paneY || g.cy, w: g.paneW, h: g.paneH, g: JSON.stringify(Object.keys(g)) }; });
+  const c = await s.page.evaluate(() => { const P = window.__DTI__.game.level.g.panes[0]; return { x: P.cx, y: (P.y0 + P.y1) / 2, w: P.w, h: P.h }; });
   log('pane', JSON.stringify(c));
   const cy = c.y;
   await s.touchStart([{ x: c.x, y: cy }]);

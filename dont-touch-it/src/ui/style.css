@@ -135,11 +135,26 @@ html,body{
 
 /* ---------- end card ---------- */
 #endcard{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
-  opacity:0;pointer-events:none;padding:0 30px;text-align:center;
+  position:absolute;inset:0;display:flex;align-items:center;flex-direction:column;
+  justify-content:flex-start;padding:calc(var(--safe-t) + 24vh) 30px 0;
+  opacity:0;pointer-events:none;text-align:center;
 }
+#endcard .big,#endcard .small span{text-shadow:0 2px 30px rgba(0,0,0,.92),0 0 3px rgba(0,0,0,.7);}
 #endcard .big{font-family:var(--serif);font-size:clamp(28px,8.4vw,46px);line-height:1.14;}
-#endcard .small{margin-top:22px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-faint);}
+#endcard .small{
+  margin-top:26px;display:flex;flex-direction:column;gap:9px;
+  font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-faint);
+}
+#endcard .again{
+  position:absolute;bottom:calc(var(--safe-b) + 58px);
+  appearance:none;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.04);backdrop-filter:blur(10px);
+  color:var(--ink-dim);font-family:var(--sans);
+  font-size:11px;font-weight:500;letter-spacing:.26em;text-transform:uppercase;
+  padding:13px 26px;border-radius:999px;cursor:pointer;pointer-events:auto;
+  transition:color .3s var(--ease-out),border-color .3s var(--ease-out),background .3s var(--ease-out);
+}
+#endcard .again:active{color:var(--ink);border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.09);}
 
 /* ---------- audio-gate / boot ---------- */
 #boot{

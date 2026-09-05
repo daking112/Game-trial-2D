@@ -176,13 +176,27 @@ export class Game {
   async finish() {
     this.state = 'end';
     await Promise.all([
-      this.tween(this.set, 'coneStrength', 0, 1.4, 'inQuad'),
-      this.tween(this.set, 'exposure', 0.04, 1.8, 'inQuad'),
+      this.tween(this.set, 'coneStrength', 0.42, 1.4, 'inQuad'),
+      this.tween(this.set, 'exposure', 0.52, 1.8, 'inQuad'),
     ]);
     if (this.level) { this.level.exit(); this.level = null; }
+    // exit() restores the room's lighting for the next chapter, and there
+    // isn't one — re-assert the closing state after it, or the gallery
+    // snaps back to full brightness under the end card.
+    this.set.exposure = 0.52;
+    this.set.coneStrength = 0.42;
+    this.set.warmth = 1;
+    this.set.tint = null;
     this.hud.showBar(false);
     this.narrator.clear();
-    this.hud.end('You were told.', `${this.transgressions} rules broken`);
+    const n = this.levelClasses.length;
+    const debris = this.wreck.items.length;
+    const glass = this.wreck.items.filter(i => i.kind === 'shard').length;
+    this.hud.end('You were told.', [
+      `${this.transgressions} of ${n} rules broken`,
+      debris ? `${debris} pieces left where they fell` : 'Nothing left behind',
+      glass > 20 ? 'Most of it was glass' : 'Room 1 of 140',
+    ], () => location.reload());
   }
 
   // -------------------- loop --------------------

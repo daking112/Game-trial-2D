@@ -63,10 +63,34 @@ export class Hud {
     });
   }
 
-  end(big, small) {
-    this.endEl.querySelector('.big').innerHTML = big;
-    this.endEl.querySelector('.small').textContent = small || '';
-    this.endEl.style.transition = 'opacity 1.6s cubic-bezier(.16,1,.3,1)';
+  /**
+   * end(big, lines, onAgain)
+   * `lines` is a short list of facts about THIS playthrough — what the
+   * player actually did — because a generic score card is the one place
+   * a game like this can't afford to stop being specific.
+   */
+  end(big, lines, onAgain) {
+    const b = this.endEl.querySelector('.big');
+    const sm = this.endEl.querySelector('.small');
+    b.textContent = big;
+    sm.innerHTML = (lines || []).map(l => `<span>${l}</span>`).join('');
+    let again = this.endEl.querySelector('.again');
+    if (!again) {
+      again = document.createElement('button');
+      again.className = 'again';
+      again.type = 'button';
+      this.endEl.appendChild(again);
+    }
+    again.textContent = 'Begin again';
+    again.onclick = () => onAgain && onAgain();
+    this.endEl.style.transition = 'opacity 1.8s cubic-bezier(.16,1,.3,1)';
     this.endEl.style.opacity = '1';
+    this.endEl.style.pointerEvents = 'auto';
+    // the button arrives late, so the last line has time to land
+    again.style.opacity = '0';
+    setTimeout(() => {
+      again.style.transition = 'opacity 1.2s cubic-bezier(.16,1,.3,1)';
+      again.style.opacity = '1';
+    }, 2600);
   }
 }
