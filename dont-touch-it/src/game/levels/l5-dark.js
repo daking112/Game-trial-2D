@@ -61,7 +61,7 @@ export class L5Dark extends Level {
     this.lamp = { on: 1, filament: 1, swing: 0, vswing: 0, flicker: 0 };
     this.pull = 0;                      // 0..1 chain travel
     this.pulled = false;
-    this.torch = { x: g.cx, y: g.h * 0.42, r: 0, on: 0, seen: 0 };
+    this.torch = { x: g.cx, y: g.h * 0.42, r: 0, on: 0, seen: 0, armed: false };
     this.bell = { a: 0, va: 0, rung: 0, found: 0, ringT: 0, tagA: 0 };
     this.reveal = 0;
     this.plinths = [];
@@ -264,6 +264,15 @@ export class L5Dark extends Level {
   // ---------------- the fingertip ----------------
   _updateTorch(dt) {
     const g = this.g, T = this.torch;
+    // The finger that pulled the chain is usually still on the screen when
+    // the room goes dark. If that finger lights the torch, the player
+    // never gets the few seconds of nothing — which is the best beat in
+    // the game. So the light needs a FRESH touch: lift, sit in the black
+    // for a moment, then reach out again.
+    if (!T.armed) {
+      if (this.input.presses.length) T.armed = true;
+      else { T.on = damp(T.on, 0, 3, dt); return; }
+    }
     const p = this.input.list[0];
     if (p) {
       T.x = damp(T.x, p.x, 34, dt);
@@ -288,7 +297,11 @@ export class L5Dark extends Level {
         }
       }
     } else {
-      T.on = damp(T.on, 0.42, 2.2, dt);    // a lingering after-glow, not a hard cut
+      // Fade OUT, don't settle on a floor. Damping toward 0.42 meant the
+      // light rose to that value on its own the moment the room went
+      // dark, so the blackout was never actually black and the best beat
+      // in the game was given away before the player touched anything.
+      T.on = damp(T.on, 0, 0.6, dt);
       T.r = damp(T.r, g.R * 0.72, 2.0, dt);
       // brushing past the bell shouldn't bank progress toward finding it
       if (this.bell.found < 1) this.bell.found = Math.max(0, this.bell.found - dt * 0.9);
@@ -308,12 +321,24 @@ export class L5Dark extends Level {
       this._seenPx = 0;
     }
     c.setTransform(S, 0, 0, S, 0, 0);
+    // Very small per-frame contribution: this is used as an alpha mask,
+    // and 'lighter' saturates within a few frames of dwelling, which is
+    // what turned a record of where you had looked into a flat grey pool
+    // with visible stamp edges.
     c.globalCompositeOperation = 'lighter';
-    const grd = c.createRadialGradient(x, y, 0, x, y, r * 0.85);
-    grd.addColorStop(0, 'rgba(255,214,168,0.10)');
+    const grd = c.createRadialGradient(x, y, 0, x, y, r * 0.80);
+    grd.addColorStop(0, 'rgba(255,222,182,0.030)');
+    grd.addColorStop(0.55, 'rgba(255,214,168,0.013)');
     grd.addColorStop(1, 'rgba(255,214,168,0)');
     c.fillStyle = grd;
-    c.beginPath(); c.arc(x, y, r * 0.85, 0, TAU); c.fill();
+    c.beginPath(); c.arc(x, y, r * 0.80, 0, TAU); c.fill();
+    // and it forgets, slowly, so exploring feels like a light sweeping
+    // rather than like painting a wall
+    c.globalCompositeOperation = 'destination-out';
+    c.globalAlpha = 0.004;
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, this.g.w, this.g.h);
+    c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
     // rough coverage estimate, for pacing the narrator
     this.torch.seen = clamp01(this.torch.seen + 0.00035 * (r / g.R));
@@ -440,77 +465,103 @@ export class L5Dark extends Level {
       ctx.fillStyle = '#000';
       ctx.fillRect(-g.w, -g.h, g.w * 3, g.h * 3);
       ctx.restore();
+      // The lamp and its chain go UNDER the mask with everything else.
+      // A dead lamp you can still see clearly is the tell that the
+      // darkness is a costume rather than the actual state of the room —
+      // and finding the chain again by touch is worth having.
       this._drawDarkWorld(ctx, glow);
     } else {
       this.game.wreck.draw(ctx, { ambient: this.game.set.lit });
       this._drawBell(ctx, glow, this.reveal > 0 ? 1 : 0);
+      this._drawLamp(ctx, glow);
+      this._drawChain(ctx, glow);
     }
-
-    this._drawLamp(ctx, glow);
-    this._drawChain(ctx, glow);
   }
 
-  /** Everything visible only inside the fingertip's pool of light. */
+  /**
+   * The dark, and the one light left in it.
+   *
+   * Built as a MASK rather than as a stencil. The world is drawn normally
+   * and then a full-screen sheet of darkness is laid over it, with holes
+   * punched where the fingertip is and — much more faintly — everywhere
+   * the fingertip has already been. That gives soft edges everywhere for
+   * free, and it means the memory of where you have looked *reveals real
+   * geometry* instead of being an additive smear of light sitting on top
+   * of nothing, which is what it was before.
+   */
   _drawDarkWorld(ctx, glow) {
     const g = this.g, T = this.torch;
     const set = this.game.set;
-
-    // where the player has already been — a faint residue
-    if (this._memReady) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(this.memory.canvas, 0, 0, g.w, g.h);
-      ctx.restore();
-    }
-    if (T.on <= 0.02) return;
-
     const R = T.r;
-    const light = { x: T.x, y: T.y, r: R, strength: T.on };
 
-    // the plinth top, lit only where the finger is
+    // --- 1. the world, drawn as if it were lit ---
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(T.x, T.y, R, 0, TAU);
-    ctx.clip();
-    const lit = Math.min(1, T.on);
-    ctx.globalAlpha = lit;
     ctx.drawImage(set.plinth.canvas, 0, 0, g.w, g.h);
-    // fall off toward the edge of the pool so it has no hard rim
-    ctx.globalCompositeOperation = 'destination-in';
-    const fg = ctx.createRadialGradient(T.x, T.y, 0, T.x, T.y, R);
-    fg.addColorStop(0, 'rgba(0,0,0,1)');
-    fg.addColorStop(0.45, 'rgba(0,0,0,0.85)');
-    fg.addColorStop(0.8, 'rgba(0,0,0,0.25)');
-    fg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = fg;
-    ctx.fillRect(T.x - R, T.y - R, R * 2, R * 2);
+    ctx.restore();
+    this.game.wreck.draw(ctx, { ambient: 1 });
+    this._drawBell(ctx, null, 1);
+    this._drawLamp(ctx, null);
+    this._drawChain(ctx, null);
+
+    // --- 2. the darkness, with holes where light has fallen ---
+    const S = 0.34;
+    const M = this._mask || (this._mask = new Layer());
+    M.size(Math.max(1, Math.round(g.w * S)), Math.max(1, Math.round(g.h * S)));
+    const mc = M.ctx;
+    mc.setTransform(1, 0, 0, 1, 0, 0);
+    mc.globalCompositeOperation = 'source-over';
+    mc.globalAlpha = 1;
+    mc.fillStyle = '#040406';
+    mc.fillRect(0, 0, M.canvas.width, M.canvas.height);
+    mc.setTransform(S, 0, 0, S, 0, 0);
+    mc.globalCompositeOperation = 'destination-out';
+
+    // everywhere already explored stays just barely readable
+    if (this._memReady) {
+      mc.globalAlpha = 0.26;
+      mc.drawImage(this.memory.canvas, 0, 0, g.w, g.h);
+    }
+    // the fingertip itself
+    if (T.on > 0.01) {
+      mc.globalAlpha = clamp01(T.on);
+      const tg = mc.createRadialGradient(T.x, T.y, 0, T.x, T.y, R * 1.18);
+      tg.addColorStop(0, 'rgba(0,0,0,1)');
+      tg.addColorStop(0.30, 'rgba(0,0,0,0.96)');
+      tg.addColorStop(0.62, 'rgba(0,0,0,0.60)');
+      tg.addColorStop(0.86, 'rgba(0,0,0,0.16)');
+      tg.addColorStop(1, 'rgba(0,0,0,0)');
+      mc.fillStyle = tg;
+      mc.beginPath(); mc.arc(T.x, T.y, R * 1.18, 0, TAU); mc.fill();
+    }
+    mc.globalAlpha = 1;
+    mc.globalCompositeOperation = 'source-over';
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(M.canvas, 0, 0, g.w, g.h);
     ctx.restore();
 
-    // the wreckage of every chapter, found by touch
-    this.game.wreck.draw(ctx, { light, ambient: 0 });
+    if (T.on <= 0.02) return;
 
-    // the bell
-    this._drawBell(ctx, glow, clamp01(1 - Math.hypot(g.bellX - T.x, g.bellY - T.y) / R) * T.on);
-
-    // the pool itself
+    // --- 3. the warmth of the light itself, over the top ---
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const pg = ctx.createRadialGradient(T.x, T.y, 0, T.x, T.y, R * 1.05);
-    pg.addColorStop(0, `rgba(255,206,146,${0.20 * T.on})`);
-    pg.addColorStop(0.35, `rgba(255,190,130,${0.07 * T.on})`);
+    const pg = ctx.createRadialGradient(T.x, T.y, 0, T.x, T.y, R * 1.1);
+    pg.addColorStop(0, `rgba(255,204,142,${0.17 * T.on})`);
+    pg.addColorStop(0.4, `rgba(255,186,126,${0.06 * T.on})`);
     pg.addColorStop(1, 'rgba(255,180,120,0)');
     ctx.fillStyle = pg;
-    ctx.beginPath(); ctx.arc(T.x, T.y, R * 1.05, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(T.x, T.y, R * 1.1, 0, TAU); ctx.fill();
     ctx.restore();
     if (glow) {
       glow.save();
       glow.globalCompositeOperation = 'lighter';
-      const gg = glow.createRadialGradient(T.x, T.y, 0, T.x, T.y, R * 0.5);
-      gg.addColorStop(0, `rgba(255,196,132,${0.30 * T.on})`);
+      const gg = glow.createRadialGradient(T.x, T.y, 0, T.x, T.y, R * 0.45);
+      gg.addColorStop(0, `rgba(255,196,132,${0.22 * T.on})`);
       gg.addColorStop(1, 'rgba(255,196,132,0)');
       glow.fillStyle = gg;
-      glow.beginPath(); glow.arc(T.x, T.y, R * 0.5, 0, TAU); glow.fill();
+      glow.beginPath(); glow.arc(T.x, T.y, R * 0.45, 0, TAU); glow.fill();
       glow.restore();
     }
   }
@@ -606,7 +657,8 @@ export class L5Dark extends Level {
   _drawChain(ctx, glow) {
     const g = this.g;
     const pts = this.chain.points;
-    const lit = this.phase === 'lit' || this.reveal > 0.2 ? 1 : 0.16 + this.torch.on * 0.3;
+    // brightness is the mask's job now, not the chain's
+    const lit = 1;
     ctx.save();
     ctx.lineCap = 'round';
     // the chain is beads, not a line — draw it as beads or it reads as string
