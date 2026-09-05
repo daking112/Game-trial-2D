@@ -279,6 +279,7 @@ export class L4Break extends Level {
     }
     if (this.panes) this._syncPanes();
     this._reflection = null;         // rebuilt lazily at the new size
+    this._buildRoomLayer();
   }
 
   _syncPanes() {
@@ -1127,28 +1128,68 @@ export class L4Break extends Level {
    * grazing edges where the light bends hard. This is real refraction of
    * the real backdrop, not a painted guess.
    */
-  _refract(ctx, G) {
-    const cv = this.r.canvas;
-    const M = ctx.getTransform();
-    const px = (x, y) => [M.a * x + M.c * y + M.e, M.b * x + M.d * y + M.f];
-    const c0 = px(G.x0, G.y0), c1 = px(G.x1, G.y0), c2 = px(G.x1, G.y1), c3 = px(G.x0, G.y1);
-    const sx = Math.max(0, Math.min(c0[0], c1[0], c2[0], c3[0]));
-    const sy = Math.max(0, Math.min(c0[1], c1[1], c2[1], c3[1]));
-    const ex = Math.min(cv.width, Math.max(c0[0], c1[0], c2[0], c3[0]));
-    const ey = Math.min(cv.height, Math.max(c0[1], c1[1], c2[1], c3[1]));
-    const sw = ex - sx, sh = ey - sy;
-    if (sw < 4 || sh < 4) return;
+  /**
+   * Build the slice of room that sits behind the pane, ONCE.
+   *
+   * The obvious way to refract is to re-sample the canvas you are drawing
+   * on. It is also a trap: reading the presenting canvas mid-frame forces
+   * an eager, unbatched raster of everything queued so far (measured at
+   * ~21ms a frame here) and on mobile it can cost the canvas its
+   * acceleration outright.
+   *
+   * Everything behind this pane is static — wall, light cone, plinth, all
+   * of which the Set already keeps as cached layers — so we composite
+   * them into one world-space layer at layout time and sample that. The
+   * refraction then costs three ordinary blits.
+   */
+  _buildRoomLayer() {
+    const g = this.g;
+    const set = this.game.set, SG = set.geom;
+    if (!SG || !g || !g.panes) return;
+    const pad = g.u * 8;
+    let wx0 = Infinity, wy0 = Infinity, wx1 = -Infinity, wy1 = -Infinity;
+    for (const P of g.panes) {
+      wx0 = Math.min(wx0, P.x0); wx1 = Math.max(wx1, P.x1);
+      wy0 = Math.min(wy0, P.y0); wy1 = Math.max(wy1, P.y1);
+    }
+    wx0 -= pad; wy0 -= pad; wx1 += pad; wy1 += pad;
+    const k = this.r.dpr;
+    const L = (this._roomLayer || (this._roomLayer = new Layer()))
+      .size(Math.max(1, Math.ceil((wx1 - wx0) * k)), Math.max(1, Math.ceil((wy1 - wy0) * k)));
+    const c = L.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, L.canvas.width, L.canvas.height);
+    c.setTransform(k, 0, 0, k, -wx0 * k, -wy0 * k);
+    c.fillStyle = '#07070a';
+    c.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+    c.drawImage(set.wall.canvas, 0, 0, SG.w, SG.h);
+    c.globalCompositeOperation = 'lighter';
+    c.drawImage(set.cone.canvas, 0, 0, SG.w, SG.h);
+    c.globalCompositeOperation = 'source-over';
+    c.drawImage(set.plinth.canvas, 0, 0, SG.w, SG.h);
+    this._roomRect = { wx0, wy0, wx1, wy1, k };
+  }
 
+  _refract(ctx, G) {
+    const R = this._roomRect;
+    if (!R || !this._roomLayer) return;
+    const cv = this._roomLayer.canvas;
+    const k = R.k;
+    const sx = (G.x0 - R.wx0) * k, sy = (G.y0 - R.wy0) * k;
+    const sw = G.w * k, sh = G.h * k;
+    if (sw < 4 || sh < 4) return;
     const inset = G.w * 0.085;
+    const lit = clamp01(this.game.set.lit);
+
     ctx.save();
     this._panePath(ctx, G);
     ctx.clip();
-    ctx.globalAlpha = 0.94;
+    ctx.globalAlpha = 0.94 * lit;
     // body: magnified a touch and pushed the other way, as thick glass does
     ctx.drawImage(cv, sx, sy, sw, sh,
       G.x0 - G.w * 0.020, G.y0 - G.h * 0.014, G.w * 1.040, G.h * 1.028);
     // grazing edges: strong horizontal compression
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.85 * lit;
     ctx.drawImage(cv, sx, sy, sw * 0.34, sh,
       G.x0, G.y0 - G.h * 0.01, inset, G.h * 1.02);
     ctx.drawImage(cv, sx + sw * 0.66, sy, sw * 0.34, sh,
@@ -1199,7 +1240,7 @@ export class L4Break extends Level {
     const sg = ctx.createLinearGradient(-sw, 0, sw, 0);
     sg.addColorStop(0, 'rgba(255,250,238,0)');
     sg.addColorStop(0.34, `rgba(255,250,238,${0.09 * brightness})`);
-    sg.addColorStop(0.5, `rgba(255,252,246,${0.155 * brightness})`);
+    sg.addColorStop(0.5, `rgba(255,252,246,${0.115 * brightness})`);
     sg.addColorStop(0.68, `rgba(255,250,238,${0.06 * brightness})`);
     sg.addColorStop(1, 'rgba(255,250,238,0)');
     ctx.fillStyle = sg;
@@ -1210,10 +1251,13 @@ export class L4Break extends Level {
     ctx.save();
     ctx.translate(G.x0 + G.w * 0.29, G.y0 + G.h * 0.24);
     ctx.rotate(-0.44);
-    const cw = G.w * 0.030, ch = G.h * 0.40 * breathe;
+    // Kept deliberately below saturation: the bloom pass amplifies this,
+    // and a specular that clips to white stops reading as a reflection of
+    // something and starts reading as a hole in the image.
+    const cw = G.w * 0.024, ch = G.h * 0.42 * breathe;
     const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    cg.addColorStop(0, `rgba(255,255,255,${0.62 * brightness})`);
-    cg.addColorStop(0.42, `rgba(255,252,246,${0.16 * brightness})`);
+    cg.addColorStop(0, `rgba(255,253,247,${0.34 * brightness})`);
+    cg.addColorStop(0.42, `rgba(255,252,246,${0.11 * brightness})`);
     cg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.scale(cw, ch);
     ctx.fillStyle = cg;
