@@ -73,12 +73,44 @@ export class Wreckage {
     const u = G.u;
     const amb = opts.ambient ?? this.game.set.lit;
     const light = opts.light || null;
+
+    // A movable light source casts movable shadows, and that — not the
+    // brightness — is what makes a pool of light read as a light rather
+    // than as a hole cut in a mask. Each piece throws a streak directly
+    // away from the source, longer and fainter the further out it sits.
+    if (light) {
+      ctx.save();
+      for (const it of this.items) {
+        const [x, y] = this.pos(it);
+        const dx = x - light.x, dy = y - light.y;
+        const d = Math.hypot(dx, dy);
+        if (d > light.r || d < 1e-3) continue;
+        const k = 1 - d / light.r;                 // 1 at the source
+        const len = it.size * u * (1.2 + (1 - k) * 7);
+        const nx = dx / d, ny = dy / d;
+        ctx.globalAlpha = clamp01(k * k * 0.38 * (light.strength ?? 1));
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        // long and narrow, foreshortened like everything else on this
+        // surface — a round blob reads as a smudge, not as a shadow
+        ctx.ellipse(x + nx * len * 0.5, y + ny * len * 0.5 * 0.34,
+          len * 0.5 + it.size * u * 0.4, it.size * u * 0.28,
+          Math.atan2(ny * 0.34, nx), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     for (const it of this.items) {
       const [x, y] = this.pos(it);
       let l = amb;
       if (light) {
+        // inverse-square-ish: bright and tight at the fingertip, gone
+        // well before the edge of the pool, so sweeping it reveals things
+        // one at a time instead of all at once
         const d = Math.hypot(x - light.x, y - light.y);
-        l = Math.max(amb, clamp01(1 - d / light.r) ** 1.6 * (light.strength ?? 1));
+        const t = clamp01(1 - d / light.r);
+        l = Math.max(amb, (t * t) / (1 + (1 - t) * 3) * 2.2 * (light.strength ?? 1));
       }
       if (l < 0.02) continue;
       const s = it.size * u;

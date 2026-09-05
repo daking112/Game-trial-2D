@@ -527,7 +527,14 @@ export class L5Dark extends Level {
     ctx.save();
     ctx.drawImage(set.plinth.canvas, 0, 0, g.w, g.h);
     ctx.restore();
-    this.game.wreck.draw(ctx, { ambient: 1 });
+    // Items stay fully lit — the mask decides what is visible — but the
+    // torch is still handed over so each piece throws a shadow away from
+    // it. Movable shadows are what make a pool of light read as a light
+    // rather than as a hole cut in a mask.
+    this.game.wreck.draw(ctx, {
+      ambient: 1,
+      light: { x: T.x, y: T.y, r: R * 1.6, strength: Math.max(0.25, T.on) },
+    });
     this._drawBell(ctx, null, 1);
     this._drawLamp(ctx, null);
     this._drawChain(ctx, null);
@@ -572,6 +579,34 @@ export class L5Dark extends Level {
     ctx.restore();
 
     if (T.on <= 0.02) return;
+
+    // The bell throws a glint before it is close enough to be seen. It is
+    // the only specular thing in the dark, so it is what tells the player
+    // there is something over there worth reaching for.
+    const bd = Math.hypot(g.bellX - T.x, (g.bellY - g.bellH * 0.6) - T.y);
+    if (bd < R * 2.4) {
+      const gk = clamp01(1 - bd / (R * 2.4)) ** 1.4 * T.on;
+      const gx = g.bellX - g.bellH * 0.22, gy = g.bellY - g.bellH * 0.72;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const gs = ctx.createRadialGradient(gx, gy, 0, gx, gy, g.bellH * 0.55);
+      gs.addColorStop(0, `rgba(255,240,200,${0.80 * gk})`);
+      gs.addColorStop(0.35, `rgba(255,220,150,${0.20 * gk})`);
+      gs.addColorStop(1, 'rgba(255,214,140,0)');
+      ctx.fillStyle = gs;
+      ctx.beginPath(); ctx.arc(gx, gy, g.bellH * 0.55, 0, TAU); ctx.fill();
+      ctx.restore();
+      if (glow) {
+        glow.save();
+        glow.globalCompositeOperation = 'lighter';
+        const g3 = glow.createRadialGradient(gx, gy, 0, gx, gy, g.bellH * 1.6);
+        g3.addColorStop(0, `rgba(255,226,164,${0.40 * gk})`);
+        g3.addColorStop(1, 'rgba(255,226,164,0)');
+        glow.fillStyle = g3;
+        glow.beginPath(); glow.arc(gx, gy, g.bellH * 1.6, 0, TAU); glow.fill();
+        glow.restore();
+      }
+    }
 
     // --- 3. the warmth of the light itself, over the top ---
     ctx.save();
