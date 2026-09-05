@@ -42,21 +42,40 @@ export class L1Press extends Level {
     const G = this.game.set.geom;
     const cx = G.cx;
     const R = G.heroR;                       // the room decides how big a hero is
-    const plateY = G.topY - u * 0.35;
+    const plateY = G.topY - u * 0.30;
+    const K = 0.255;                          // the room's ellipse foreshortening
 
+    // The assembly is ONE bolted object: plate → gasket → flange → glass.
+    // Every radius below is a fraction of the plate so nothing floats.
     this.g = {
-      w, h, u, cx, plateY, R,
-      plateRx: R * 1.26, plateRy: R * 1.26 * 0.255,
-      jarR: R,
+      w, h, u, cx, plateY, R, K,
+      // base plate: machined steel disc with a chamfered rim
+      plateRx: R * 1.30, plateRy: R * 1.30 * K,
+      plateTh: u * 2.1,
+      chamfer: u * 1.05,
+      // raised seat the jar bolts down onto
+      seatRx: R * 1.10, seatRy: R * 1.10 * K, seatH: u * 0.85,
+      // brass flange, an annulus wide enough to actually hold a screw head
+      flangeIn: R * 0.845, flangeOut: R * 1.085, flangeTh: u * 1.15,
+      gasketTh: u * 0.62,
+      // the glass
+      jarR: R * 0.865,
       jarStraight: R * 1.30,
-      flangeRx: R * 1.10, flangeRy: R * 1.10 * 0.255,
-      btnBaseRx: R * 0.52, btnBaseRy: R * 0.52 * 0.28,
-      collarRx: R * 0.345, collarH: R * 0.30,
-      capRx: R * 0.325, capRy: R * 0.325 * 0.30, capBulge: R * 0.25,
-      travel: R * 0.17,
+      jarDome: R * 0.94,
+      jarWall: u * 0.78,
+      // the switch
+      bezelRx: R * 0.485, bezelH: u * 1.5,
+      collarRx: R * 0.40, collarH: R * 0.24,
+      capRx: R * 0.385, capBulge: R * 0.285,
+      travel: R * 0.155,
     };
-    this.g.jarBaseY = plateY - u * 0.5;
-    this.g.jarTopY = this.g.jarBaseY - this.g.jarStraight - R;
+    const g = this.g;
+    g.capRy = g.capRx * K * 1.12;
+    g.flangeRx = (g.flangeIn + g.flangeOut) * 0.5;   // screw circle
+    g.flangeRy = g.flangeRx * K;
+    g.jarBaseY = plateY - g.seatH - g.gasketTh;      // glass rests on the gasket
+    g.jarTopY = g.jarBaseY - g.jarStraight - g.jarDome;
+    g.btnBaseY = plateY - g.seatH * 0.2;
 
     if (this.screws) this._placeScrews();
     this.floorY = plateY;
@@ -67,8 +86,8 @@ export class L1Press extends Level {
     for (const s of this.screws) {
       const a = s.angle;
       s.x = g.cx + Math.cos(a) * g.flangeRx;
-      s.y = g.jarBaseY + Math.sin(a) * g.flangeRy;
-      s.r = g.R * 0.118;
+      s.y = g.jarBaseY + g.flangeTh * 0.1 + Math.sin(a) * g.flangeRy;
+      s.r = g.R * 0.105;
     }
   }
 
@@ -207,11 +226,11 @@ export class L1Press extends Level {
     const cx = g.cx + (j ? j.x : 0);
     const baseY = g.jarBaseY - (j ? j.lift : 0);
     const dx = x - cx;
-    if (Math.abs(dx) > g.jarR * 1.14) return false;
+    if (Math.abs(dx) > g.jarR * 1.20) return false;
     if (y > baseY + g.flangeRy * 1.3) return false;
-    const capY = baseY - g.jarStraight;
-    if (y > capY) return true;
-    return Math.hypot(dx, y - capY) < g.jarR * 1.10;
+    const shoulder = baseY - g.jarStraight;
+    if (y > shoulder) return true;
+    return Math.hypot(dx / (g.jarR * 1.14), (y - shoulder) / (g.jarDome * 1.12)) < 1;
   }
 
   // ---------------- screws ----------------

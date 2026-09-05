@@ -24,11 +24,13 @@ export const Audio = {
   noiseBuf: null,
   _ambience: null,
 
-  init() {
-    if (this.ctx) return this;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return this;
-    const ctx = this.ctx = new AC({ latencyHint: 'interactive' });
+  /**
+   * Build the whole signal chain on a given AudioContext.
+   * Split out of init() so tools/audio-lab.mjs can bind an OfflineAudioContext
+   * and measure the EXACT chain the game plays through, master bus included.
+   */
+  attach(ctx) {
+    this.ctx = ctx;
 
     this.comp = ctx.createDynamicsCompressor();
     this.comp.threshold.value = -14;
@@ -61,6 +63,13 @@ export const Audio = {
     this.noiseBuf = this._noise(2.2);
     this.ready = true;
     return this;
+  },
+
+  init() {
+    if (this.ctx) return this;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return this;
+    return this.attach(new AC({ latencyHint: 'interactive' }));
   },
 
   resume() {

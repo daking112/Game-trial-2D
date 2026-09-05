@@ -7,6 +7,7 @@ import { Input } from '../core/input.js';
 import { Camera } from './camera.js';
 import { Particles } from '../render/particles.js';
 import { Set as StageSet } from './set.js';
+import { Wreckage } from './wreckage.js';
 import { Narrator } from '../ui/narrator.js';
 import { Hud } from '../ui/hud.js';
 import { Timeline } from '../core/tween.js';
@@ -25,6 +26,7 @@ export class Game {
     this.cam = new Camera();
     this.particles = new Particles(1200);
     this.set = new StageSet(this.r);
+    this.wreck = new Wreckage(this);
     this.hud = new Hud(overlay);
     this.narrator = new Narrator(overlay);
     this.tl = new Timeline();
@@ -73,23 +75,69 @@ export class Game {
 
   // -------------------- chapters --------------------
 
-  async goto(i, { card = true } = {}) {
+  /** Promise-returning tween on the shell's own timeline. */
+  tween(obj, key, to, dur, ease = 'inOutCubic') {
+    return new Promise(res => { this.tl.to(obj, key, to, dur, ease).then(res); });
+  }
+  wait(sec) { return new Promise(res => this.tl.after(sec, res)); }
+
+  /**
+   * Chapter change. The gallery does this the way a gallery would: the
+   * lights go down on the old exhibit, the new one is installed in the
+   * dark, and the lights come back up. No cross-fades, no wipes — the
+   * room itself is the transition.
+   */
+  async goto(i, { card = true, instant = false } = {}) {
     if (i >= this.levelClasses.length) return this.finish();
+    if (this._changing) return null;
+    this._changing = true;
     this.state = 'transition';
+    this.hud.hideHint();
+
+    if (this.level && !instant) {
+      // lights down on the old exhibit
+      this.cam.push(1.045);
+      await Promise.all([
+        this.tween(this.set, 'coneStrength', 0, 0.75, 'inQuad'),
+        this.tween(this.set, 'exposure', 0, 0.95, 'inQuad'),
+      ]);
+    }
     if (this.level) { this.level.exit(); this.level = null; }
     this.particles.clear();
     this.narrator.clear();
-    this.hud.hideHint();
+    this.set.tint = null;
+    this.set.warmth = 1;
+    this.set.flicker = 0;
+    this.set.plinthOpacity = 1;
+    this.cam.tzoom = 1;
+
     this.index = i;
     const C = this.levelClasses[i];
     this.hud.setChapter(i + 1, this.levelClasses.length);
+    this.hud.showBar(false);
+
     if (card) await this.hud.card(`Chapter ${C.chapter}`, C.rule);
+
     const lv = new C(this);
     lv.layout(this.r.w, this.r.h, this.r.u);
     lv.enter();
     this.level = lv;
-    this.hud.showBar(true);
     this.state = 'playing';
+
+    if (!instant) {
+      // lights up on the new one — cone first, so the object arrives out
+      // of the dark rather than simply appearing
+      this.set.exposure = 0;
+      this.set.coneStrength = 0;
+      SFX.powerUp();
+      this.tween(this.set, 'coneStrength', 1, 1.5, 'outCubic');
+      await this.tween(this.set, 'exposure', 1, 1.25, 'outCubic');
+    } else {
+      this.set.exposure = 1;
+      this.set.coneStrength = 1;
+    }
+    this.hud.showBar(true);
+    this._changing = false;
     return lv;
   }
 
@@ -102,15 +150,16 @@ export class Game {
     });
   }
 
-  finish() {
+  async finish() {
     this.state = 'end';
+    await Promise.all([
+      this.tween(this.set, 'coneStrength', 0, 1.4, 'inQuad'),
+      this.tween(this.set, 'exposure', 0.04, 1.8, 'inQuad'),
+    ]);
     if (this.level) { this.level.exit(); this.level = null; }
     this.hud.showBar(false);
     this.narrator.clear();
-    this.hud.end(
-      `You were told.`,
-      `${this.transgressions} rules broken`
-    );
+    this.hud.end('You were told.', `${this.transgressions} rules broken`);
   }
 
   // -------------------- loop --------------------
@@ -178,6 +227,9 @@ export class Game {
     if (this.level) this.level.drawBack(ctx, g);
     this.set.drawLightCone(ctx);
     this.set.drawPlinth(ctx);
+    // Everything previous chapters destroyed, still lying where it fell.
+    // A chapter that lights the room itself (Chapter V) paints it instead.
+    if (!this.level || !this.level.ownsWreckage) this.wreck.draw(ctx);
     if (this.level) this.level.draw(ctx, g);
     this.particles.draw(ctx, g);
     if (this.level) this.level.drawFront(ctx, g);

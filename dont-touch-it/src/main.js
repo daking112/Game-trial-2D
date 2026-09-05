@@ -5,12 +5,13 @@
 import { Game } from './game/game.js';
 import { Audio, SFX } from './core/audio.js';
 import Haptics from './core/haptics.js';
-import { LEVELS } from './game/levels/index.js';
+import { loadLevels } from './game/levels/index.js';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('world');
 const overlay = document.getElementById('overlay');
 
+const LEVELS = await loadLevels();
 const game = new Game(canvas, overlay, LEVELS);
 game.debug = params.has('debug');
 if (game.debug) document.body.classList.add('debug');
@@ -72,15 +73,15 @@ async function enter(skipCard = false) {
   titleEl.style.transform = 'scale(1.04)';
   setTimeout(() => titleEl.remove(), 1400);
 
-  // the room comes up like a gallery opening
-  SFX.powerUp();
-  game.tl.to(game.set, 'exposure', 1, 1.5, 'outCubic');
-  game.tl.to(game.set, 'coneStrength', 1, 1.9, 'outCubic');
-  game.ambience = Audio.drone({ f: 46, gain: 0.035, send: 0.7, lfoRate: 0.07, lfoDepth: 0.9, attack: 4, filter: 240 });
+  // room tone, quietly, under everything for the rest of the session
+  game.ambience = Audio.drone({
+    f: 46, gain: 0.035, send: 0.7, lfoRate: 0.07, lfoDepth: 0.9, attack: 4, filter: 240,
+  });
 
+  // goto() owns the lights-up; don't fight it
   const idx = params.has('level') ? Math.max(0, (parseInt(params.get('level'), 10) || 1) - 1) : 0;
-  await new Promise(r => setTimeout(r, skipCard ? 250 : 850));
-  await game.goto(idx, { card: !skipCard });
+  await new Promise(r => setTimeout(r, skipCard ? 120 : 700));
+  await game.goto(idx, { card: !skipCard, instant: skipCard });
 }
 
 canvas.addEventListener('pointerdown', () => { if (!entered) enter(); }, { once: false });

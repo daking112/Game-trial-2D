@@ -114,3 +114,25 @@ your geometry as multiples of it so every chapter is framed identically.
    what the player thought the toy could do. If your chapter doesn't have
    one, you are not finished.
 7. **Look at it.** Capture the running game after every change.
+
+---
+
+## Wreckage — what you broke stays broken
+
+`src/game/wreckage.js` holds a persistent, chapter-spanning pile of debris.
+Anything a chapter destroys should be deposited there before the chapter
+ends, so the plinth becomes a crime scene by Chapter V.
+
+From inside a Level:
+```js
+this.leave('shard', x, y, { size, a, hue });   // one item
+this.leaveDebris(this.shards, 'shard');        // a whole array of Debris bodies
+```
+Kinds: `shard` (glass) · `screw` (brass) · `thread` · `bead` · `crumb` · `ash`.
+
+Coordinates are converted to plinth-relative on deposit, so wreckage
+survives resize and orientation changes. The shell draws it automatically
+between the plinth and your chapter. If your chapter owns the room's
+lighting, set `this.ownsWreckage = true` and paint it yourself with
+`this.game.wreck.draw(ctx, { light: { x, y, r, strength }, ambient })`,
+which reveals debris only inside a light pool.

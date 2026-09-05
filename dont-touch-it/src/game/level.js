@@ -38,6 +38,12 @@ export class Level {
     this.tag = this.constructor.id;
     /** Set true once the player has done the forbidden thing. */
     this.transgressed = false;
+    /**
+     * Set true if this chapter draws `game.wreck` itself — e.g. because it
+     * controls the room's lighting and must reveal debris under its own
+     * light source instead of the gallery's.
+     */
+    this.ownsWreckage = false;
   }
 
   // -------- lifecycle (override) --------
@@ -61,6 +67,20 @@ export class Level {
   shake(a) { this.cam.shake(a); }
   slowmo(s, d) { this.cam.slowmo(s, d); }
   flash(c, a, d) { this.cam.flash(c, a, d); }
+
+  /**
+   * Leave something behind. Deposited debris persists for the rest of the
+   * game in plinth-relative coordinates.
+   *   this.leave('shard', x, y, { size, a, hue })
+   * Kinds: shard | screw | thread | crumb | ash | bead
+   */
+  leave(kind, x, y, opts = {}) {
+    return this.game.wreck.add({ kind, x, y, ...opts });
+  }
+  /** Deposit a whole array of Debris bodies at once. */
+  leaveDebris(list, kind, sizeOf) {
+    this.game.wreck.addDebris(list, kind, sizeOf);
+  }
 
   solve(delay = 0) {
     if (this.solved) return;
