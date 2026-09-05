@@ -684,14 +684,59 @@ export class L3Squeeze extends Level {
   _split(b) {
     const g = this.g;
     const pts = b.points, n = pts.length;
-    const px = -b.axY, py = b.axX;             // cut line ⟂ to the finger axis normal
-    const mx = b.mx, my = b.my;
+    // The cut plane contains the squeeze axis, so the body parts into the
+    // lobe above the fingers and the lobe below them.
+    //
+    // By the time a hard pinch actually gives, the fingers are usually
+    // already off the screen and the recorded axis is stale or zero —
+    // which silently produced no crossings at all and dumped the player
+    // into a burst. So fall back to the body's own longest diameter,
+    // which is the axis it was just squeezed along anyway.
+    let px = -b.axY, py = b.axX;
+    // Cut through the BODY's centre, not the fingers'. The finger midpoint
+    // is where the pressure was applied a moment ago, and by the time the
+    // membrane gives it has usually drifted clear of the body entirely —
+    // which put the cut plane outside the outline and produced no
+    // crossings at all. A membrane parts at its own waist.
+    let mx = b.cx, my = b.cy;
+    const alen = Math.hypot(px, py);
+    if (alen > 1e-4) { px /= alen; py /= alen; }
+    else {
+      let bi = 0, bj = 1, bd = -1;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const d = (pts[i].x - pts[j].x) ** 2 + (pts[i].y - pts[j].y) ** 2;
+          if (d > bd) { bd = d; bi = i; bj = j; }
+        }
+      }
+      const ax = pts[bj].x - pts[bi].x, ay = pts[bj].y - pts[bi].y;
+      const L = Math.hypot(ax, ay) || 1;
+      px = -ay / L; py = ax / L;
+    }
     const side = new Array(n);
     for (let i = 0; i < n; i++) side[i] = (pts[i].x - mx) * px + (pts[i].y - my) * py;
-    const cuts = [];
+    let cuts = [];
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       if ((side[i] >= 0) !== (side[j] >= 0)) cuts.push(i);
+    }
+    // A hard, fast pinch squashes the ring flat, and a flattened outline
+    // crosses the cut line four or six times instead of twice — so the
+    // naive test bailed to a burst exactly when the player squeezed
+    // hardest. That made the chapter's best outcome, dividing in two,
+    // effectively unreachable. Keep the two crossings furthest apart and
+    // cut there: geometrically it is the widest part of the body, which
+    // is where a membrane would actually part.
+    if (cuts.length > 2) {
+      let best = [cuts[0], cuts[1]], bestD = -1;
+      for (let a = 0; a < cuts.length; a++) {
+        for (let bI = a + 1; bI < cuts.length; bI++) {
+          const p0 = pts[cuts[a]], p1 = pts[cuts[bI]];
+          const d = (p0.x - p1.x) ** 2 + (p0.y - p1.y) ** 2;
+          if (d > bestD) { bestD = d; best = [cuts[a], cuts[bI]]; }
+        }
+      }
+      cuts = best.sort((x, y) => x - y);
     }
     if (cuts.length !== 2) { this._burst(b); return; }
 
@@ -702,7 +747,8 @@ export class L3Squeeze extends Level {
     };
     const A1 = arc(cuts[0], cuts[1]);
     const A2 = arc(cuts[1], cuts[0]);
-    if (A1.length < 7 || A2.length < 7) { this._burst(b); return; }
+    // A lopsided cut still divides; only a degenerate one should burst.
+    if (A1.length < 4 || A2.length < 4) { this._burst(b); return; }
 
     const snap = A1.map(p => ({ x: p.x, y: p.y, vx: p.x - p.ox, vy: p.y - p.oy }));
     const snap2 = A2.map(p => ({ x: p.x, y: p.y, vx: p.x - p.ox, vy: p.y - p.oy }));
@@ -806,8 +852,15 @@ export class L3Squeeze extends Level {
       const a = snap[i0], c = snap[i1];
       const x = lerp(a.x, c.x, f) + outX * g.u * 0.5;
       const y = lerp(a.y, c.y, f) + outY * g.u * 0.5;
-      const vx = lerp(a.vx, c.vx, f) + outX * 2.4;
-      const vy = lerp(a.vy, c.vy, f) + outY * 2.4;
+      // Inherited velocity has to be capped. A hard pinch leaves the
+      // parent's points moving very fast, and handing that straight to a
+      // child launched one half of the specimen clean off the top of the
+      // screen — impressive once, then the player has lost half their toy.
+      let vx = lerp(a.vx, c.vx, f) + outX * 1.5;
+      let vy = lerp(a.vy, c.vy, f) + outY * 1.5;
+      const vmax = g.u * 0.85;
+      const vl = Math.hypot(vx, vy);
+      if (vl > vmax) { const k = vmax / vl; vx *= k; vy *= k; }
       const p = nb.points[i];
       p.x = x; p.y = y; p.ox = x - vx; p.oy = y - vy;
     }
