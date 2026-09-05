@@ -408,17 +408,31 @@ export class L5Dark extends Level {
     Audio.setRoom(1.9, 2.6, 0.26);
     if (this.game.ambience) this.game.ambience.set(0.035, 1.6);
     this.tl.to(this.lamp, 'filament', 1, 1.4, 'outCubic');
-    // the gallery turns out to be much larger than one plinth
+    // The gallery turns out to be much larger than one plinth. They have
+    // to RECEDE — converging toward the room's own horizon and shrinking —
+    // or the line lands as a couple of slivers cropped off the edges of
+    // the screen, which is what it did before.
+    const G = this.game.set.geom;
+    const horizon = (G.plinth && G.plinth.horizonY) || this.g.h * 0.12;
+    // A phone is 393px wide and the near plinth is most of that, so there
+    // is no room for neighbours AT this depth — flanking them just crops
+    // slivers off the edges. They have to sit further back: higher up the
+    // frame, smaller, converging toward the room's horizon. Each gets its
+    // own little pool of light, because that is the thing that actually
+    // reads as another room rather than another box.
     const rng = makeRng(8181);
-    for (let i = 0; i < 7; i++) {
+    const RANKS = 5;
+    for (let i = 0; i < RANKS * 2; i++) {
       const side = i % 2 ? 1 : -1;
-      const depth = 0.3 + (i / 7) * 0.85;
+      const rank = Math.floor(i / 2);
+      const t = (rank + 1) / RANKS;                   // 0.2 … 1 = deeper
+      const jitter = 0.92 + rng() * 0.18;
       this.plinths.push({
-        x: this.g.cx + side * this.g.topRx * (1.5 + depth * 2.9) * (0.6 + rng() * 0.5),
-        y: this.g.topY - depth * this.g.h * 0.075,
-        s: 1 / (1 + depth * 1.5),
+        x: this.g.cx + side * this.g.topRx * (0.52 + (1 - t) * 0.95) * jitter,
+        y: this.g.topY - (this.g.topY - horizon) * (0.16 + t * 0.62),
+        s: 0.44 * (1 - t * 0.62),
         a: 0,
-        delay: 0.5 + i * 0.16,
+        delay: 0.5 + t * 1.7 + (side > 0 ? 0.11 : 0),
       });
     }
     for (const pl of this.plinths) this.tl.to(pl, 'a', 1, 1.5, 'outCubic', pl.delay);
@@ -434,21 +448,36 @@ export class L5Dark extends Level {
     // the deeper gallery, revealed at the very end
     if (this.reveal <= 0.01) return;
     const g = this.g;
-    for (const pl of this.plinths) {
+    // farthest first, so nearer plinths occlude the ones behind them
+    const order = this.plinths.slice().sort((a, b) => a.s - b.s);
+    for (const pl of order) {
       if (pl.a <= 0.01) continue;
       ctx.save();
-      ctx.globalAlpha = pl.a * 0.5 * this.reveal;
-      const hw = g.topRx * pl.s, hh = g.h * 0.22 * pl.s;
+      // haze with distance: the far end of the room is barely there
+      const fade = 0.24 + pl.s * 0.76;
+      ctx.globalAlpha = pl.a * fade * this.reveal;
+      const hw = g.topRx * pl.s, hh = (g.h - pl.y) * 0.9;
       const grd = ctx.createLinearGradient(pl.x - hw, 0, pl.x + hw, 0);
-      grd.addColorStop(0, '#101116');
-      grd.addColorStop(0.45, '#2b2e35');
-      grd.addColorStop(1, '#0c0d10');
+      grd.addColorStop(0, '#0d0e12');
+      grd.addColorStop(0.42, '#282b32');
+      grd.addColorStop(0.62, '#1c1e24');
+      grd.addColorStop(1, '#0a0b0e');
       ctx.fillStyle = grd;
       ctx.fillRect(pl.x - hw, pl.y, hw * 2, hh);
-      ctx.fillStyle = `rgba(150,150,162,${0.5 * pl.a})`;
+      // lit top face, and a hint of a light pool above each one
+      const tg = ctx.createRadialGradient(pl.x, pl.y, 0, pl.x, pl.y, hw);
+      tg.addColorStop(0, `rgba(186,180,172,${0.62 * pl.a})`);
+      tg.addColorStop(1, `rgba(96,94,98,${0.34 * pl.a})`);
+      ctx.fillStyle = tg;
       ctx.beginPath();
       ctx.ellipse(pl.x, pl.y, hw, hw * 0.19, 0, 0, TAU);
       ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const lp = ctx.createRadialGradient(pl.x, pl.y - hw * 0.9, 0, pl.x, pl.y - hw * 0.9, hw * 2.1);
+      lp.addColorStop(0, `rgba(255,222,178,${0.10 * pl.a * fade})`);
+      lp.addColorStop(1, 'rgba(255,222,178,0)');
+      ctx.fillStyle = lp;
+      ctx.fillRect(pl.x - hw * 2.2, pl.y - hw * 3, hw * 4.4, hw * 4);
       ctx.restore();
     }
   }
