@@ -147,9 +147,31 @@ changes is reallocated and cleared by the browser. Camera shake moves
 things every frame; quantise any derived layer's SIZE and let its origin
 drift.
 
+**Transparency accumulates.** A hundred and sixty glass shards at 0.5
+alpha composite to solid white. Anything that appears in large overlapping
+quantities has to be almost invisible on its own.
+
+**Rest thresholds must be compared against gravity, not against a fixed
+speed.** One frame at 2700px/s² adds 43px/s, so a "resting" test of
+`|vy| < 22` can never be satisfied — the body re-accelerates past it every
+frame and jitters forever. Compare the post-bounce speed against
+`grav * dt`.
+
 **Paint low-frequency content small and upscale it.** A 30px `ctx.filter`
 blur across a full-resolution surface costs ~100x what the same look
 costs at 1/8 scale, and nobody can tell the difference.
+
+**Judging motion: drive the input WHILE the clock runs.** `Session.strip()`
+pauses the game and steps it frame by frame. That is useful for
+deterministic captures of something already in motion, but if you use it
+while no touch is being driven, nothing moves — because nothing is being
+done. A critic once concluded from it that the screws, the switch and the
+crack "have no visual state"; all three animate fine. To judge an
+interaction, send a `touchMove`, wait ~30-50ms, screenshot, repeat, with
+the game running normally — or set state directly
+(`window.__DTI__.game.level.<field> = …`) and compare frames. See
+`tools/statediff.mjs`. If you are about to claim something does not
+animate, first prove your method was actually moving the input.
 
 **Headless fps here is meaningless** — this container rasterises on CPU.
 Judge with `game.drawMs` (budget: under 6ms) and pin `?quality=high` when

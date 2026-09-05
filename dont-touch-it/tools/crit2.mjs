@@ -157,7 +157,7 @@ const scripts = {
 '3': async () => {
   await s.goto(3); await s.wait(2500);
   await shot('idle'); console.log('drawMs idle', await draw());
-  const c = await s.page.evaluate(()=>{const l=window.__DTI__.game.level,g=l.g||{};return {x:g.cx,y:g.paneY||g.cy,w:g.paneW||120,h:g.paneH||200};});
+  const c = await s.page.evaluate(()=>{const P=window.__DTI__.game.level.g.panes[0];return {x:P.cx,y:(P.y0+P.y1)/2,w:P.w,h:P.h};});
   console.log('pane',JSON.stringify(c));
   await holdFilm(c.x, c.y, 2000, 12, 'stress');
   await settle(900, 4, 'stress-rel');
@@ -197,5 +197,5 @@ const scripts = {
 
 await scripts[which]();
 console.log('ERRORS', s.errors.filter(e=>!/vibrate/.test(e)).slice(0,6));
-await contactSheet(files, path.join(OUT, '_sheet.png'), { cols: 6, cellW: 200, title: 'ch' + which });
+// sheet skipped
 await s.browser.close(); srv.close(); process.exit(0);
