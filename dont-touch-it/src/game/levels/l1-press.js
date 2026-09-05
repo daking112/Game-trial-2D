@@ -103,7 +103,11 @@ export class L1Press extends Level {
       x: 0, y: 0, r: 0,
       spin: 0,             // visual rotation
       progress: 0,         // 0..1 unwound
-      target: [3.0, 2.6, 2.2, 1.8][i] * Math.PI,   // radians of turning needed
+      // Each screw is quicker than the last. The gesture teaches nothing
+      // after the first one, so the remaining three are about escalation,
+      // not practice — and with three out the fourth can be sheared
+      // instead of turned anyway.
+      target: [2.2, 1.8, 1.5, 1.3][i] * Math.PI,
       turned: 0,
       detent: 0,
       free: false,
