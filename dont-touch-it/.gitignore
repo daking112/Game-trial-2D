@@ -11,3 +11,4 @@ tools/tmp*.mjs
 tools/zoom.mjs
 tools/refdump.mjs
 tools/play-l1b.mjs
+tools/bell.mjs

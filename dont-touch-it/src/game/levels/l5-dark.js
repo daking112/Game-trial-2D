@@ -721,45 +721,161 @@ export class L5Dark extends Level {
   _drawChain(ctx, glow) {
     const g = this.g;
     const pts = this.chain.points;
-    // brightness is the mask's job now, not the chain's
-    const lit = 1;
+    if (pts.length < 2) return;
+    const u = g.u;
+    const r = u * 0.34;                 // bead radius
     ctx.save();
     ctx.lineCap = 'round';
-    // the chain is beads, not a line — draw it as beads or it reads as string
+    ctx.lineJoin = 'round';
+
+    // The old chain was beads with gaps between them, which at this size
+    // reads as a dotted line. Real ball chain is beads TOUCHING: the body
+    // of it is continuous and the articulation is a rhythm of dark pinches.
+    // Three strokes down one path, instead of a radial gradient per bead.
+    const path = new Path2D();
+    path.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+
+    ctx.strokeStyle = '#9c7a34';
+    ctx.lineWidth = r * 2;
+    ctx.stroke(path);
+    // the specular running down the lit side of every bead
+    ctx.save();
+    ctx.translate(-r * 0.34, -r * 0.30);
+    ctx.strokeStyle = 'rgba(255,236,178,0.72)';
+    ctx.lineWidth = r * 0.72;
+    ctx.stroke(path);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(r * 0.42, r * 0.36);
+    ctx.strokeStyle = 'rgba(52,36,10,0.55)';
+    ctx.lineWidth = r * 0.6;
+    ctx.stroke(path);
+    ctx.restore();
+
+    // the pinches: one every bead-diameter, walked at constant arc length
+    // so they stay evenly spaced however the rope happens to hang
+    ctx.strokeStyle = 'rgba(44,30,8,0.62)';
+    ctx.lineWidth = Math.max(0.8, r * 0.34);
+    ctx.beginPath();
+    const step = r * 1.92;
+    let carry = 0;
     for (let i = 1; i < pts.length; i++) {
-      const p = pts[i];
-      const q = pts[i - 1];
-      ctx.strokeStyle = `rgba(120,96,44,${0.5 * lit})`;
-      ctx.lineWidth = Math.max(1, g.u * 0.22);
-      ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-      const r = g.u * 0.42;
-      const bg = ctx.createRadialGradient(p.x - r * 0.4, p.y - r * 0.5, 0, p.x, p.y, r);
-      bg.addColorStop(0, `rgba(255,232,168,${0.95 * lit})`);
-      bg.addColorStop(0.5, `rgba(196,156,72,${0.9 * lit})`);
-      bg.addColorStop(1, `rgba(88,66,26,${0.9 * lit})`);
-      ctx.fillStyle = bg;
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
+      const a2 = pts[i - 1], b2 = pts[i];
+      const dx = b2.x - a2.x, dy = b2.y - a2.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-4) continue;
+      const nx = -dy / len, ny = dx / len;
+      for (let d = step - carry; d < len; d += step) {
+        const px = a2.x + dx * (d / len), py = a2.y + dy * (d / len);
+        ctx.moveTo(px - nx * r * 0.86, py - ny * r * 0.86);
+        ctx.lineTo(px + nx * r * 0.86, py + ny * r * 0.86);
+      }
+      carry = (carry + len) % step;
     }
-    // the acorn
+    ctx.stroke();
+
+    // The acorn on the end — the thing the player actually takes hold of,
+    // so it is turned rather than blobbed: a collar, a shoulder, a point.
     const a = this.acorn;
-    const ar = g.u * 0.95;
+    const ar = u * 0.92;
     ctx.save();
     ctx.translate(a.x, a.y);
-    const ag = ctx.createLinearGradient(-ar, -ar, ar, ar);
-    ag.addColorStop(0, `rgba(255,240,186,${lit})`);
-    ag.addColorStop(0.4, `rgba(206,164,76,${lit})`);
-    ag.addColorStop(1, `rgba(74,54,20,${lit})`);
-    ctx.fillStyle = ag;
+    // the collar where the chain enters it
+    ctx.fillStyle = '#8a6b2c';
     ctx.beginPath();
-    ctx.moveTo(0, ar * 1.5);
-    ctx.bezierCurveTo(-ar, ar * 0.6, -ar * 0.8, -ar * 0.9, 0, -ar);
-    ctx.bezierCurveTo(ar * 0.8, -ar * 0.9, ar, ar * 0.6, 0, ar * 1.5);
+    ctx.ellipse(0, -ar * 1.02, ar * 0.44, ar * 0.20, 0, 0, TAU);
     ctx.fill();
+    // the body
+    ctx.beginPath();
+    ctx.moveTo(0, ar * 1.62);
+    ctx.bezierCurveTo(-ar * 0.94, ar * 0.66, -ar * 0.86, -ar * 0.52, -ar * 0.40, -ar * 0.86);
+    ctx.quadraticCurveTo(0, -ar * 1.06, ar * 0.40, -ar * 0.86);
+    ctx.bezierCurveTo(ar * 0.86, -ar * 0.52, ar * 0.94, ar * 0.66, 0, ar * 1.62);
+    ctx.closePath();
+    ctx.save();
+    ctx.clip();
+    metalFill(ctx, -ar, 0, ar, 0, PALETTES.brass);
+    const agl = ctx.createLinearGradient(-ar, 0, ar, 0);
+    agl.addColorStop(0, 'rgba(30,20,6,0.55)');
+    agl.addColorStop(0.30, 'rgba(255,244,200,0.42)');
+    agl.addColorStop(0.62, 'rgba(255,236,180,0.04)');
+    agl.addColorStop(1, 'rgba(24,16,4,0.62)');
+    ctx.fillStyle = agl;
+    ctx.fillRect(-ar, -ar * 1.2, ar * 2, ar * 3);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,238,190,0.34)';
+    ctx.lineWidth = Math.max(0.8, u * 0.09);
+    ctx.stroke();
+    ctx.restore();
     ctx.restore();
     ctx.restore();
   }
 
   // ---------------- the bell ----------------
+  /**
+   * A cast-brass hand bell, built from its turned profile rather than from
+   * a triangle. The silhouette is the whole thing: crown, shoulder, waist,
+   * and the thickened sound bow at the lip — the part that actually makes
+   * the note, and the part whose absence let the old shape read as a party
+   * hat. Two incised mouldings above the bow, a lit inner far wall inside
+   * the mouth, and a clapper that lags the body it hangs in.
+   *
+   * It is the last object in the game and the only one the player has to
+   * find by feel, so it gets the profile it deserves.
+   */
+
+  /** Half-profile of the casting, outer edge, mouth at y = 0. */
+  _bellProfile(h) {
+    return [
+      [0.720, 0.000],   // lip, outer
+      [0.734, -0.070],  // the bulge of the sound bow
+      [0.664, -0.148],  // above the bow it tucks in fast
+      [0.556, -0.240],
+      [0.470, -0.356],
+      [0.420, -0.492],  // waist — a bell is nearly vertical through here
+      [0.396, -0.618],
+      [0.336, -0.752],  // the shoulder turns over
+      [0.212, -0.878],
+      [0.104, -0.958],
+      [0.058, -0.992],  // crown
+    ].map(([px, py]) => [px * h, py * h]);
+  }
+
+  _bellPath(ctx, h) {
+    const pr = this._bellProfile(h);
+    const n = pr.length;
+    ctx.beginPath();
+    ctx.moveTo(pr[0][0], pr[0][1]);
+    for (let i = 1; i < n - 1; i++) {
+      const [ax, ay] = pr[i], [bx, by] = pr[i + 1];
+      ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
+    }
+    ctx.lineTo(pr[n - 1][0], pr[n - 1][1]);
+    ctx.bezierCurveTo(h * 0.04, -h * 1.012, -h * 0.04, -h * 1.012,
+      -pr[n - 1][0], pr[n - 1][1]);
+    for (let i = n - 2; i >= 1; i--) {
+      const [ax, ay] = pr[i], [bx, by] = pr[i - 1];
+      ctx.quadraticCurveTo(-ax, ay, -(ax + bx) / 2, (ay + by) / 2);
+    }
+    ctx.lineTo(-pr[0][0], pr[0][1]);
+    // the front half of the mouth ellipse closes the silhouette
+    ctx.ellipse(0, 0, h * 0.72, h * 0.205, 0, Math.PI, 0, true);
+    ctx.closePath();
+  }
+
+  /** Radius of the casting at a given height, for the mouldings. */
+  _bellRx(h, y) {
+    const pr = this._bellProfile(h);
+    for (let i = 0; i < pr.length - 1; i++) {
+      if (y <= pr[i][1] && y >= pr[i + 1][1]) {
+        const t = (y - pr[i][1]) / ((pr[i + 1][1] - pr[i][1]) || 1);
+        return lerp(pr[i][0], pr[i + 1][0], t);
+      }
+    }
+    return pr[0][0];
+  }
+
   _drawBell(ctx, glow, vis) {
     if (vis <= 0.02) return;
     const g = this.g, B = this.bell;
@@ -767,52 +883,148 @@ export class L5Dark extends Level {
     ctx.save();
     ctx.globalAlpha = clamp01(vis);
     contactShadow(ctx, x, y + g.u * 0.3, h * 0.95, h * 0.28, { strength: 0.6 * vis });
+    // it swings about the hand, up at the top of the grip
     ctx.translate(x, y - h * 1.05);
     ctx.rotate(B.a * 0.5);
     ctx.translate(0, h * 1.05);
 
-    // handle
-    ctx.strokeStyle = 'rgba(96,70,34,0.9)';
-    ctx.lineWidth = Math.max(1.4, g.u * 0.34);
+    // ---- the handle: a turned grip, a collar, a ferrule
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, -h * 0.98);
-    ctx.lineTo(0, -h * 1.5);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(178,140,66,0.95)';
-    ctx.beginPath(); ctx.ellipse(0, -h * 1.58, g.u * 0.62, g.u * 0.9, 0, 0, TAU); ctx.fill();
-
-    // the body
-    ctx.beginPath();
-    ctx.moveTo(-h * 0.72, 0);
-    ctx.bezierCurveTo(-h * 0.70, -h * 0.62, -h * 0.34, -h * 0.92, 0, -h * 0.98);
-    ctx.bezierCurveTo(h * 0.34, -h * 0.92, h * 0.70, -h * 0.62, h * 0.72, 0);
-    ctx.ellipse(0, 0, h * 0.72, h * 0.22, 0, 0, Math.PI);
+    ctx.moveTo(-h * 0.088, -h * 0.96);
+    ctx.bezierCurveTo(-h * 0.098, -h * 1.12, -h * 0.112, -h * 1.24, -h * 0.100, -h * 1.34);
+    ctx.lineTo(h * 0.100, -h * 1.34);
+    ctx.bezierCurveTo(h * 0.112, -h * 1.24, h * 0.098, -h * 1.12, h * 0.088, -h * 0.96);
     ctx.closePath();
+    ctx.save(); ctx.clip();
+    metalFill(ctx, -h * 0.09, 0, h * 0.09, 0, PALETTES.brass);
+    ctx.restore();
+    // the grip bulb
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 1.42, h * 0.176, h * 0.150, 0, 0, TAU);
+    ctx.save(); ctx.clip();
+    metalFill(ctx, -h * 0.18, 0, h * 0.18, 0, PALETTES.brass);
+    const bl = ctx.createRadialGradient(-h * 0.06, -h * 1.472, 0, 0, -h * 1.42, h * 0.22);
+    bl.addColorStop(0, 'rgba(255,246,214,0.55)');
+    bl.addColorStop(1, 'rgba(255,246,214,0)');
+    ctx.fillStyle = bl;
+    ctx.fillRect(-h * 0.2, -h * 1.72, h * 0.4, h * 0.42);
+    ctx.restore();
+    // collar under the bulb, ferrule where the shaft enters the crown
+    ctx.strokeStyle = 'rgba(58,42,16,0.75)';
+    ctx.lineWidth = Math.max(1, g.u * 0.10);
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 1.294, h * 0.112, h * 0.034, 0, 0, TAU);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.995, h * 0.126, h * 0.040, 0, 0, TAU);
+    const fg = ctx.createLinearGradient(-h * 0.1, 0, h * 0.1, 0);
+    fg.addColorStop(0, '#6b5220'); fg.addColorStop(0.45, '#d8b56e'); fg.addColorStop(1, '#5a4419');
+    ctx.fillStyle = fg;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // ---- the casting
+    this._bellPath(ctx, h);
     ctx.save();
     ctx.clip();
     metalFill(ctx, -h * 0.72, -h, h * 0.72, h * 0.2, PALETTES.brass);
     radialBrush(ctx, 0, -h * 0.4, h, 17, { count: 60, alpha: 0.05 });
+    // a bell is a body of revolution: one bright band left of centre, and
+    // both edges falling away into the dark
+    const rd = ctx.createLinearGradient(-h * 0.72, 0, h * 0.72, 0);
+    rd.addColorStop(0, 'rgba(24,16,4,0.72)');
+    rd.addColorStop(0.20, 'rgba(24,16,4,0.10)');
+    rd.addColorStop(0.34, 'rgba(255,244,206,0.32)');
+    rd.addColorStop(0.52, 'rgba(255,236,186,0.05)');
+    rd.addColorStop(0.78, 'rgba(30,20,6,0.30)');
+    rd.addColorStop(1, 'rgba(20,13,3,0.76)');
+    ctx.fillStyle = rd;
+    ctx.fillRect(-h * 0.8, -h * 1.1, h * 1.6, h * 1.4);
+    // tarnish settles in the concave waist, where no cloth reaches
+    const tz = ctx.createLinearGradient(0, -h * 0.62, 0, -h * 0.24);
+    tz.addColorStop(0, 'rgba(46,58,30,0)');
+    tz.addColorStop(0.5, 'rgba(46,58,30,0.20)');
+    tz.addColorStop(1, 'rgba(46,58,30,0)');
+    ctx.fillStyle = tz;
+    ctx.fillRect(-h * 0.8, -h * 0.62, h * 1.6, h * 0.4);
     ctx.restore();
-    ctx.strokeStyle = `rgba(255,238,190,${0.5 * vis})`;
-    ctx.lineWidth = Math.max(1, g.u * 0.12);
-    ctx.stroke();
 
-    // mouth
+    // ---- the mouldings above the sound bow
+    ctx.save();
+    for (const [my, dark] of [[-h * 0.148, 0.72], [-h * 0.206, 0.58]]) {
+      const rx = this._bellRx(h, my);
+      const ry = rx * 0.285;
+      ctx.strokeStyle = `rgba(30,20,6,${dark})`;
+      ctx.lineWidth = Math.max(1.1, g.u * 0.14);
+      ctx.beginPath(); ctx.ellipse(0, my, rx, ry, 0, 0.06, Math.PI - 0.06); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,240,196,0.30)';
+      ctx.lineWidth = Math.max(0.8, g.u * 0.07);
+      ctx.beginPath();
+      ctx.ellipse(0, my + g.u * 0.11, rx, ry, 0, 0.10, Math.PI - 0.10);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- the mouth: the far inner wall is lit, the near one is not
+    ctx.save();
     ctx.beginPath();
-    ctx.ellipse(0, 0, h * 0.72, h * 0.22, 0, 0, TAU);
-    ctx.fillStyle = 'rgba(18,12,6,0.85)';
+    ctx.ellipse(0, 0, h * 0.72, h * 0.205, 0, 0, TAU);
+    ctx.fillStyle = 'rgba(14,9,3,0.94)';
     ctx.fill();
+    ctx.clip();
+    const iw = ctx.createLinearGradient(0, -h * 0.205, 0, h * 0.06);
+    iw.addColorStop(0, 'rgba(186,142,64,0.62)');
+    iw.addColorStop(0.55, 'rgba(90,66,26,0.14)');
+    iw.addColorStop(1, 'rgba(20,14,4,0)');
+    ctx.fillStyle = iw;
+    ctx.fillRect(-h * 0.72, -h * 0.205, h * 1.44, h * 0.41);
+    // the clapper, hanging inside and lagging the body it hangs in
+    ctx.save();
+    ctx.rotate(-B.a * 0.9);
+    ctx.strokeStyle = 'rgba(40,28,10,0.9)';
+    ctx.lineWidth = Math.max(1, g.u * 0.13);
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.30);
+    ctx.lineTo(0, -h * 0.04);
+    ctx.stroke();
+    const cg = ctx.createRadialGradient(-h * 0.03, -h * 0.055, 0, 0, -h * 0.03, h * 0.13);
+    cg.addColorStop(0, 'rgba(236,206,140,0.95)');
+    cg.addColorStop(0.6, 'rgba(140,104,44,0.95)');
+    cg.addColorStop(1, 'rgba(40,28,10,0.95)');
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(0, -h * 0.03, h * 0.105, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    // ---- the lip: the brightest line on the object, and the one that
+    // says the wall has thickness instead of being a paper cone
+    ctx.strokeStyle = `rgba(255,242,202,${0.78 * vis})`;
+    ctx.lineWidth = Math.max(1.2, g.u * 0.17);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, h * 0.72, h * 0.205, 0, Math.PI * 0.06, Math.PI * 0.94);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255,238,190,${0.30 * vis})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.10);
+    this._bellPath(ctx, h);
+    ctx.stroke();
 
     // the card, tied on with thread
     if (B.tagA > 0.01) {
       ctx.save();
       ctx.globalAlpha = B.tagA * vis;
-      ctx.rotate(0.22 + B.a * 0.3);
+      // hung to the side and slightly low, so the whole card clears both
+      // the casting and the mess the player has already made on the plinth
+      ctx.rotate(0.15 + B.a * 0.3);
       const tw = h * 0.86, th = h * 0.5;
-      const tx = h * 0.5, ty = -h * 0.42;
+      const tx = h * 0.80, ty = -h * 0.26;
       ctx.strokeStyle = 'rgba(200,180,140,0.7)';
       ctx.lineWidth = Math.max(1, g.u * 0.1);
-      ctx.beginPath(); ctx.moveTo(h * 0.1, -h * 0.7); ctx.lineTo(tx, ty); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(h * 0.06, -h * 1.02);
+      ctx.quadraticCurveTo(h * 0.66, -h * 0.80, tx + tw * 0.16, ty);
+      ctx.stroke();
       ctx.save();
       ctx.translate(tx, ty);
       roundRectPath(ctx, 0, 0, tw, th, g.u * 0.4);
