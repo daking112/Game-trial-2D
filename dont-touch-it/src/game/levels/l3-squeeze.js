@@ -232,14 +232,17 @@ export class L3Squeeze extends Level {
 
     this.strain = null;
 
-    this.say("This one is warm.", { hold: 1.5 });
-    this.say("Do not squeeze it.", { hold: 2.4 });
   }
 
   exit() {
     this.hideHint();
     if (this.strain) { this.strain.stop(0.3); this.strain = null; }
     this.p.floor = this._pFloor ?? Infinity;
+  }
+
+  intro() {
+    this.say("This one is warm.", { hold: 1.5 });
+    this.say("Do not squeeze it.", { hold: 2.4 });
   }
 
   probe() {

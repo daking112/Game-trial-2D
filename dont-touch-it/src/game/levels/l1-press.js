@@ -145,12 +145,15 @@ export class L1Press extends Level {
     this.narratorStage = 0;
     this.smoke = 0;
 
-    this.say("Behind the glass is a switch.", { hold: 1.4 });
-    this.say("Do not press it.", { hold: 2.2 });
     this.hint('');
   }
 
   exit() { this.hideHint(); }
+
+  intro() {
+    this.say("Behind the glass is a switch.", { hold: 1.4 });
+    this.say("Do not press it.", { hold: 2.2 });
+  }
 
   probe() {
     return {
@@ -490,10 +493,15 @@ export class L1Press extends Level {
   _updateButton(dt) {
     const g = this.g, b = this.btn;
     const p = this.input.find(pt => !pt.claimedBy && pt.down && this._onButton(pt.x, pt.y), this.tag);
-    const holder = this.input.list.find(pt => pt.data && pt.data.btn);
+    // `holder` MUST be re-read after a claim: computing it once above the
+    // claim meant the release branch below still saw "nobody is holding
+    // this", so the switch pressed and released itself on the same frame
+    // and could never be held long enough to reach the detent.
+    let holder = this.input.list.find(pt => pt.data && pt.data.btn);
 
     if (p && !holder && this.input.presses.includes(p)) {
       p.claimedBy = this.tag; p.data.btn = true;
+      holder = p;
       b.down = true; b.holdT = 0;
       SFX.buttonPress();
       Haptics.press();
@@ -759,6 +767,13 @@ export class L1Press extends Level {
       sx.drawImage(cvs, rx0 * kx, ry0 * ky, rw * kx, rh * ky, rx0, ry0, rw, rh);
       if (comp) sx.globalCompositeOperation = 'source-over';
     };
+    // the same opaque base drawBackdrop uses — without it this layer
+    // composites over transparency and its blit shows as a rectangle
+    sx.save();
+    sx.setTransform(1, 0, 0, 1, 0, 0);
+    sx.fillStyle = '#07070a';
+    sx.fillRect(0, 0, w, h);
+    sx.restore();
     const lit = Math.min(1, 0.10 + set.lit * 0.90);
     region(set.wall.canvas, lit);
     region(set.cone.canvas, set.coneStrength * set.lit, 'lighter');

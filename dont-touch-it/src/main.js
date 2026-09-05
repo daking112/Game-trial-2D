@@ -40,9 +40,12 @@ const bootEl = document.getElementById('boot');
 
 async function boot() {
   try { await document.fonts.ready; } catch (_) {}
-  game.set.exposure = 0.16;
-  game.set.coneStrength = 0.35;
+  game.set.exposure = 0.18;
+  game.set.coneStrength = 0.30;
   game.start();
+  // The first exhibit is already on its plinth, in half-light, behind the
+  // title. Tapping doesn't load a level — it turns the lights on.
+  if (!params.has('level')) game.preview(0);
   bootEl.classList.add('gone');
   // title choreography
   const items = titleEl.querySelectorAll('.mark span i');
@@ -83,8 +86,8 @@ async function enter(skipCard = false) {
 
   // goto() owns the lights-up; don't fight it
   const idx = params.has('level') ? Math.max(0, (parseInt(params.get('level'), 10) || 1) - 1) : 0;
-  await new Promise(r => setTimeout(r, skipCard ? 120 : 700));
-  await game.goto(idx, { card: !skipCard, instant: skipCard });
+  await new Promise(r => setTimeout(r, skipCard ? 120 : 520));
+  await game.goto(idx, { card: false, instant: skipCard });
 }
 
 canvas.addEventListener('pointerdown', () => { if (!entered) enter(); }, { once: false });

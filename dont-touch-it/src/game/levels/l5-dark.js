@@ -55,6 +55,7 @@ export class L5Dark extends Level {
   enter() {
     const g = this.g;
     this.ownsWreckage = true;           // we light the room; we reveal the mess
+    this.ownsLighting = true;           // ...so the shell must not dim us
     this.phase = 'lit';                 // lit | dying | dark | found | ringing | restored
     this.darkT = 0;
     this.lamp = { on: 1, filament: 1, swing: 0, vswing: 0, flicker: 0 };
@@ -74,8 +75,6 @@ export class L5Dark extends Level {
     // something to find. A real playthrough arrives with its own.
     if (this.game.wreck.items.length === 0) this._seedWreckage();
 
-    this.say('This is the last one.', { hold: 1.6 });
-    this.say('The light. Do not turn off the light.', { hold: 2.6 });
   }
 
   _buildChain() {
@@ -114,6 +113,11 @@ export class L5Dark extends Level {
     set.exposure = 1; set.coneStrength = 1; set.plinthOpacity = 1;
     set.warmth = 1; set.flicker = 0; set.tint = null;
     this.hideHint();
+  }
+
+  intro() {
+    this.say('This is the last one.', { hold: 1.6 });
+    this.say('The light. Do not turn off the light.', { hold: 2.6 });
   }
 
   probe() {

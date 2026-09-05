@@ -44,10 +44,23 @@ export class Level {
      * light source instead of the gallery's.
      */
     this.ownsWreckage = false;
+    /**
+     * Set true if this chapter lights the scene itself. The shell dims the
+     * world to match the room's exposure; a chapter whose only light
+     * source is drawn INSIDE its own draw() must opt out, or the shell
+     * will dim the very light it is drawing.
+     */
+    this.ownsLighting = false;
   }
 
   // -------- lifecycle (override) --------
   enter() {}
+  /**
+   * Opening narration, separated from enter() so the shell can build a
+   * chapter without it speaking — the title screen shows Chapter I's
+   * object in half-light before the game has started.
+   */
+  intro() {}
   layout(w, h, u) {}
   update(dt) {}
   drawBack(ctx) {}

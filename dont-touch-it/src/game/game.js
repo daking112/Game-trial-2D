@@ -118,9 +118,8 @@ export class Game {
 
     if (card) await this.hud.card(`Chapter ${C.chapter}`, C.rule);
 
-    const lv = new C(this);
-    lv.layout(this.r.w, this.r.h, this.r.u);
-    lv.enter();
+    const lv = this.previewed && this.previewed.constructor === C ? this.previewed : this._build(C);
+    this.previewed = null;
     this.level = lv;
     this.state = 'playing';
 
@@ -137,7 +136,31 @@ export class Game {
       this.set.coneStrength = 1;
     }
     this.hud.showBar(true);
+    lv.intro();
     this._changing = false;
+    return lv;
+  }
+
+  _build(C) {
+    const lv = new C(this);
+    lv.layout(this.r.w, this.r.h, this.r.u);
+    lv.enter();
+    return lv;
+  }
+
+  /**
+   * Build a chapter but do not start it: the title screen shows the first
+   * object sitting in half-light, so the game's opening move is the room
+   * coming up on something that is already there.
+   */
+  preview(i) {
+    const C = this.levelClasses[i];
+    if (!C) return null;
+    const lv = this._build(C);
+    this.previewed = lv;
+    this.level = lv;
+    this.index = i;
+    this.narrator.clear();
     return lv;
   }
 
@@ -234,6 +257,18 @@ export class Game {
     this.particles.draw(ctx, g);
     if (this.level) this.level.drawFront(ctx, g);
     this.set.drawAtmosphere(ctx);
+
+    // The room's exposure dims the ROOM (its layers are blitted with
+    // alpha) but not the object on it. This scrim closes that gap, which
+    // is what lets the title screen show the first exhibit in half-light
+    // and makes "tap to enter" an act of turning the lights on.
+    if (!this.level || !this.level.ownsLighting) {
+      const scrim = clamp01(0.95 - this.set.lit * 1.02);
+      if (scrim > 0.004) {
+        ctx.fillStyle = `rgba(5,5,8,${scrim})`;
+        ctx.fillRect(-r.w, -r.h, r.w * 3, r.h * 3);
+      }
+    }
 
     g.restore();
     ctx.restore();

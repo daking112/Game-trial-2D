@@ -330,14 +330,17 @@ export class L4Break extends Level {
     this._refHands = [];
     this.drawCost = 0;
 
-    this.say("Six millimetres of tempered glass.", { hold: 1.5 });
-    this.say("There is a single flaw in the left edge. Ignore it.", { hold: 2.4 });
     this.hideHint();
   }
 
   exit() { this.hideHint(); }
 
   roomLight() { return 1; }
+
+  intro() {
+    this.say("Six millimetres of tempered glass.", { hold: 1.5 });
+    this.say("There is a single flaw in the left edge. Ignore it.", { hold: 2.4 });
+  }
 
   probe() {
     const P = this.panes ? this.panes[0] : null;
