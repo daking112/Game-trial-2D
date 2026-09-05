@@ -126,14 +126,27 @@ const S = {
 // ------------------------------------------------------------
 // path helpers
 // ------------------------------------------------------------
+/**
+ * Closed Catmull-Rom through the simulated ring, emitted as cubic Béziers.
+ *
+ * The obvious quadratic-through-midpoints version never actually reaches
+ * the simulated points, so the silhouette flattens between them and a
+ * soft body ends up looking like a polygon — which is the single fastest
+ * way to lose the illusion that it is soft. This interpolates THROUGH
+ * every point, so a fingertip dimple stays as sharp as the sim made it.
+ */
 function ringPath(ctx, pts) {
   const n = pts.length;
+  if (n < 3) return;
   ctx.beginPath();
-  const a0 = pts[n - 1], b0 = pts[0];
-  ctx.moveTo((a0.x + b0.x) * 0.5, (a0.y + b0.y) * 0.5);
+  ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 0; i < n; i++) {
-    const a = pts[i], b = pts[(i + 1) % n];
-    ctx.quadraticCurveTo(a.x, a.y, (a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i];
+    const p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    ctx.bezierCurveTo(
+      p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
+      p2.x, p2.y);
   }
   ctx.closePath();
 }
@@ -1146,6 +1159,11 @@ export class L3Squeeze extends Level {
     ctx.restore();  // un-clip
 
     // --- wet rim ---
+    // Rebuild the silhouette first: the current path is still the core
+    // glint's little circle from the pass above (a path survives
+    // save/restore), so stroking here without this drew a bright arc
+    // floating outside the body.
+    ringPath(ctx, pts);
     const rimw = Math.max(1, rr * 0.045);
     ctx.lineWidth = rimw;
     const rg = ctx.createLinearGradient(b.cx - rx, b.cy - ry, b.cx + rx, b.cy + ry);
@@ -1199,20 +1217,31 @@ export class L3Squeeze extends Level {
     // filaments — only just visible, which is what makes them work
     const rng = makeRng(b.seed);
     ctx.save();
-    ctx.globalAlpha = 0.5 + load * 0.3;
-    ctx.strokeStyle = 'rgba(66,8,22,0.55)';
-    ctx.lineWidth = Math.max(0.6, rr * 0.022);
     ctx.lineCap = 'round';
+    // Each filament fades to nothing at its tip and is laid down twice: a
+    // wide, very faint pass under a thin one. Drawn as flat crisp strokes
+    // they read as scratches ON the skin rather than structure inside it —
+    // depth here is entirely a matter of contrast and edge softness.
     for (let i = 0; i < 6; i++) {
       const a = rng() * TAU;
       const l = rr * (0.4 + rng() * 0.55);
       const wob = Math.sin(this.t * 0.6 + i) * rr * 0.06;
-      ctx.beginPath();
-      ctx.moveTo(b.nx, b.ny);
-      ctx.quadraticCurveTo(
-        b.nx + Math.cos(a) * l * 0.55 + wob, b.ny + Math.sin(a) * l * 0.55 - wob,
-        b.nx + Math.cos(a + 0.4) * l, b.ny + Math.sin(a + 0.4) * l);
-      ctx.stroke();
+      const ex = b.nx + Math.cos(a + 0.4) * l, ey = b.ny + Math.sin(a + 0.4) * l;
+      const fg = ctx.createLinearGradient(b.nx, b.ny, ex, ey);
+      const base = 0.34 + load * 0.26;
+      fg.addColorStop(0, `rgba(74,10,26,${base})`);
+      fg.addColorStop(0.55, `rgba(88,14,32,${base * 0.45})`);
+      fg.addColorStop(1, 'rgba(96,18,36,0)');
+      ctx.strokeStyle = fg;
+      for (const [wm, am] of [[3.2, 0.30], [1.0, 1.0]]) {
+        ctx.globalAlpha = am;
+        ctx.lineWidth = Math.max(0.6, rr * 0.019 * wm);
+        ctx.beginPath();
+        ctx.moveTo(b.nx, b.ny);
+        ctx.quadraticCurveTo(
+          b.nx + Math.cos(a) * l * 0.55 + wob, b.ny + Math.sin(a) * l * 0.55 - wob, ex, ey);
+        ctx.stroke();
+      }
     }
     ctx.restore();
 
