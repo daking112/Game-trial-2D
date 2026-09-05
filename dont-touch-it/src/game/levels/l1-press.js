@@ -543,7 +543,7 @@ export class L1Press extends Level {
     Haptics.shatter();
     this.shake(0.62);
     this.slowmo(0.28, 0.5);
-    this.flash('220,238,255', 0.28, 0.32);
+    this.flash('220,238,255', 0.13, 0.26);   // a glint, not a whiteout
     Audio.setRoom(2.4, 2.2, 0.34);
 
     const rng = makeRng(77);
@@ -554,26 +554,50 @@ export class L1Press extends Level {
       const px = cx + Math.cos(a) * rr;
       const py = baseY - rng() * (g.jarStraight + g.jarR) * 0.95;
       const size = g.u * (0.7 + rng() * 2.1);
+      // A jar dropped onto a plate does not launch upward. Its rim blows
+      // out sideways and its body COLLAPSES: the higher a piece started,
+      // the further it has to fall, so height adds downward speed rather
+      // than subtracting it. The old sign made every fragment arc up in a
+      // symmetric fountain, which is the look of confetti, not of glass.
+      const height = (baseY - py) / Math.max(1, g.jarStraight + g.jarDome);
       const d = new Debris(px, py, shardPoly(size, rng), {
-        vx: (px - cx) * rrange(2.6, 5.0) + rrange(-140, 140),
-        vy: rrange(-620, -120) - (baseY - py) * 0.7,
-        va: rrange(-16, 16), restitution: 0.32, friction: 0.82, grav: 2700,
+        vx: (px - cx) * rrange(3.0, 6.0) + rrange(-120, 120),
+        vy: rrange(-210, -40) * (1 - height) + height * rrange(220, 620),
+        va: rrange(-16, 16), restitution: 0.28, friction: 0.80, grav: 2700,
         data: { kind: 'shard', size },
       });
-      d.floorY = g.plateY + rrange(-1, 5) + (Math.abs(px - g.cx) > g.plateRx ? g.h : 0);
+      d.baseFloor = g.plateY + rrange(-1, 5);
+      d.floorY = d.baseFloor;
       this.shards.push(d);
     }
-    this.p.burst(cx, baseY - g.jarStraight * 0.6, 60, {
-      speed: 560, dir: -Math.PI / 2, spread: TAU, life: 0.8, size: 1.5,
-      kind: 2, grav: 2200, drag: 1.0, color: [216, 236, 250], alpha: 0.95, jitter: g.jarR,
+    // A jar that has hit a steel plate throws glass OUTWARD and slightly
+    // down, not up in a symmetric fountain. Two lateral fans, each tilted
+    // toward the floor, plus a much smaller upward puff — and translucent
+    // rather than opaque, because opaque flecks read as torn paper.
+    const fanY = baseY - g.u * 1.2;
+    for (const [dir, side] of [[0.34, 1], [Math.PI - 0.34, -1]]) {
+      this.p.burst(cx + side * g.jarR * 0.2, fanY, 26, {
+        speed: 620, dir, spread: 1.45, life: 0.75, size: 1.7,
+        kind: 2, grav: 2600, drag: 0.9, color: [216, 236, 250],
+        alpha: 0.55, jitter: g.jarR * 0.7,
+      });
+      // a finer, faster tail of splinters
+      this.p.burst(cx + side * g.jarR * 0.2, fanY, 18, {
+        speed: 880, dir, spread: 0.95, life: 0.5, size: 0.8,
+        kind: 2, grav: 2900, drag: 1.4, color: [232, 246, 255],
+        alpha: 0.42, jitter: g.jarR * 0.5,
+      });
+    }
+    // glass dust: settles, it does not rise
+    this.p.burst(cx, fanY - g.u * 2, 22, {
+      speed: 210, dir: 0, spread: TAU, life: 1.1, size: 4.5,
+      kind: 4, grav: 70, drag: 1.9, color: [192, 206, 220], alpha: 0.30, jitter: g.jarR,
     });
-    this.p.burst(cx, baseY - g.jarStraight * 0.5, 26, {
-      speed: 300, dir: -Math.PI / 2, spread: TAU, life: 1.4, size: 5,
-      kind: 4, grav: -30, drag: 1.4, color: [190, 205, 220], alpha: 0.5, jitter: g.jarR,
-    });
-    this.p.burst(cx, baseY - g.jarStraight * 0.5, 18, {
-      speed: 420, dir: -Math.PI / 2, spread: TAU, life: 0.5, size: 2,
-      kind: 3, grav: 900, drag: 1.6, color: [200, 230, 255], alpha: 0.8, jitter: g.jarR,
+    // a brief spark of caught light at the impact itself
+    this.p.burst(cx, fanY, 14, {
+      speed: 430, dir: -Math.PI / 2, spread: 2.4, life: 0.42, size: 1.8,
+      kind: 3, grav: 1400, drag: 1.8, color: [212, 236, 255], alpha: 0.6,
+      jitter: g.jarR * 0.6,
     });
     this.smoke = 1;
     this.interrupt("…", { hold: 1.1, agitated: true });
@@ -741,9 +765,18 @@ export class L1Press extends Level {
   _updateShards(dt) {
     const g = this.g;
     let settled = 0;
+    const G = this.game.set.geom;
     for (const d of this.shards) {
       if (d.rest) { settled++; continue; }
       const fast = Math.abs(d.vy) > 260;
+      // The floor a piece lands on depends on where it IS, not where it
+      // was thrown from. Fixing it at spawn left fragments resting in
+      // mid-air just past the plinth's edge, at exactly the plate's
+      // height, because they drifted outward after the floor was chosen.
+      const dx = Math.abs(d.x - g.cx);
+      d.floorY = dx < g.plateRx * 0.96 ? d.baseFloor
+        : dx < G.topRx * 0.98 ? G.topY + g.u * 0.4
+        : g.h + g.u * 20;                 // past the plinth: it keeps going
       d.step(dt, d.floorY, null);
       if (fast && Math.abs(d.vy) < 200 && rand() < 0.5)
         SFX.shardTinkle(d.data.size / g.u, (d.x - g.cx) / (g.u * 24));
