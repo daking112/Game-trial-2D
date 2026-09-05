@@ -741,7 +741,11 @@ export class L4Break extends Level {
     const rng = makeRng(9001 + P.i * 313);
     const cap = this._shardCap();
     const diag = Math.hypot(G.w, G.h);
-    let s0 = diag * 0.052, k = 0.30;
+    // A mirror does not go to gravel. It comes apart into a dozen big
+    // wedges, each of which keeps a whole readable piece of the picture —
+    // which is the entire point of breaking this particular pane.
+    const big = P.kind === 'mirror';
+    let s0 = diag * (big ? 0.215 : 0.084), k = big ? 0.46 : 0.30;
     let seeds = this._seed(G, ix, iy, s0, k, rng);
     // adaptive: coarsen until we are inside budget rather than truncating,
     // so the pattern stays a correct Voronoi at every quality tier
@@ -753,14 +757,16 @@ export class L4Break extends Level {
     // the crack you grew becomes real cell boundaries: seed pairs straddling
     // each segment so the Voronoi edge between them lies along the crack
     const off = s0 * 0.34;
+    const seedCap = big ? 26 : cap * 1.5;
+    const stride = big ? 10 : 2;
     for (const tip of P.crack.paths) {
-      for (let i = 0; i + 3 < tip.pts.length; i += 2) {
+      for (let i = 0; i + 3 < tip.pts.length; i += stride) {
         const ax = tip.pts[i], ay = tip.pts[i + 1];
         const bx = tip.pts[i + 2], by = tip.pts[i + 3];
         const mx = (ax + bx) / 2, my = (ay + by) / 2;
         const L = Math.hypot(bx - ax, by - ay) || 1;
         const nx = -(by - ay) / L, ny = (bx - ax) / L;
-        if (seeds.length / 2 > cap * 1.5) break;
+        if (seeds.length / 2 > seedCap) break;
         seeds.push(mx + nx * off, my + ny * off, mx - nx * off, my - ny * off);
       }
     }
@@ -792,7 +798,7 @@ export class L4Break extends Level {
     // ---- build the shards ----
     const dpr = clamp(this.r.dpr, 1, 2);
     const bake = P.kind === 'mirror' && this._reflection;
-    const floorBase = P.i === 0 ? g.floorBase : g.floorBase - g.u * 2.6;
+    const floorBase = P.i === 0 ? g.floorBase : g.floorBase + g.u * 2.2;
     let biggest = 0;
     for (const cell of cells) {
       const [ccx, ccy] = polyCentroid(cell.poly);
@@ -808,10 +814,10 @@ export class L4Break extends Level {
       // energy falls off with distance from the impact; near cells are flung,
       // far ones essentially just lose their footing
       const e = 1 / (1 + (dd / (diag * 0.20)) ** 1.5);
-      const spd = 60 + e * 640;
+      const spd = (60 + e * 640) * (big ? 1.6 : 1);
       const d = new Debris(ccx, ccy, local, {
         vx: (dx / dd) * spd + rrange(-70, 70),
-        vy: (dy / dd) * spd * 0.72 - rrange(40, 260) * (0.35 + e),
+        vy: (dy / dd) * spd * 0.72 - rrange(40, 260) * (0.35 + e) * (big ? 0.55 : 1),
         a: 0, va: rrange(-7, 7) * (0.4 + e),
         restitution: 0.24 + rand() * 0.16,
         friction: 0.78,
@@ -822,6 +828,14 @@ export class L4Break extends Level {
       d.floorY = d.baseFloor;
       d.wasFast = 0;
       d.spark = ((ccx * 13 + ccy * 7) | 0) % 4;
+      // How flat a piece comes to rest. Most lie down — foreshortened to a
+      // lozenge — but a few catch on the ones beneath and stand up, and
+      // those are the ones with a face in them. A pile that is uniformly
+      // flat has no picture left in it; a pile that is uniformly upright is
+      // a hedge. The mix is the whole image.
+      d.tilt = big
+        ? clamp(0.20 + rand() ** 2.2 * 0.52 + (rmax / diag) * 0.44, 0.18, 0.94)
+        : 0.52;
       // cached local drawing state — built once, reused every frame
       d.p2 = new Path2D();
       for (let i = 0; i < local.length; i += 2)
@@ -882,10 +896,38 @@ export class L4Break extends Level {
     } else {
       this.say("…", { hold: 1.2, agitated: true });
       this.tl.after(1.2, () => this.say("You're in pieces on the floor.", { hold: 2.4, agitated: true }));
-      this.tl.after(4.0, () => this.say("Every one of them still has a bit of you in it.", { hold: 3.0 }));
+      // Then the camera crosses the room and looks. Telling the player that
+      // every piece still has a bit of them in it is worth nothing while
+      // the pieces are forty pixels wide — so we go and read them.
+      this.tl.after(3.3, () => this._closeOnPile());
+      this.tl.after(4.9, () => this.say("Every one of them still has a bit of you in it.", { hold: 3.4 }));
+      this.tl.after(9.4, () => {
+        this.game.cam.focus(0, 0, Math.max(1, this.constructor.push || 1), 1.1);
+        Audio.setRoom(1.9, 2.6, 0.26);
+      });
       this.phase = 'done';
-      this.solve(7.2);
+      this.solve(11.0);
     }
+  }
+
+  /**
+   * Cross the room to the wreckage. Aimed at the centre of mass of the
+   * mirror's own pieces rather than at the pane, because that is where the
+   * picture ended up — and held there, so the last line has something to
+   * land on.
+   */
+  _closeOnPile() {
+    const M = this.panes[1];
+    if (!M.shards.length || !this.r.w) return;
+    let sx = 0, sy = 0;
+    for (const d of M.shards) { sx += d.x; sy += d.y; }
+    const px = sx / M.shards.length;
+    const py = sy / M.shards.length - this.g.u * 0.5;
+    // far enough in to read a face, not so far that the plinth's cached
+    // layers start showing their own pixels
+    const z = clamp(this.r.w / (M.g.w * 1.5), 1.4, 1.95);
+    this.game.cam.focus(this.r.w / 2 - px, this.r.h / 2 - py, z, 0.95);
+    Audio.setRoom(2.3, 2.4, 0.30);
   }
 
   /** polar seeding: ring spacing grows with radius → small cells at impact */
@@ -916,12 +958,17 @@ export class L4Break extends Level {
     const G = P.g, ref = this._reflection;
     if (!ref) return null;
     const pad = 2;
-    const size = Math.ceil((rmax + pad) * 2 * dpr);
-    if (size < 4 || size > 420) return null;
+    const R = rmax + pad;
+    if (R < 2) return null;
+    // Big wedges bake at a reduced scale so no single piece costs more than
+    // a modest texture; on screen they still land at 1:1 or better.
+    const MAX = 512;
+    const k = Math.min(dpr, MAX / (R * 2));
+    const size = Math.max(4, Math.round(R * 2 * k));
     const L = new Layer(size, size);
     const c = L.ctx;
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    c.translate(rmax + pad, rmax + pad);
+    c.setTransform(k, 0, 0, k, 0, 0);
+    c.translate(R, R);
     c.beginPath();
     for (let i = 0; i < cell.poly.length; i += 2) {
       const lx = cell.poly[i] - ccx, ly = cell.poly[i + 1] - ccy;
@@ -929,9 +976,27 @@ export class L4Break extends Level {
     }
     c.closePath();
     c.clip();
-    // the reflection layer is authored in pane space
-    c.drawImage(ref.canvas, G.x0 - ccx, G.y0 - ccy, G.w, G.h);
-    return { canvas: L.canvas, r: rmax + pad };
+    // A mirror in one piece has one viewpoint. A mirror in twenty pieces
+    // has twenty, because every piece now faces its own way — so each one
+    // shows the room from somewhere slightly different, and a good number
+    // of them are pointed straight back at the person standing in front of
+    // it. Sampling every shard from the same fixed slice is what made the
+    // pile read as anonymous grey plates: most slices are empty wall.
+    const rng = makeRng((((ccx * 977 + ccy * 613) | 0) >>> 0) + 17);
+    const sees = rng() < 0.5;                   // this piece can see you
+    const zm = 1 + rng() * 0.55;
+    const tx = sees ? G.w * (0.52 + rng() * 0.18) : G.w * (0.10 + rng() * 0.82);
+    const ty = sees ? G.h * (0.30 + rng() * 0.34) : G.h * (0.12 + rng() * 0.78);
+    // place pane-space (tx, ty) at this shard's own centre
+    c.drawImage(ref.canvas, -tx * zm, -ty * zm, G.w * zm, G.h * zm);
+    // A piece of mirror lying on a lit plinth is far brighter than the same
+    // piece was inside a dim frame. Lifting it additively raises the room
+    // and leaves the silhouette black, which is what makes the shape of you
+    // still legible at a tenth of the size.
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.38;
+    c.drawImage(ref.canvas, -tx * zm, -ty * zm, G.w * zm, G.h * zm);
+    return { canvas: L.canvas, r: R };
   }
 
   // ---------------- shard physics ----------------
@@ -957,7 +1022,13 @@ export class L4Break extends Level {
           });
         }
         if (d.rest) {
-          this._addPile(bins, d.x, d.data.r * 0.30);
+          // Glass heaps. Mirror plates do not: a dozen flat pieces the
+          // size of your hand lie over each other on the plinth like a
+          // dropped deck, and charging them by radius would build a hedge
+          // that hides every picture in the chapter.
+          this._addPile(bins, d.x, P.kind === 'mirror'
+            ? g.u * 0.09 + d.data.r * 0.10 * (d.tilt ?? 0.4)
+            : d.data.r * 0.24);
           settled++;
           if (settled === P.shards.length) S.settle();
         }
@@ -973,7 +1044,9 @@ export class L4Break extends Level {
   _pileAt(bins, x) { return bins[this._pileBin(x)]; }
   _addPile(bins, x, h) {
     const i = this._pileBin(x);
-    const cap = this.g.u * 6.5;
+    // The heap used to stand high enough to bury the bottom third of the
+    // mirror behind it — which is to say, to bury the reflection.
+    const cap = this.g.u * 4.6;
     for (let k = -3; k <= 3; k++) {
       const j = i + k;
       if (j < 0 || j > 55) continue;
@@ -1013,11 +1086,14 @@ export class L4Break extends Level {
     // back plane first
     if (!M.broken) this._drawPane(ctx, glow, M);
     this._drawShoe(ctx, M);
-    this._drawShards(ctx, glow, M);
-
     if (!F.broken) this._drawPane(ctx, glow, F);
     this._drawShoe(ctx, F, true);
+
+    // The mirror comes apart toward you, so its wedges land in front of the
+    // glass and draw over it. Any other order buries the only thing in this
+    // chapter worth looking at under a hundred and sixty clear pebbles.
     this._drawShards(ctx, glow, F);
+    this._drawShards(ctx, glow, M);
 
     // stress + crack ride on the active pane
     const P = this._activePane();
@@ -1448,127 +1524,209 @@ export class L4Break extends Level {
   }
 
   // ---------- the mirror ----------
+  /**
+   * The reflection is not a painting of a room. It is *this* room.
+   *
+   * The gallery already keeps its wall, its light cone and its plinth as
+   * cached layers, so the mirror composites those through a mirror
+   * transform — flipped in x, pushed back by a scale about the eye line,
+   * then cooled and hazed by the extra distance. The wreckage the player
+   * made in Chapters I and II comes with it, lying on the reflected
+   * plinth, because it is lying on the real one. Break the mirror having
+   * broken nothing yet and the plinth behind you is clean; break it after
+   * a bad afternoon and your own mess is in the picture.
+   *
+   * Then you: two arms, a phone, and the light of it under your jaw.
+   *
+   * Authored in pane space (0..G.w, 0..G.h) so `_bakeShard` can keep
+   * slicing straight out of it, but at device resolution so a shard held
+   * close to the camera still has a sharp picture in it.
+   */
   _buildReflection() {
     const G = this.g.panes[1];
     const w = Math.max(8, Math.round(G.w)), h = Math.max(8, Math.round(G.h));
-    const L = new Layer(w, h);
+    const k = clamp(this.r.dpr, 1, 2);
+    const L = new Layer(Math.ceil(w * k), Math.ceil(h * k));
     const c = L.ctx;
+    c.setTransform(k, 0, 0, k, 0, 0);
     const u = this.g.u;
+    const set = this.game.set, SG = set.geom;
 
-    // the far room, dark and cool
+    // the dark the far room sits in — everything else is drawn over it, so
+    // any corner the reflected gallery does not reach is simply more room
     const bg = c.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, '#0a0d14');
-    bg.addColorStop(0.42, '#0d1119');
-    bg.addColorStop(0.74, '#0a0c12');
-    bg.addColorStop(1, '#06070b');
+    bg.addColorStop(0, '#080a11');
+    bg.addColorStop(0.46, '#0b0e16');
+    bg.addColorStop(1, '#05060a');
     c.fillStyle = bg;
     c.fillRect(0, 0, w, h);
 
-    // the lamp, reflected — it lives above and behind the viewer
-    c.save();
-    c.globalCompositeOperation = 'lighter';
-    const lampG = c.createRadialGradient(w * 0.34, -h * 0.06, 0, w * 0.34, -h * 0.06, h * 0.62);
-    lampG.addColorStop(0, 'rgba(255,232,190,0.30)');
-    lampG.addColorStop(0.4, 'rgba(240,206,160,0.09)');
-    lampG.addColorStop(1, 'rgba(240,206,160,0)');
-    c.fillStyle = lampG;
-    c.fillRect(0, 0, w, h);
-    // its cone spilling down the far wall
-    c.beginPath();
-    c.moveTo(w * 0.26, 0); c.lineTo(w * 0.44, 0);
-    c.lineTo(w * 0.80, h * 0.86); c.lineTo(w * -0.06, h * 0.86);
-    c.closePath();
-    const coneG = c.createLinearGradient(0, 0, 0, h * 0.86);
-    coneG.addColorStop(0, 'rgba(255,226,178,0.13)');
-    coneG.addColorStop(1, 'rgba(255,226,178,0)');
-    c.fillStyle = coneG;
-    c.fill();
-    c.restore();
+    // ---- the gallery, reflected ----
+    // s < 1 because the far wall is two mirror-distances away; the flip is
+    // about a point left of centre so the reflected plinth clears you
+    // instead of hiding directly behind your head.
+    if (SG) {
+      const s = 0.50;
+      const mx = w * 0.24;              // flip axis, in pane space
+      const ey = h * 0.42;              // eye line — a mirror's horizon
+      c.save();
+      c.translate(mx, ey);
+      c.scale(-s, s);
+      c.translate(-mx, -ey);
+      c.translate(-G.x0, -G.y0);        // pane space → world space
+      c.globalAlpha = 1;
+      c.drawImage(set.wall.canvas, 0, 0, SG.w, SG.h);
+      c.globalCompositeOperation = 'lighter';
+      c.globalAlpha = 0.85;
+      c.drawImage(set.cone.canvas, 0, 0, SG.w, SG.h);
+      c.globalCompositeOperation = 'source-over';
+      c.globalAlpha = 1;
+      c.drawImage(set.plinth.canvas, 0, 0, SG.w, SG.h);
+      // what you have already broken, still on the plinth
+      this.game.wreck.draw(c, { ambient: 0.85 });
+      c.restore();
 
-    // a doorway on the right — depth, and a reason the room continues
-    c.save();
-    const dw = w * 0.16, dx = w * 0.80, dy = h * 0.30, dh = h * 0.48;
-    const dg = c.createLinearGradient(dx, 0, dx + dw, 0);
-    dg.addColorStop(0, 'rgba(28,32,42,0.9)');
-    dg.addColorStop(1, 'rgba(8,9,13,0.9)');
-    c.fillStyle = dg;
-    c.fillRect(dx, dy, dw, dh);
-    c.strokeStyle = 'rgba(150,166,190,0.14)';
-    c.lineWidth = 1;
-    c.strokeRect(dx + 0.5, dy + 0.5, dw - 1, dh - 1);
-    c.restore();
+      // one exposure lift over the composed room: a reflection of a lit
+      // gallery is the brightest thing on this wall, and the figure needs
+      // something to be a silhouette against
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.globalAlpha = 0.34;
+      c.drawImage(L.canvas, 0, 0, w, h);
+      c.restore();
 
-    // the floor line
-    c.save();
-    const fy = h * 0.845;
-    const fgd = c.createLinearGradient(0, fy, 0, h);
-    fgd.addColorStop(0, 'rgba(46,52,64,0.55)');
-    fgd.addColorStop(1, 'rgba(10,12,16,0.9)');
-    c.fillStyle = fgd;
-    c.fillRect(0, fy, w, h - fy);
-    c.restore();
+      // distance haze: the air between here and there. Weighted to the top,
+      // because that is the part of the room furthest behind you — laying it
+      // on the bottom instead buries the one object the reflection needs to
+      // be recognisable, which is the plinth.
+      c.save();
+      c.fillStyle = 'rgba(14,19,30,0.12)';
+      c.fillRect(0, 0, w, h);
+      const hz = c.createLinearGradient(0, 0, 0, h);
+      hz.addColorStop(0, 'rgba(20,27,40,0.26)');
+      hz.addColorStop(0.62, 'rgba(12,16,25,0.04)');
+      hz.addColorStop(1, 'rgba(8,10,16,0.18)');
+      c.fillStyle = hz;
+      c.fillRect(0, 0, w, h);
+      c.restore();
+
+      // the lamp itself, over the viewer's shoulder and out of frame
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      const lampG = c.createRadialGradient(w * 0.22, -h * 0.05, 0, w * 0.22, -h * 0.05, h * 0.70);
+      lampG.addColorStop(0, 'rgba(255,232,190,0.20)');
+      lampG.addColorStop(0.42, 'rgba(240,206,160,0.065)');
+      lampG.addColorStop(1, 'rgba(240,206,160,0)');
+      c.fillStyle = lampG;
+      c.fillRect(0, 0, w, h);
+      c.restore();
+    }
 
     // ---- you ----
-    const px = w * 0.50, headR = w * 0.135;
-    const headY = h * 0.44;
-    // shoulders
+    const px = w * 0.600;
+    const headR = w * 0.104, headY = h * 0.330;
+    const shY = headY + headR * 2.05;          // shoulder line
+    const shHalf = w * 0.200;
+    const hy = h * 0.748;                      // hands
+    // the phone is placed first and the forearms are aimed at it, so the
+    // grip is exact instead of approximately near
+    const phW = w * 0.098, phH = phW * 1.86;
+    const phX = px + w * 0.004, phY = hy - h * 0.030;
+    const hxL = phX - phW * 0.52, hxR = phX + phW * 0.52;
+    const INK = '#04050a';
+    // Shoulder → elbow → hand as two straight segments with a round join:
+    // a bent arm, not a bowed tube. The elbows sit well outside the ribs.
+    // The two sides are not quite the same, because nobody's are.
+    const armPath = () => {
+      c.beginPath();
+      c.moveTo(px - shHalf * 0.86, shY + h * 0.012);
+      c.lineTo(px - shHalf * 1.62, shY + h * 0.106);
+      c.lineTo(hxL, phY + phH * 0.40);
+      c.moveTo(px + shHalf * 0.86, shY + h * 0.012);
+      c.lineTo(px + shHalf * 1.56, shY + h * 0.092);
+      c.lineTo(hxR, phY + phH * 0.34);
+    };
+
     c.save();
+    c.fillStyle = INK;
+    c.strokeStyle = INK;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    // arms first, behind the torso — the elbows reach past the ribs, so
+    // what you see of each arm is a bent shape against the room
+    c.lineWidth = w * 0.062;
+    armPath(); c.stroke();
+    // torso: shoulders that fall away to the frame edge, not a bottle
     c.beginPath();
-    c.moveTo(px - w * 0.44, h);
-    c.bezierCurveTo(px - w * 0.36, h * 0.72, px - w * 0.20, h * 0.63, px - w * 0.10, h * 0.615);
-    c.lineTo(px + w * 0.10, h * 0.615);
-    c.bezierCurveTo(px + w * 0.20, h * 0.63, px + w * 0.36, h * 0.72, px + w * 0.44, h);
+    c.moveTo(px - shHalf * 1.10, h);
+    c.bezierCurveTo(px - shHalf * 1.02, h * 0.872, px - shHalf * 0.99, shY + h * 0.050, px - shHalf, shY);
+    c.bezierCurveTo(px - shHalf * 0.42, shY - h * 0.022, px - headR * 0.76, shY - h * 0.004, px - headR * 0.62, shY - h * 0.038);
+    c.lineTo(px + headR * 0.62, shY - h * 0.038);
+    c.bezierCurveTo(px + headR * 0.76, shY - h * 0.004, px + shHalf * 0.42, shY - h * 0.022, px + shHalf, shY);
+    c.bezierCurveTo(px + shHalf * 0.99, shY + h * 0.050, px + shHalf * 1.02, h * 0.872, px + shHalf * 1.10, h);
     c.closePath();
-    c.fillStyle = '#04050a';
     c.fill();
-    c.restore();
-    // head
-    c.save();
+    // neck, then head
+    c.strokeStyle = INK;
+    c.lineWidth = headR * 0.92;
     c.beginPath();
-    c.ellipse(px, headY, headR * 0.86, headR * 1.06, 0, 0, TAU);
-    c.fillStyle = '#04050a';
+    c.moveTo(px, headY + headR * 0.85);
+    c.lineTo(px, shY - h * 0.028);
+    c.stroke();
+    c.beginPath();
+    c.ellipse(px, headY, headR * 0.86, headR * 1.10, 0, 0, TAU);
     c.fill();
+    // the phone catches the top of each forearm — just enough of an edge
+    // that the arms do not dissolve into the chest
+    c.strokeStyle = 'rgba(128,164,214,0.11)';
+    c.lineWidth = Math.max(1, u * 0.22);
+    c.beginPath();
+    c.moveTo(px - shHalf * 1.60, shY + h * 0.100);
+    c.lineTo(hxL - w * 0.008, phY + phH * 0.36);
+    c.moveTo(px + shHalf * 1.54, shY + h * 0.086);
+    c.lineTo(hxR + w * 0.008, phY + phH * 0.30);
+    c.stroke();
     c.restore();
 
-    // the phone: the one bright thing, held at chest height
-    const phW = w * 0.115, phH = phW * 1.9;
-    const phX = px + w * 0.055, phY = h * 0.735;
+    // the phone: the one bright thing in the room, and it is in your hands
     c.save();
     c.globalCompositeOperation = 'lighter';
-    // its glow, spilling up onto the underside of the face
-    const pg = c.createRadialGradient(phX, phY, 0, phX, phY, h * 0.34);
-    pg.addColorStop(0, 'rgba(196,224,255,0.42)');
-    pg.addColorStop(0.22, 'rgba(150,190,240,0.14)');
+    const pg = c.createRadialGradient(phX, phY, 0, phX, phY, h * 0.26);
+    pg.addColorStop(0, 'rgba(196,224,255,0.30)');
+    pg.addColorStop(0.24, 'rgba(150,190,240,0.075)');
     pg.addColorStop(1, 'rgba(120,160,220,0)');
     c.fillStyle = pg;
     c.fillRect(0, 0, w, h);
-    // a soft under-lighting on the jaw
-    const ug = c.createRadialGradient(px, headY + headR * 0.7, 0, px, headY + headR * 0.7, headR * 1.5);
-    ug.addColorStop(0, 'rgba(150,190,240,0.20)');
+    // the screen throwing light up under the jaw
+    const ug = c.createRadialGradient(px, headY + headR * 0.72, 0, px, headY + headR * 0.72, headR * 1.6);
+    ug.addColorStop(0, 'rgba(150,190,240,0.18)');
     ug.addColorStop(1, 'rgba(150,190,240,0)');
     c.fillStyle = ug;
-    c.beginPath(); c.arc(px, headY + headR * 0.7, headR * 1.5, 0, TAU); c.fill();
+    c.beginPath(); c.arc(px, headY + headR * 0.72, headR * 1.6, 0, TAU); c.fill();
     c.restore();
-    // the screen itself
     c.save();
     c.translate(phX, phY);
-    c.rotate(-0.14);
-    roundRectPath(c, -phW / 2, -phH / 2, phW, phH, phW * 0.16);
-    c.fillStyle = 'rgba(212,232,255,0.85)';
+    c.rotate(-0.16);
+    roundRectPath(c, -phW / 2, -phH / 2, phW, phH, phW * 0.17);
+    const sg = c.createLinearGradient(0, -phH / 2, 0, phH / 2);
+    sg.addColorStop(0, 'rgba(216,234,255,0.86)');
+    sg.addColorStop(0.55, 'rgba(178,206,242,0.74)');
+    sg.addColorStop(1, 'rgba(140,172,214,0.62)');
+    c.fillStyle = sg;
     c.fill();
     c.restore();
 
-    // rim light along the left shoulder + skull, from the gallery key
+    // rim light down the left shoulder and skull, from the gallery key
     c.save();
     c.globalCompositeOperation = 'lighter';
     c.strokeStyle = 'rgba(255,228,186,0.20)';
-    c.lineWidth = Math.max(1, u * 0.24);
+    c.lineWidth = Math.max(1, u * 0.20);
     c.beginPath();
-    c.arc(px, headY, headR * 0.92, Math.PI * 0.95, Math.PI * 1.75);
+    c.arc(px, headY, headR * 0.95, Math.PI * 1.02, Math.PI * 1.42);
     c.stroke();
     c.beginPath();
-    c.moveTo(px - w * 0.42, h);
-    c.bezierCurveTo(px - w * 0.345, h * 0.725, px - w * 0.195, h * 0.638, px - w * 0.10, h * 0.622);
+    c.moveTo(px - shHalf * 1.16, h * 0.905);
+    c.bezierCurveTo(px - shHalf * 1.075, h * 0.850, px - shHalf * 1.020, shY + h * 0.048, px - shHalf * 0.975, shY + h * 0.004);
     c.stroke();
     c.restore();
 
@@ -1583,10 +1741,10 @@ export class L4Break extends Level {
       c.arc(rng() * w, rng() * h, 0.5 + rng() * 1.6, 0, TAU);
       c.fill();
     }
-    c.strokeStyle = 'rgba(226,240,255,0.035)';
-    c.lineWidth = u * 1.6;
+    c.strokeStyle = 'rgba(226,240,255,0.014)';
+    c.lineWidth = u * 1.2;
     c.beginPath();
-    c.arc(w * 0.3, h * 0.2, w * 0.5, 0.3, 1.5);
+    c.arc(w * -0.10, h * 0.10, w * 0.42, 0.20, 1.05);
     c.stroke();
     c.restore();
 
@@ -1617,6 +1775,10 @@ export class L4Break extends Level {
     ctx.fillStyle = back;
     ctx.fillRect(G.x0, G.y0, G.w, G.h);
 
+    // a resize throws the baked reflection away; rebuild it the first
+    // frame it is wanted again rather than showing an empty mirror
+    if (rv > 0.005 && !this._reflection) this._buildReflection();
+
     if (rv > 0.005 && this._reflection) {
       ctx.save();
       ctx.globalAlpha = rv * lit;
@@ -1624,7 +1786,7 @@ export class L4Break extends Level {
       ctx.restore();
       // the phone glow blooms out of the mirror
       if (glow) {
-        const px = G.x0 + G.w * 0.555, py = G.y0 + G.h * 0.735;
+        const px = G.x0 + G.w * 0.563, py = G.y0 + G.h * 0.688;
         glow.save();
         glow.globalCompositeOperation = 'lighter';
         const gg = glow.createRadialGradient(px, py, 0, px, py, G.w * 0.42);
@@ -2028,16 +2190,31 @@ export class L4Break extends Level {
       // Once a piece stops moving it is lying ON the plinth, seen at a
       // shallow angle — not standing on its edge. Without this squash the
       // pile grows into a hedge of vertical slivers.
-      if (d.rest) ctx.scale(1, 0.52);
+      if (d.rest) ctx.scale(1, d.tilt ?? 0.52);
       ctx.rotate(d.a);
       if (mirror && d.img) {
         // the shard still shows its piece of the reflection
-        ctx.globalAlpha = 0.93;
         ctx.drawImage(d.img.canvas, -d.img.r, -d.img.r, d.img.r * 2, d.img.r * 2);
-        ctx.globalAlpha = 1;
         if (!d.gloss) d.gloss = this._shardGrad(ctx, d.data.r, true);
+        ctx.save();
+        ctx.globalAlpha = 0.28;
         ctx.fillStyle = d.gloss;
         ctx.fill(d.p2);
+        ctx.restore();
+        // Every piece now faces its own way, so every piece catches the
+        // gallery lamp differently. A few blaze white; the rest keep the
+        // picture. That split is what a broken mirror actually looks like,
+        // and it is why the pile reads as mirror and not as more glass.
+        const sheen = 0.5 + 0.5 * Math.cos(d.a * 2 + d.spark * 1.7);
+        if (sheen > 0.62) {
+          if (!d.sheenG) d.sheenG = this._sheenGrad(ctx, d.data.r);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = (sheen - 0.62) * 1.5 * lit;
+          ctx.fillStyle = d.sheenG;
+          ctx.fill(d.p2);
+          ctx.restore();
+        }
       } else {
         if (!d.grad) d.grad = this._shardGrad(ctx, d.data.r, false);
         ctx.fillStyle = d.grad;
@@ -2051,7 +2228,7 @@ export class L4Break extends Level {
     const LX = -0.55, LY = -0.8;
     for (const d of P.shards) {
       const ca = Math.cos(d.a), sa = Math.sin(d.a);
-      const fl = d.rest ? 0.52 : 1;          // matches the body pass
+      const fl = d.rest ? (d.tilt ?? 0.52) : 1;   // matches the body pass
       const poly = d.poly, n = poly.length >> 1;
       let px = d.x + poly[(n - 1) * 2] * ca - poly[(n - 1) * 2 + 1] * sa;
       let py = d.y + (poly[(n - 1) * 2] * sa + poly[(n - 1) * 2 + 1] * ca) * fl;
@@ -2066,7 +2243,7 @@ export class L4Break extends Level {
         // bucket, and 158 shards stroked bright white read as a scribble
         // rather than as glass. Only edges genuinely turned toward the key
         // light should catch it.
-        const tgt = (nx * LX + ny * LY) > 0.52 ? litP : dimP;
+        const tgt = (nx * LX + ny * LY) > (mirror ? 0.42 : 0.62) ? litP : dimP;
         tgt.moveTo(px, py); tgt.lineTo(qx, qy);
         px = qx; py = qy;
       }
@@ -2077,8 +2254,8 @@ export class L4Break extends Level {
     ctx.lineWidth = Math.max(0.6, u * 0.08);
     ctx.stroke(dimP);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(255,255,255,${0.38 * lit})`;
-    ctx.lineWidth = Math.max(0.7, u * 0.10);
+    ctx.strokeStyle = `rgba(255,255,255,${(mirror ? 0.66 : 0.30) * lit})`;
+    ctx.lineWidth = Math.max(0.7, u * (mirror ? 0.13 : 0.10));
     ctx.stroke(litP);
     ctx.restore();
 
@@ -2103,6 +2280,15 @@ export class L4Break extends Level {
       }
       glow.restore();
     }
+  }
+
+  /** Warm gallery light landing flat on a silvered face. */
+  _sheenGrad(ctx, r) {
+    const g = ctx.createLinearGradient(-r * 0.6, -r, r * 0.6, r);
+    g.addColorStop(0, 'rgba(255,246,226,0.92)');
+    g.addColorStop(0.45, 'rgba(236,242,255,0.52)');
+    g.addColorStop(1, 'rgba(176,200,236,0.20)');
+    return g;
   }
 
   /** A local-space gradient cached per shard: built once, drawn every frame. */

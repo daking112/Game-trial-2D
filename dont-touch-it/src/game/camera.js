@@ -24,12 +24,29 @@ export class Camera {
     this._tsTarget = 1;
     this._tsTimer = 0;
     this.ox = 0; this.oy = 0; this.orot = 0; this.ozoom = 1;
+    // A held offset, as opposed to tx/ty which spring back to zero. This is
+    // how a chapter moves the camera somewhere and keeps it there — a push
+    // in on the thing the player just did, rather than a kick away from it.
+    this.fx = 0; this.fy = 0; this.hx = 0; this.hy = 0; this.fease = 1.6;
     this.parallax = { x: 0, y: 0 };   // subtle device-tilt / pointer parallax
   }
 
   shake(amount = 0.4) { this.trauma = clamp01(this.trauma + amount); }
   kick(x, y, amount = 8) { this.tx += x * amount; this.ty += y * amount; }
   push(zoom, dur = 0.5) { this.tzoom = zoom; }
+
+  /**
+   * Hold the camera at an offset, optionally at a new zoom.
+   *   focus(w / 2 - x, h / 2 - y, 2)  puts world (x, y) in the middle of the
+   * screen at twice the size, and keeps it there until focus() is called
+   * again. focus(0, 0, 1) returns.
+   */
+  focus(dx = 0, dy = 0, zoom = null, ease = 1.6) {
+    this.fx = dx; this.fy = dy; this.fease = ease;
+    if (zoom != null) this.tzoom = zoom;
+  }
+  /** Snap the held offset home with no travel — used when a chapter ends. */
+  resetFocus() { this.fx = this.fy = this.hx = this.hy = 0; }
   slowmo(scale = 0.25, dur = 0.5) { this._tsTarget = scale; this._tsTimer = dur; }
   flash(color = '255,255,255', alpha = 0.5, dur = 0.28) {
     this.flashes.push({ color, alpha, t: 0, dur });
@@ -51,8 +68,12 @@ export class Camera {
     this.tx = lerp(this.tx, 0, 1 - Math.exp(-4 * dt));
     this.ty = lerp(this.ty, 0, 1 - Math.exp(-4 * dt));
 
-    this.ox = this.x + sx + this.parallax.x;
-    this.oy = this.y + sy + this.parallax.y;
+    const fe = 1 - Math.exp(-this.fease * dt);
+    this.hx = lerp(this.hx, this.fx, fe);
+    this.hy = lerp(this.hy, this.fy, fe);
+
+    this.ox = this.x + this.hx + sx + this.parallax.x;
+    this.oy = this.y + this.hy + sy + this.parallax.y;
     this.orot = this.rot + sr;
     this.ozoom = this.zoom;
 

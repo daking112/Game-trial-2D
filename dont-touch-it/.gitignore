@@ -9,3 +9,4 @@ tools/dbg*.mjs
 tools/crit*.mjs
 tools/tmp*.mjs
 tools/zoom.mjs
+tools/refdump.mjs

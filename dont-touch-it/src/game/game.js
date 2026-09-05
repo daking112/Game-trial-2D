@@ -121,6 +121,7 @@ export class Game {
     this.set.plinthOpacity = 1;
     this.cam.tzoom = 1;
     this.cam.zoom = 1;
+    this.cam.resetFocus();
 
     this.index = i;
     const C = this.levelClasses[i];
