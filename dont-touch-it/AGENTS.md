@@ -97,6 +97,27 @@ Helpers on `this`: `say/interrupt` (narrator), `hint`, `shake`, `slowmo`,
 
 `glow` is a second, low-resolution context. Anything drawn into it blooms.
 
+### The camera
+`this.game.cam` is shared. `shake`, `kick`, `slowmo` and `flash` are
+impulses — they spring back on their own. `focus(dx, dy, zoom)` is not: it
+HOLDS an offset until you call it again, which is how a chapter pushes in
+on something and stays there. To centre world point `(x, y)` at `zoom`:
+
+```js
+this.game.cam.focus(this.r.w / 2 - x, this.r.h / 2 - y, 2, 0.95);
+// ...and to release
+this.game.cam.focus(0, 0, Math.max(1, this.constructor.push || 1), 1.1);
+```
+
+The Set's layers are cached at screen resolution, so a zoom above about
+2 starts showing you their pixels. `game._goto` calls `cam.resetFocus()`,
+so you never have to clean up after yourself on the way out.
+
+Use it for a payoff the player cannot otherwise see. Chapter III's mirror
+comes apart into pieces forty pixels wide; the line about every piece
+still having a bit of you in it is worth nothing until the camera crosses
+the room and reads them.
+
 ### The room gives you your size
 `this.game.set.geom` = `{ w, h, u, cx, topY, topRx, topRy, plinthW, heroR, heroTop }`.
 `heroR` is the radius the room expects your hero object to occupy — build
@@ -123,6 +144,13 @@ your geometry as multiples of it so every chapter is framed identically.
    what the player thought the toy could do. If your chapter doesn't have
    one, you are not finished.
 7. **Look at it.** Capture the running game after every change.
+8. **Every prop needs one true detail.** Not more gradient — one thing
+   that is only true of that object. The plinth is a painted MDF box, so
+   it has roller nap, a lid joint and chipped arrises. The screws were
+   sealed by an inspector, so they carry a lacquer torque seal that breaks
+   the instant one turns. The bell is a casting, so it has a sound bow.
+   Smooth gradients are what an object looks like when nobody decided
+   what it was made of.
 
 ---
 
