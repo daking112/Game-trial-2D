@@ -34,6 +34,15 @@ container. Judge cost with `game.drawMs` (JS-side render time; budget
 
 ## Architecture (zero dependencies, plain ES modules, no build step)
 
+The slice is four chapters:
+
+| # | Rule | Object | The verb |
+|---|------|--------|----------|
+| I | Do not press | a switch under a bolted bell jar | torque, lift, press-and-hold |
+| II | Do not squeeze | a soft specimen in a dish | poke, pinch |
+| III | Do not break | a pane of tempered glass | press, then two fingers at once |
+| IV | Do not turn it off | the gallery's own lamp | pull, then feel around in the dark |
+
 ```
 src/
   main.js              boot, title, test seam
@@ -114,6 +123,38 @@ your geometry as multiples of it so every chapter is framed identically.
    what the player thought the toy could do. If your chapter doesn't have
    one, you are not finished.
 7. **Look at it.** Capture the running game after every change.
+
+---
+
+## Performance traps this project has already paid for
+
+**Never read back the presenting canvas mid-frame.** `drawImage(mainCanvas, …)`
+while you are drawing on it forces an eager, unbatched raster of
+everything queued so far. Measured here it turned a 2.7ms frame into an
+80ms one, and on mobile it can cost a canvas its acceleration for the rest
+of the session. Both glass chapters originally did this to refract the
+scene. The fix is to composite what you need into a layer you own — the
+Set already keeps the wall, light cone and plinth as cached layers — and
+sample that instead. Chapter III's version is built once at layout time,
+because everything behind that pane is static.
+
+**Don't hand a full-screen image to drawImage and let it scale down.**
+The whole source is resampled regardless of how little of it lands. Blit
+the sub-rectangle you actually need.
+
+**Don't resize a canvas every frame.** A canvas whose width or height
+changes is reallocated and cleared by the browser. Camera shake moves
+things every frame; quantise any derived layer's SIZE and let its origin
+drift.
+
+**Paint low-frequency content small and upscale it.** A 30px `ctx.filter`
+blur across a full-resolution surface costs ~100x what the same look
+costs at 1/8 scale, and nobody can tell the difference.
+
+**Headless fps here is meaningless** — this container rasterises on CPU.
+Judge with `game.drawMs` (budget: under 6ms) and pin `?quality=high` when
+reviewing art, or the auto-governor will settle on a fallback tier and you
+will be looking at the wrong image.
 
 ---
 
