@@ -15,10 +15,11 @@ for (const device of ['phone', 'small', 'tablet']) {
   await s.wait(3500);
   const count = await s.page.evaluate(() => window.__DTI__.game.levelClasses.length);
   for (const q of ['high', 'medium', 'low']) {
-    await s.page.evaluate((qq) => window.__DTI__.quality(qq), q);
+    await s.page.evaluate((qq) => { window.__DTI__.quality(qq); window.__DTI__.game.gov.locked = true; }, q);
     for (let i = 1; i <= count; i++) {
-      await s.page.evaluate((n) => window.__DTI__.goto(n), i);
-      await s.wait(2500);
+      await s.goto(i);
+      await s.page.evaluate(() => { window.__DTI__.game.drawMs = 0; });
+      await s.wait(2200);
       // let the smoothed average settle on this chapter
       const ms = await s.page.evaluate(() => +window.__DTI__.game.drawMs.toFixed(2));
       rows.push({ device, q, ch: i, drawMs: ms });

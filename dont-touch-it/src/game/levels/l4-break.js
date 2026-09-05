@@ -1171,6 +1171,10 @@ export class L4Break extends Level {
   }
 
   _refract(ctx, G) {
+    // Surface bandwidth, not draw calls: three blits of a large region
+    // cost little on a phone and a lot on a tablet at the top tier. It
+    // rides the same quality gate as Chapter I's glass.
+    if (!this.r.quality.refract) return;
     const R = this._roomRect;
     if (!R || !this._roomLayer) return;
     const cv = this._roomLayer.canvas;

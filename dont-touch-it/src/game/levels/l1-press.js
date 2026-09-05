@@ -755,13 +755,19 @@ export class L1Press extends Level {
   _hints(dt) {
     const idle = this.input.idle();
     if (this.solved) { this.hideHint(); return; }
+    // Hints are a safety net, not the teacher. They arrive late and they
+    // describe what the player can SEE rather than naming the gesture —
+    // a pill that reads "Turn the screws" three seconds in has taught the
+    // whole chapter before the player has had a chance to be curious.
     if (this.phase === 'glass') {
-      if (this.freed === 0 && idle > 7) this.hint('Turn the screws');
+      if (this.freed === 0 && idle > 16) this.hint('It is bolted down');
       else this.hideHint();
+    } else if (this.phase === 'strain') {
+      if (idle > 14) this.hint('One bolt left'); else this.hideHint();
     } else if (this.phase === 'jar') {
-      if (idle > 4) this.hint('Lift the glass'); else this.hideHint();
+      if (idle > 12) this.hint('Nothing is holding it'); else this.hideHint();
     } else if (this.phase === 'button') {
-      if (idle > 6 && !this.btn.pressed) this.hint('Press and hold'); else this.hideHint();
+      if (idle > 14 && !this.btn.pressed) this.hint('It resists'); else this.hideHint();
     } else this.hideHint();
   }
 
@@ -783,15 +789,21 @@ export class L1Press extends Level {
     // at its base, so its far half is behind the glass and its near half
     // is in front of it. Splitting the ring is what stops it reading as a
     // hoop floating around the jar.
+    // Depth order for one bolted object: the clamp ring's far half sits
+    // behind the glass and its near half in front of it — until the jar
+    // is lifted clear, at which point the whole ring is below it and
+    // belongs entirely to the scene behind.
+    const jarUp = this.jar.lift > this.g.u * 1.4 || this.jar.gone;
     this._drawPlate(t, glow);
     this._drawFlange(t, false);         // far half of the clamp ring
+    if (jarUp) this._drawFlange(t, true);
     this._drawScrews(t, false);         // back screws, seated on it
     this._drawButton(t, glow);
     this._drawShards(t, glow);
     this._drawDebris(t);
     if (sc) this._flushScene(ctx, sc);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
-    if (!this.jar.gone || this.jar.resting) this._drawFlange(ctx, true);
+    if (!jarUp) this._drawFlange(ctx, true);
     this._drawScrews(ctx, true);        // front screws
   }
 
@@ -1566,11 +1578,20 @@ export class L1Press extends Level {
    * glass (you look through the vessel to see it) and the near half in
    * front. That, plus the gasket seam, is what bolts the jar to the plate.
    */
+  /**
+   * The brass clamp ring is bolted to the PLATE, not to the glass. It
+   * holds the jar's brim down; it does not travel with it.
+   *
+   * It used to be drawn at the jar's own base, so lifting the jar carried
+   * a wide saturated brass hoop 300px into the air with nothing under it.
+   * Physically wrong and, worse, illegible: the ring is the thing that
+   * explains why four screws mattered, and it has to stay where the
+   * screws were.
+   */
   _drawFlange(ctx, front) {
     const g = this.g, j = this.jar;
-    if (j.gone && !j.resting) return;
-    const cx = g.cx + j.x;
-    const baseY = g.jarBaseY - j.lift;
+    const cx = g.cx;
+    const baseY = g.jarBaseY;
     const E = this.game.set.lit;
     const oRx = g.flangeOut, oRy = g.flangeOut * g.K;
     const iRx = g.flangeIn, iRy = g.flangeIn * g.K;

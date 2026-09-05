@@ -1024,7 +1024,7 @@ export class L3Squeeze extends Level {
     ctx.stroke();
     ctx.restore();
 
-    engrave(ctx, 'SPECIMEN III', cx, g.topY + g.dishRy * 1.35, {
+    engrave(ctx, 'SPECIMEN II', cx, g.topY + g.dishRy * 1.35, {
       font: `600 ${Math.max(7, g.u * 2.05).toFixed(1)}px Inter, system-ui, sans-serif`,
       depth: 0.9, darkness: 0.62, light: 0.16, letterSpacing: '0.34em',
     });

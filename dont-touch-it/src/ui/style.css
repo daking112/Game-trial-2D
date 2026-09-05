@@ -67,6 +67,16 @@ html,body{
   position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 42px);
   padding:0 34px;text-align:center;pointer-events:none;
 }
+/* The narrator sits over whatever the chapter happens to be showing —
+   often a pale plinth face. A soft scrim keeps white serif legible
+   without putting a visible box on screen. */
+#narrator::before{
+  content:'';position:absolute;left:0;right:0;bottom:-38px;height:210px;
+  background:radial-gradient(120% 100% at 50% 78%,
+    rgba(4,4,7,.62) 0%, rgba(4,4,7,.38) 42%, rgba(4,4,7,0) 76%);
+  pointer-events:none;
+}
+#narrator .line{position:relative;}
 #narrator .line{
   font-family:var(--serif);font-size:clamp(19px,5.4vw,27px);line-height:1.34;
   letter-spacing:.004em;color:var(--ink);
