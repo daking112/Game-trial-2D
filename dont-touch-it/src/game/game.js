@@ -120,6 +120,7 @@ export class Game {
     this.set.flicker = 0;
     this.set.plinthOpacity = 1;
     this.cam.tzoom = 1;
+    this.cam.zoom = 1;
 
     this.index = i;
     const C = this.levelClasses[i];
@@ -131,6 +132,7 @@ export class Game {
     const lv = this.previewed && this.previewed.constructor === C ? this.previewed : this._build(C);
     this.previewed = null;
     this.level = lv;
+    this.cam.tzoom = Math.max(1, C.push || 1);
     this.state = 'playing';
 
     if (!instant) {

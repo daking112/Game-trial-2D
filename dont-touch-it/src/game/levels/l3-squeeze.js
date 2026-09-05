@@ -157,6 +157,8 @@ export class L3Squeeze extends Level {
   static chapter = 'II';
   static rule = 'Do not squeeze';
   static hint = 'Squeeze it';
+  // the smallest object in the game; the room comes to it
+  static push = 1.13;
 
   // ---------------------------------------------------------
   // layout
@@ -957,8 +959,11 @@ export class L3Squeeze extends Level {
   _hints(dt) {
     if (this.solved || !this.blobs.length) { this.hideHint(); return; }
     const idle = this.input.idle();
-    if (!this.pokes && this.knocks === 0 && idle > 6.5) this.hint('Touch it');
-    else if (!this.everTwoFinger && this.phase === 'poked' && idle > 5.5) this.hint('Two fingers');
+    // Late, and observational. A pill reading "TWO FINGERS" five seconds
+    // in hands over the chapter's only discovery before the player has had
+    // a chance to make it.
+    if (!this.pokes && this.knocks === 0 && idle > 15) this.hint('It is warm');
+    else if (!this.everTwoFinger && this.phase === 'poked' && idle > 14) this.hint('One finger is not enough');
     else this.hideHint();
     if (this.fingersOn > 0 && !this.pokes) {
       this.pokes = 1;

@@ -25,6 +25,13 @@ export class Level {
   static chapter = 'I';
   static rule = 'DO NOT TOUCH';
   static hint = '';
+  /**
+   * Camera push for this chapter, applied by the shell on entry. Only
+   * values >= 1 are safe: the room is rasterised to exactly the viewport,
+   * so pulling back would reveal its edges. Exists because four chapters
+   * framed identically start to read as one room with the props swapped.
+   */
+  static push = 1;
 
   constructor(game) {
     this.game = game;
