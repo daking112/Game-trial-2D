@@ -114,6 +114,11 @@ export class L1Press extends Level {
       wobble: 0,
       claimed: null,
       glow: 0,
+      // Where the inspector's torque seal was painted. Arbitrary, because
+      // it is a brush stroke, but fixed, because the whole point of one is
+      // that it does not move.
+      markA: Math.PI / 2 + (i - 1.5) * 0.26,
+      sheared: false,
       hintPulse: new Pulse(1.1),
     }));
     this._placeScrews();
@@ -1056,6 +1061,14 @@ export class L1Press extends Level {
   // ---------- screws ----------
   _drawScrews(ctx, glow, front) {
     const g = this.g;
+    // The half of every torque seal that is painted on the flange itself.
+    // It stays where it was whatever happens to the screw, which is the
+    // entire function of a torque seal and, here, the only record of how
+    // far each one has been turned.
+    for (const s of this.screws) {
+      if ((Math.sin(s.angle) > 0) !== front) continue;
+      this._sealStroke(ctx, s, s.markA, s.r * 1.06, s.r * 1.86, 0.9);
+    }
     for (const s of this.screws) {
       const isFront = Math.sin(s.angle) > 0;
       if (isFront !== front) continue;
@@ -1103,6 +1116,13 @@ export class L1Press extends Level {
         glowSeat: Math.max(s.glow * 0.8, hintGlow * 0.55),
       });
 
+      // and the half painted across the head, which turns with it. One
+      // unbroken stripe becomes two the instant the screw moves — which is
+      // how you read progress on a hex head that repeats every sixty
+      // degrees and otherwise looks identical at every angle.
+      this._sealStroke(ctx, { x, y, r: s.r }, s.markA + s.spin,
+        s.r * 0.12, s.r * 0.98, 1);
+
       // progress arc while being turned
       if (s.glow > 0.02) {
         ctx.save();
@@ -1121,6 +1141,41 @@ export class L1Press extends Level {
         ctx.restore();
       }
     }
+  }
+
+  /**
+   * One arm of a torque seal: a stripe of pale lacquer, brushed on, thicker
+   * where the brush landed and thinner where it lifted.
+   */
+  _sealStroke(ctx, s, a, r0, r1, alpha) {
+    const g = this.g;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    // the flange is seen at a shallow angle, so anything lying on it is
+    // foreshortened the same way the screw holes are
+    const K = 0.56;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // the shadow the raised bead of lacquer casts on the brass beside it
+    ctx.strokeStyle = `rgba(24,16,4,${0.5 * alpha})`;
+    ctx.lineWidth = Math.max(1.6, g.u * 0.46);
+    ctx.beginPath();
+    ctx.moveTo(s.x + ca * r0, s.y + sa * r0 * K + g.u * 0.08);
+    ctx.lineTo(s.x + ca * r1, s.y + sa * r1 * K + g.u * 0.08);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(246,240,220,${0.88 * alpha})`;
+    ctx.lineWidth = Math.max(1.3, g.u * 0.34);
+    ctx.beginPath();
+    ctx.moveTo(s.x + ca * r0, s.y + sa * r0 * K);
+    ctx.lineTo(s.x + ca * r1, s.y + sa * r1 * K);
+    ctx.stroke();
+    // a highlight along the crown of the brush stroke
+    ctx.strokeStyle = `rgba(255,254,248,${0.55 * alpha})`;
+    ctx.lineWidth = Math.max(0.8, g.u * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(s.x + ca * (r0 + (r1 - r0) * 0.12), s.y + sa * (r0 + (r1 - r0) * 0.12) * K - g.u * 0.05);
+    ctx.lineTo(s.x + ca * (r0 + (r1 - r0) * 0.86), s.y + sa * (r0 + (r1 - r0) * 0.86) * K - g.u * 0.05);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /**
