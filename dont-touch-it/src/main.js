@@ -15,7 +15,10 @@ const LEVELS = await loadLevels();
 const game = new Game(canvas, overlay, LEVELS);
 game.debug = params.has('debug');
 if (game.debug) document.body.classList.add('debug');
-if (params.has('quality')) game.r.setQuality(params.get('quality'));
+// An explicit ?quality= pins the tier and disables the governor, so art
+// review always looks at the same image instead of whatever the machine
+// happened to settle on.
+if (params.has('quality')) { game.r.setQuality(params.get('quality')); game.gov.locked = true; }
 
 // ------------------------------------------------------------
 // Boot / title

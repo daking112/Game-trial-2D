@@ -173,7 +173,7 @@ export class Game {
     this._last = now;
     if (dt > 0.25) dt = 1 / 60;        // returned from background
     this.raw += dt;
-    this.gov.sample(dt);
+    this.gov.sample(dt, this.drawMs);
 
     this._frames++; this._fpsT += dt;
     if (this._fpsT >= 0.5) { this._fps = this._frames / this._fpsT; this._frames = 0; this._fpsT = 0; }

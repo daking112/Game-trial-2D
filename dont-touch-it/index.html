@@ -9,6 +9,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="description" content="DON'T TOUCH IT — a tactile puzzle about curiosity.">
 <title>DON'T TOUCH IT</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+<link rel="icon" href="./assets/icons/icon-192.png">
+<link rel="preload" as="font" type="font/woff2" href="./assets/fonts/inter-var-latin.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="./assets/fonts/instrument-serif.woff2" crossorigin>
 <link rel="stylesheet" href="./src/ui/style.css">
 </head>
 <body>
@@ -17,5 +22,12 @@
     <div id="overlay" aria-live="polite"></div>
   </div>
   <script type="module" src="./src/main.js"></script>
+  <script>
+    // Offline shell. Skipped on localhost test runs so the harness always
+    // sees the file it just wrote rather than a cached one.
+    if ('serviceWorker' in navigator && !/^(127\.|localhost)/.test(location.hostname)) {
+      addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    }
+  </script>
 </body>
 </html>

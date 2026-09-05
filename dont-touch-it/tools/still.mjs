@@ -8,7 +8,11 @@ const level = process.argv[2] || '1';
 const out = process.argv[3] || path.join(ROOT, 'shots/still.png');
 const waitMs = +(process.argv[4] || 3200);
 const { srv, port } = await serve();
-const s = await launch({ device: process.env.DEVICE || 'phone', url: `http://127.0.0.1:${port}/?level=${level}${process.env.DEBUG ? '&debug=1' : ''}` });
+// Pin the quality tier: this container rasterises on CPU, so the auto
+// governor would settle on 'low' and every art review would be looking at
+// a fallback image rather than what a phone actually renders.
+const q = process.env.QUALITY || 'high';
+const s = await launch({ device: process.env.DEVICE || 'phone', url: `http://127.0.0.1:${port}/?level=${level}&quality=${q}${process.env.DEBUG ? '&debug=1' : ''}` });
 await s.wait(waitMs);
 fs.mkdirSync(path.dirname(out), { recursive: true });
 await s.page.evaluate(() => window.__DTI__.pause());

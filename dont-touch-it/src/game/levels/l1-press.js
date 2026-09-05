@@ -24,6 +24,7 @@ import {
   glassDome, caustic, engrave, emboss, contactShadow, roundRectPath,
 } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
+import { Layer } from '../../render/renderer.js';
 import { Audio, SFX } from '../../core/audio.js';
 import Haptics from '../../core/haptics.js';
 import { Smooth, Pulse } from '../../core/tween.js';
@@ -543,10 +544,12 @@ export class L1Press extends Level {
   }
 
   _onButton(x, y) {
-    const g = this.g;
+    const g = this.g, b = this.btn;
     if (!this.exposed) return false;
-    const dx = x - g.cx, dy = y - (g.plateY - g.collarH - g.capBulge * 0.5);
-    return Math.hypot(dx / (g.capRx * 1.5), dy / (g.capRx * 1.1)) < 1;
+    const capY = g.btnBaseY - g.bezelH - g.collarH - g.travel * (1 - b.press);
+    const cy = capY - g.capBulge * 0.5;
+    // generous by design: this is a thumb, not a cursor
+    return Math.hypot((x - g.cx) / (g.capRx * 1.45), (y - cy) / (g.capBulge * 1.4)) < 1;
   }
 
   _commit() {
@@ -653,14 +656,119 @@ export class L1Press extends Level {
   // DRAW
   // =========================================================
   draw(ctx, glow) {
-    const g = this.g;
-    this._drawPlate(ctx, glow);
-    this._drawScrews(ctx, false);       // back screws
-    this._drawButton(ctx, glow);
-    this._drawShards(ctx, glow);
-    this._drawDebris(ctx);
+    // Everything that lives BEHIND the glass is painted into a layer we
+    // own, then blitted. The glass then refracts that layer instead of
+    // reading back the canvas it is being drawn on — see _beginScene.
+    // On capable hardware the interior goes to an owned layer so the glass
+    // can refract it. Where that bandwidth isn't available we draw straight
+    // to the canvas and the glass simply doesn't bend the scene — the one
+    // effect whose cost scales with surface copies rather than draw calls.
+    const sc = this.r.quality.refract ? this._beginScene(ctx) : null;
+    if (!sc) this._sceneRect = null;
+    const t = sc ? sc.ctx : ctx;
+    this._drawPlate(t, glow);
+    this._drawScrews(t, false);         // back screws
+    this._drawButton(t, glow);
+    this._drawShards(t, glow);
+    this._drawDebris(t);
+    if (sc) this._flushScene(ctx, sc);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
     this._drawScrews(ctx, true);        // front screws
+  }
+
+  /**
+   * Open an offscreen pass for everything behind the glass.
+   *
+   * Reading the presenting canvas mid-frame (drawImage(mainCanvas, ...))
+   * is a hard performance cliff: it forces an eager, unbatched raster of
+   * everything queued so far, and on mobile it can cost a canvas its
+   * acceleration for the rest of the session. Measured here it turned a
+   * 2.7ms frame into an 80ms one.
+   *
+   * So we paint the interior into a layer sized to just the object, seed
+   * it with the room from the Set's own cached layers, and let the jar
+   * sample THAT. Reading a surface we own and have finished writing is
+   * cheap and stays cached.
+   */
+  _beginScene(ctx) {
+    const r = this.r, g = this.g, set = this.game.set, G = set.geom;
+    if (!G) return null;
+    const M = ctx.getTransform();
+    const pad = g.u * 5;
+    const jarTop = g.jarBaseY - this.jar.lift - g.jarStraight - g.jarDome;
+    const wx0 = g.cx + Math.min(0, this.jar.x) - g.plateRx * 1.4;
+    const wx1 = g.cx + Math.max(0, this.jar.x) + g.plateRx * 1.4;
+    const wy0 = Math.min(jarTop, g.plateY - g.plateRy) - pad * 3;
+    const wy1 = g.plateY + g.plateTh + g.plateRy * 2 + pad;
+
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [px, py] of [[wx0, wy0], [wx1, wy0], [wx0, wy1], [wx1, wy1]]) {
+      const dx = M.a * px + M.c * py + M.e;
+      const dy = M.b * px + M.d * py + M.f;
+      if (dx < x0) x0 = dx;
+      if (dx > x1) x1 = dx;
+      if (dy < y0) y0 = dy;
+      if (dy > y1) y1 = dy;
+    }
+    x0 = Math.floor(x0); y0 = Math.floor(y0);
+    // Quantise the SIZE. Camera shake moves this rect every frame, and a
+    // canvas whose width/height changes gets reallocated and cleared by
+    // the browser each time — which cost more than everything it drew.
+    // The origin may drift freely; only the dimensions must stay put.
+    const Q = 32;
+    const w = Math.ceil((x1 - x0) / Q) * Q + Q;
+    const h = Math.ceil((y1 - y0) / Q) * Q + Q;
+    if (w < 8 || h < 8) return null;
+
+    if (!this._scene) this._scene = new Layer();
+    const L = this._scene.size(w, h);
+    const sx = L.ctx;
+    sx.setTransform(1, 0, 0, 1, 0, 0);
+    sx.clearRect(0, 0, w, h);
+    // same world transform as the main canvas, shifted to this layer's origin
+    sx.setTransform(M.a, M.b, M.c, M.d, M.e - x0, M.f - y0);
+
+    // Seed with the room, taken from the Set's cached layers.
+    // Blit ONLY the sub-rectangle this layer covers: handing the whole
+    // 786x1704 room to drawImage and letting it scale down costs ~11ms a
+    // frame even when the destination is small, because the full source
+    // is resampled regardless of how little of it lands.
+    const inv = M.inverse();
+    let rx0 = Infinity, ry0 = Infinity, rx1 = -Infinity, ry1 = -Infinity;
+    for (const [dx, dy] of [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]]) {
+      const pt = inv.transformPoint(new DOMPoint(dx, dy));
+      if (pt.x < rx0) rx0 = pt.x;
+      if (pt.x > rx1) rx1 = pt.x;
+      if (pt.y < ry0) ry0 = pt.y;
+      if (pt.y > ry1) ry1 = pt.y;
+    }
+    rx0 = Math.max(0, rx0 - 2); ry0 = Math.max(0, ry0 - 2);
+    rx1 = Math.min(G.w, rx1 + 2); ry1 = Math.min(G.h, ry1 + 2);
+    const rw = rx1 - rx0, rh = ry1 - ry0;
+    const region = (cvs, alpha, comp) => {
+      if (rw <= 0 || rh <= 0 || alpha <= 0.004) return;
+      const kx = cvs.width / G.w, ky = cvs.height / G.h;
+      sx.globalAlpha = Math.min(1, alpha);
+      if (comp) sx.globalCompositeOperation = comp;
+      sx.drawImage(cvs, rx0 * kx, ry0 * ky, rw * kx, rh * ky, rx0, ry0, rw, rh);
+      if (comp) sx.globalCompositeOperation = 'source-over';
+    };
+    const lit = Math.min(1, 0.10 + set.lit * 0.90);
+    region(set.wall.canvas, lit);
+    region(set.cone.canvas, set.coneStrength * set.lit, 'lighter');
+    region(set.plinth.canvas, set.plinthOpacity * lit);
+    sx.globalAlpha = 1;
+
+    const rect = { ctx: sx, x0, y0, w, h };
+    this._sceneRect = rect;
+    return rect;
+  }
+
+  _flushScene(ctx, sc) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this._scene.canvas, sc.x0, sc.y0);
+    ctx.restore();
   }
 
   drawFront(ctx, glow) {
@@ -678,75 +786,205 @@ export class L1Press extends Level {
   }
 
   // ---------- base plate ----------
+  // A machined steel disc: chamfered rim, turned top face, a raised seat
+  // ring the bell jar bolts down onto, and the warning cut into the metal.
   _drawPlate(ctx, glow) {
     const g = this.g;
     const { cx, plateY, plateRx, plateRy } = g;
+    const E = this.game.set.lit;
+    const th = g.plateTh;
+    const ch = g.chamfer;
+    const inRx = plateRx - ch, inRy = plateRy - ch * g.K;
 
-    // plate shadow on the plinth
-    contactShadow(ctx, cx, plateY + g.u * 0.7, plateRx * 1.02, plateRy * 1.1,
-      { strength: 0.6 * this.game.set.exposure });
+    // --- shadow the plate throws on the plinth top ---
+    contactShadow(ctx, cx, plateY + th + g.u * 0.5, plateRx * 1.16, plateRy * 1.25,
+      { strength: 0.66 * E });
+    contactShadow(ctx, cx, plateY + th + g.u * 0.2, plateRx * 0.98, plateRy * 0.78,
+      { strength: 0.5 * E });
 
-    // side wall of the plate (it has thickness)
-    const th = g.u * 1.5;
+    // --- side wall (it has real thickness) ---
     ctx.beginPath();
     ctx.ellipse(cx, plateY + th, plateRx, plateRy, 0, 0, Math.PI);
     ctx.lineTo(cx - plateRx, plateY);
     ctx.ellipse(cx, plateY, plateRx, plateRy, 0, Math.PI, 0, true);
     ctx.closePath();
     const sideG = ctx.createLinearGradient(cx - plateRx, 0, cx + plateRx, 0);
-    sideG.addColorStop(0, '#16181c');
-    sideG.addColorStop(0.3, '#33383f');
-    sideG.addColorStop(0.52, '#454c55');
-    sideG.addColorStop(0.75, '#23262b');
-    sideG.addColorStop(1, '#101216');
+    sideG.addColorStop(0, '#101216');
+    sideG.addColorStop(0.24, '#3a4049');
+    sideG.addColorStop(0.40, '#5a626d');
+    sideG.addColorStop(0.58, '#31363d');
+    sideG.addColorStop(0.82, '#191c21');
+    sideG.addColorStop(1, '#0d0f12');
     ctx.fillStyle = sideG;
     ctx.fill();
+    // ground-occlusion at the very bottom of the wall
+    ctx.save();
+    ctx.clip();
+    const og = ctx.createLinearGradient(0, plateY + th * 0.35, 0, plateY + th + plateRy);
+    og.addColorStop(0, 'rgba(0,0,0,0)');
+    og.addColorStop(1, 'rgba(0,0,0,0.72)');
+    ctx.fillStyle = og;
+    ctx.fillRect(cx - plateRx, plateY, plateRx * 2, th + plateRy * 2);
+    ctx.restore();
 
-    // top face
+    // --- the 45° chamfer: the ring that catches the key light ---
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(cx, plateY, plateRx, plateRy, 0, 0, TAU);
-    ctx.clip();
-    const topG = ctx.createLinearGradient(cx - plateRx, plateY - plateRy, cx + plateRx, plateY + plateRy);
-    topG.addColorStop(0, '#22262c');
-    topG.addColorStop(0.28, '#40464f');
-    topG.addColorStop(0.46, '#5b636e');
-    topG.addColorStop(0.62, '#3b414a');
-    topG.addColorStop(1, '#1a1d22');
-    ctx.fillStyle = topG;
-    ctx.fillRect(cx - plateRx, plateY - plateRy, plateRx * 2, plateRy * 2);
-    ctx.save();
-    ctx.scale(1, plateRy / plateRx);
-    radialBrush(ctx, cx, plateY * plateRx / plateRy, plateRx, 91, { count: 190, alpha: 0.05 });
-    ctx.restore();
-    // warm light pool from above
-    ctx.globalCompositeOperation = 'lighter';
-    const lp = ctx.createRadialGradient(cx, plateY - plateRy * 0.5, 0, cx, plateY, plateRx);
-    lp.addColorStop(0, `rgba(255,226,182,${0.16 * this.game.set.exposure})`);
-    lp.addColorStop(1, 'rgba(255,226,182,0)');
-    ctx.fillStyle = lp;
-    ctx.fillRect(cx - plateRx, plateY - plateRy, plateRx * 2, plateRy * 2);
+    ctx.ellipse(cx, plateY + ch * g.K * 0.9, inRx, inRy, 0, 0, TAU);
+    ctx.clip('evenodd');
+    const cg = ctx.createLinearGradient(cx - plateRx, plateY - plateRy, cx + plateRx, plateY + plateRy);
+    cg.addColorStop(0, '#6e7681');
+    cg.addColorStop(0.17, '#c8d0d9');
+    cg.addColorStop(0.30, '#f2f6fa');
+    cg.addColorStop(0.46, '#8f98a3');
+    cg.addColorStop(0.66, '#4a515a');
+    cg.addColorStop(0.85, '#787f89');
+    cg.addColorStop(1, '#33383f');
+    ctx.fillStyle = cg;
+    ctx.fillRect(cx - plateRx, plateY - plateRy - ch, plateRx * 2, plateRy * 2 + ch * 3);
     ctx.restore();
 
-    // chamfer highlight
+    // --- top face: turned steel ---
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, plateY, plateRx - 0.5, plateRy - 0.5, 0, Math.PI * 1.05, Math.PI * 1.95);
-    ctx.strokeStyle = `rgba(255,240,214,${0.45 * this.game.set.exposure})`;
-    ctx.lineWidth = Math.max(1, g.u * 0.2);
+    ctx.ellipse(cx, plateY + ch * g.K * 0.9, inRx, inRy, 0, 0, TAU);
+    ctx.clip();
+    const topG = ctx.createLinearGradient(cx - inRx, plateY - inRy, cx + inRx, plateY + inRy);
+    topG.addColorStop(0, '#2b3037');
+    topG.addColorStop(0.26, '#4c545f');
+    topG.addColorStop(0.44, '#6b7480');
+    topG.addColorStop(0.60, '#464d57');
+    topG.addColorStop(0.82, '#282c32');
+    topG.addColorStop(1, '#1b1e23');
+    ctx.fillStyle = topG;
+    ctx.fillRect(cx - plateRx, plateY - plateRy - ch, plateRx * 2, plateRy * 2 + ch * 3);
+    ctx.save();
+    ctx.translate(cx, plateY);
+    ctx.scale(1, g.K);
+    radialBrush(ctx, 0, 0, plateRx / g.K * 0.9, 91, { count: 210, alpha: 0.055 });
+    ctx.restore();
+    // warm pool from the overhead key, offset up-left like everything else
+    ctx.globalCompositeOperation = 'lighter';
+    const lp = ctx.createRadialGradient(cx - inRx * 0.18, plateY - inRy * 0.7, 0, cx, plateY, inRx * 1.15);
+    lp.addColorStop(0, `rgba(255,228,186,${0.22 * E})`);
+    lp.addColorStop(0.55, `rgba(255,216,172,${0.05 * E})`);
+    lp.addColorStop(1, 'rgba(255,216,172,0)');
+    ctx.fillStyle = lp;
+    ctx.fillRect(cx - plateRx, plateY - plateRy - ch, plateRx * 2, plateRy * 2 + ch * 3);
+    ctx.restore();
+
+    // --- the warning, cut into the top face and foreshortened onto it ---
+    this._drawEngraving(ctx, E);
+
+    // --- inner edge of the chamfer: a crisp machined line ---
+    ctx.save();
+    ctx.lineWidth = Math.max(1, g.u * 0.16);
+    ctx.strokeStyle = `rgba(12,14,18,0.75)`;
+    ctx.beginPath();
+    ctx.ellipse(cx, plateY + ch * g.K * 0.9, inRx, inRy, 0, Math.PI * 1.02, Math.PI * 1.98);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255,244,220,${0.30 * E})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, plateY + ch * g.K * 0.9, inRx, inRy, 0, 0.04, Math.PI * 0.96);
+    ctx.stroke();
+    // outer lip catches a hot line
+    ctx.strokeStyle = `rgba(255,248,232,${0.6 * E})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.14);
+    ctx.beginPath();
+    ctx.ellipse(cx, plateY, plateRx - 0.5, plateRy - 0.5, 0, Math.PI * 1.06, Math.PI * 1.94);
     ctx.stroke();
     ctx.restore();
 
-    // engraved plaque
-    const py = plateY + plateRy * 0.56;
+    // --- raised seat ring the jar bolts onto ---
+    this._drawSeat(ctx, E);
+  }
+
+  _drawEngraving(ctx, E) {
+    const g = this.g;
+    const { cx, plateY } = g;
+    // sits on the FRONT half of the top face, squashed into the plane
+    const py = plateY + g.plateRy * 0.60;
     ctx.save();
-    ctx.globalAlpha = clamp01(this.game.set.exposure * 1.2);
-    engrave(ctx, 'DO NOT PRESS', cx, py, {
-      font: `700 ${g.u * 2.0}px Inter, sans-serif`,
-      letterSpacing: `${g.u * 0.34}px`,
-      depth: Math.max(1, g.u * 0.12), darkness: 0.8, light: 0.26,
+    ctx.globalAlpha = clamp01(E * 1.25);
+    ctx.translate(cx, py);
+    ctx.scale(1, g.K * 1.55);
+    engrave(ctx, 'DO NOT PRESS', 0, 0, {
+      font: `800 ${g.u * 4.4}px Inter, sans-serif`,
+      letterSpacing: `${g.u * 0.5}px`,
+      depth: Math.max(1.2, g.u * 0.32), darkness: 0.86, light: 0.30,
     });
     ctx.restore();
+  }
+
+  /** The raised machined boss + rubber gasket the bell jar seats on. */
+  _drawSeat(ctx, E) {
+    const g = this.g;
+    const { cx, plateY } = g;
+    const sRx = g.seatRx, sRy = g.seatRy, sH = g.seatH;
+    const topY = plateY - sH;
+
+    // boss side wall
+    ctx.beginPath();
+    ctx.ellipse(cx, plateY, sRx, sRy, 0, 0, Math.PI);
+    ctx.lineTo(cx - sRx, topY);
+    ctx.ellipse(cx, topY, sRx, sRy, 0, Math.PI, 0, true);
+    ctx.closePath();
+    const sw = ctx.createLinearGradient(cx - sRx, 0, cx + sRx, 0);
+    sw.addColorStop(0, '#14171b');
+    sw.addColorStop(0.26, '#454c56');
+    sw.addColorStop(0.44, '#666e79');
+    sw.addColorStop(0.66, '#2c3037');
+    sw.addColorStop(1, '#101317');
+    ctx.fillStyle = sw;
+    ctx.fill();
+    // the boss occludes the plate right at its foot
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, plateY, sRx * 1.22, sRy * 1.22, 0, 0, TAU);
+    ctx.ellipse(cx, plateY, sRx, sRy, 0, 0, TAU);
+    ctx.clip('evenodd');
+    contactShadow(ctx, cx, plateY + g.u * 0.15, sRx * 1.16, sRy * 1.5, { strength: 0.72 * E });
+    ctx.restore();
+
+    // boss top face
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, sRx, sRy, 0, 0, TAU);
+    ctx.clip();
+    const tg = ctx.createLinearGradient(cx - sRx, topY - sRy, cx + sRx, topY + sRy);
+    tg.addColorStop(0, '#3a4048');
+    tg.addColorStop(0.32, '#69717c');
+    tg.addColorStop(0.5, '#828b96');
+    tg.addColorStop(0.72, '#454b54');
+    tg.addColorStop(1, '#23272c');
+    ctx.fillStyle = tg;
+    ctx.fillRect(cx - sRx, topY - sRy, sRx * 2, sRy * 2);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,246,226,${0.55 * E})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.13);
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, sRx - 0.5, sRy - 0.5, 0, Math.PI * 1.04, Math.PI * 1.96);
+    ctx.stroke();
+    ctx.restore();
+
+    // --- gasket: black rubber ring between boss and glass ---
+    const gy = topY - g.gasketTh * (1 - this.gasketSquash * 0.55);
+    const gRx = g.flangeOut * 0.995;
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, gRx, gRx * g.K, 0, 0, Math.PI);
+    ctx.lineTo(cx - gRx, gy);
+    ctx.ellipse(cx, gy, gRx, gRx * g.K, 0, Math.PI, 0, true);
+    ctx.closePath();
+    const rg = ctx.createLinearGradient(cx - gRx, 0, cx + gRx, 0);
+    rg.addColorStop(0, '#08090b');
+    rg.addColorStop(0.28, '#232529');
+    rg.addColorStop(0.44, '#33363b');
+    rg.addColorStop(0.7, '#141619');
+    rg.addColorStop(1, '#07080a');
+    ctx.fillStyle = rg;
+    ctx.fill();
   }
 
   // ---------- screws ----------
@@ -868,15 +1106,133 @@ export class L1Press extends Level {
   }
 
   // ---------- the bell jar ----------
-  _jarPath(ctx, cx, baseY, R, straight, flangeRx, flangeRy) {
+  /**
+   * Outline of the glass shell. `inset` shrinks it by the wall thickness so
+   * the same profile can draw the inner surface — the double line is what
+   * makes it read as a hollow vessel rather than a grey blob.
+   */
+  _jarPath(ctx, cx, baseY, R, straight, dome, lipRx, inset = 0) {
+    const g = this.g;
+    const r = R - inset;
+    const lip = lipRx - inset * 0.4;
+    const sh = baseY - straight;                       // shoulder
+    const topY = sh - dome + inset * 1.15;
+    const footY = baseY - inset * 0.5;
     ctx.beginPath();
-    ctx.moveTo(cx - flangeRx, baseY);
-    ctx.lineTo(cx - R, baseY - flangeRy * 0.9);
-    ctx.lineTo(cx - R, baseY - straight);
-    ctx.arc(cx, baseY - straight, R, Math.PI, 0);
-    ctx.lineTo(cx + R, baseY - flangeRy * 0.9);
-    ctx.lineTo(cx + flangeRx, baseY);
+    ctx.moveTo(cx - lip, footY);
+    ctx.lineTo(cx - lip, footY - g.u * 0.55);
+    ctx.lineTo(cx - r, footY - g.u * 2.2);
+    ctx.lineTo(cx - r, sh);
+    ctx.bezierCurveTo(cx - r, sh - dome * 0.60, cx - r * 0.615, topY, cx, topY);
+    ctx.bezierCurveTo(cx + r * 0.615, topY, cx + r, sh - dome * 0.60, cx + r, sh);
+    ctx.lineTo(cx + r, footY - g.u * 2.2);
+    ctx.lineTo(cx + lip, footY - g.u * 0.55);
+    ctx.lineTo(cx + lip, footY);
     ctx.closePath();
+  }
+
+  /**
+   * Real refraction. The centre of a thin-walled vessel deflects almost
+   * nothing (two near-parallel surfaces), but toward the silhouette the wall
+   * turns edge-on and the background compresses violently into a bright band.
+   * So we grab the two edge bands of what is already on the canvas and
+   * re-blit them as displaced vertical strips. That's the whole trick, and it
+   * is what makes the engraving bend as it passes behind the glass.
+   */
+  /**
+   * Bend the scene behind the glass.
+   *
+   * A curved wall compresses what you see through it toward the
+   * silhouette — that squeeze, not the highlights, is what makes a
+   * drawn shape read as a solid transparent object. We do it by
+   * re-sampling the already-composited frame in vertical strips whose
+   * source offset grows with a Fresnel-ish curve.
+   *
+   * PERFORMANCE: the naive version copies through a full-canvas scratch,
+   * which makes every one of the 22 strip reads snapshot a 786x1704
+   * surface — about 80ms a frame. We instead keep one buffer sized to
+   * the band we actually sample, so the readback and every strip read
+   * are ~15x smaller. Same image, ~0.6ms.
+   */
+  _refractEdges(ctx, cx, baseY, R, straight, dome) {
+    const r = this.r;
+    const cw = r.canvas.width, chh = r.canvas.height;
+    if (cw < 8) return;
+    const M = ctx.getTransform();
+    const dx = (x, y) => M.a * x + M.c * y + M.e;
+    const dy = (x, y) => M.b * x + M.d * y + M.f;
+
+    const DCX = dx(cx, baseY);
+    const RD = Math.abs(dx(cx + R, baseY) - DCX);
+    if (RD < 12) return;
+    const yTop = dy(cx, baseY - straight - dome) - RD * 0.06;
+    const yBot = dy(cx, baseY) + RD * 0.10;
+    const sy = Math.max(0, Math.floor(yTop));
+    const sh = Math.min(chh, Math.ceil(yBot)) - sy;
+    if (sh < 8) return;
+
+    const Q0 = 0.40;                       // inside this, glass is a window
+    const AMT = 0.30;                      // strength of the edge squeeze
+    const MAXD = RD * 0.34;
+    const bend = (u) => Math.min(1.9, Math.pow(u, 2.6) / Math.sqrt(Math.max(0.012, 1 - u * u)));
+
+    // the band wide enough to include everything the strips reach for
+    let gx0 = clamp(Math.floor(DCX - RD - MAXD - 2), 0, cw);
+    let gx1 = clamp(Math.ceil(DCX + RD + MAXD + 2), 0, cw);
+    const bw = gx1 - gx0;
+    if (bw < 8) return;
+
+    const SR = this._sceneRect;
+    if (!SR || !this._scene) return;
+    if (!this._bandA) { this._bandA = new Layer(bw, sh); this._bandB = new Layer(bw, sh); }
+    const A = this._bandA.size(bw, sh), B = this._bandB.size(bw, sh);
+    const ax = A.ctx, bx = B.ctx;
+    ax.setTransform(1, 0, 0, 1, 0, 0);
+    ax.clearRect(0, 0, bw, sh);
+    // source is the interior layer, in ITS coordinates
+    ax.drawImage(this._scene.canvas, gx0 - SR.x0, sy - SR.y0, bw, sh, 0, 0, bw, sh);
+
+    // Assemble the bent image OFF-CLIP. Each strip blit is cheap on its
+    // own but ruinous when masked by the bell-jar path, so we build the
+    // whole band flat and pay for the clip exactly once.
+    bx.setTransform(1, 0, 0, 1, 0, 0);
+    bx.globalCompositeOperation = 'copy';
+    bx.drawImage(A.canvas, 0, 0);          // untouched centre
+    bx.globalCompositeOperation = 'source-over';
+    bx.imageSmoothingEnabled = true;
+    const N = 11;                          // strips per side
+    const w = (1 - Q0) * RD / N;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let i = 0; i < N; i++) {
+        const q = Q0 + (i + 0.5) / N * (1 - Q0);
+        const d = side * bend(q) * AMT * RD;
+        const x0 = DCX + side * (Q0 * RD + i * w) - (side < 0 ? w : 0) - gx0;
+        const src = x0 + d;                // band-local
+        if (src + w < 0 || src > bw) continue;
+        bx.drawImage(A.canvas, src, 0, w, sh, x0, 0, w + 0.6, sh);
+      }
+    }
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(B.canvas, 0, 0, bw, sh, gx0, sy, bw, sh);
+    ctx.restore();
+  }
+
+  /** Shadow + caustic the jar throws down onto the plate. Unrotated. */
+  _drawJarContact(ctx) {
+    const g = this.g, j = this.jar;
+    const cx = g.cx + j.x;
+    const seatTop = g.plateY - g.seatH;
+    const h = clamp01(j.lift / (g.u * 24));
+    contactShadow(ctx, cx, seatTop + g.u * 0.2, g.flangeOut * 0.98, g.flangeOut * g.K * 1.05,
+      { strength: 0.62 * this.game.set.lit, height: h });
+    if (j.lift < g.u * 14) {
+      ctx.save();
+      ctx.globalAlpha = clamp01(1 - j.lift / (g.u * 14)) * this.game.set.lit;
+      caustic(ctx, cx, seatTop - g.u * 0.15, g.flangeOut * 0.86, this.t, { alpha: 0.30 });
+      ctx.restore();
+    }
   }
 
   _drawJar(ctx, glow) {
@@ -884,360 +1240,507 @@ export class L1Press extends Level {
     const j = this.jar;
     const cx = g.cx + j.x;
     const baseY = g.jarBaseY - j.lift;
+    const R = g.jarR, straight = g.jarStraight, dome = g.jarDome;
+    const lip = g.flangeOut;
+    const wall = g.jarWall;
+    const shoulder = baseY - straight;
+    const topY = shoulder - dome;
+    const E = this.game.set.lit;
 
     ctx.save();
     ctx.translate(cx, baseY);
     ctx.rotate(j.tilt);
     ctx.translate(-cx, -baseY);
 
-    // shadow the jar casts on the plate — shrinks and softens as it rises
+    // ---- 1. the scene, bent by the wall ----
     ctx.save();
-    ctx.rotate(0);
-    contactShadow(ctx, cx, g.jarBaseY + g.u * 0.4, g.flangeRx, g.flangeRy * 0.9,
-      { strength: 0.55, height: clamp01(j.lift / (g.u * 22)) });
-    ctx.restore();
-
-    // caustic under the glass
-    if (j.lift < g.u * 10) {
-      ctx.save();
-      ctx.globalAlpha = clamp01(1 - j.lift / (g.u * 10)) * 0.8 * this.game.set.exposure;
-      caustic(ctx, cx, g.jarBaseY - g.u * 0.4, g.flangeRx * 0.8, this.t, { alpha: 0.22 });
-      ctx.restore();
-    }
-
-    const R = g.jarR, straight = g.jarStraight;
-
-    // --- refraction: the plate seen THROUGH the glass shifts slightly ---
-    // (cheap fake: a darkened, scaled echo of the plate rim inside the jar)
-    ctx.save();
-    this._jarPath(ctx, cx, baseY, R, straight, g.flangeRx, g.flangeRy);
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
     ctx.clip();
-    ctx.globalCompositeOperation = 'multiply';
-    const inner = ctx.createLinearGradient(cx - R, 0, cx + R, 0);
-    inner.addColorStop(0, 'rgba(150,178,196,1)');
-    inner.addColorStop(0.18, 'rgba(226,238,246,1)');
-    inner.addColorStop(0.5, 'rgba(255,255,255,1)');
-    inner.addColorStop(0.84, 'rgba(214,228,238,1)');
-    inner.addColorStop(1, 'rgba(140,168,188,1)');
-    ctx.fillStyle = inner;
-    ctx.fillRect(cx - R * 1.2, baseY - straight - R * 1.2, R * 2.4, straight + R * 2.4);
-    ctx.restore();
+    this._refractEdges(ctx, cx, baseY, R, straight, dome);
 
-    // --- glass body ---
-    ctx.save();
-    this._jarPath(ctx, cx, baseY, R, straight, g.flangeRx, g.flangeRy);
-    ctx.save();
-    ctx.clip();
-    // faint tint + vertical gradient
-    const bodyG = ctx.createLinearGradient(cx - R, 0, cx + R, 0);
-    bodyG.addColorStop(0, 'rgba(178,206,222,0.30)');
-    bodyG.addColorStop(0.14, 'rgba(200,224,238,0.10)');
-    bodyG.addColorStop(0.42, 'rgba(255,255,255,0.03)');
-    bodyG.addColorStop(0.68, 'rgba(190,214,230,0.07)');
-    bodyG.addColorStop(0.88, 'rgba(168,196,214,0.20)');
-    bodyG.addColorStop(1, 'rgba(150,180,200,0.34)');
-    ctx.fillStyle = bodyG;
-    ctx.fillRect(cx - R * 1.3, baseY - straight - R * 1.3, R * 2.6, straight + R * 2.6);
+    // ---- 2. what the glass itself does to transmitted light ----
+    // Path length through the wall grows toward the silhouette, so the
+    // edges absorb (cool + dark) while the middle is essentially a window.
+    const gx = (a) => ctx.createLinearGradient(cx - R, 0, cx + R, 0);
+    const ab = gx();
+    ab.addColorStop(0.00, 'rgba(20,40,46,0.62)');
+    ab.addColorStop(0.045, 'rgba(28,52,58,0.30)');
+    ab.addColorStop(0.13, 'rgba(46,74,80,0.10)');
+    ab.addColorStop(0.32, 'rgba(120,160,170,0.020)');
+    ab.addColorStop(0.55, 'rgba(160,190,200,0.012)');
+    ab.addColorStop(0.74, 'rgba(90,124,136,0.030)');
+    ab.addColorStop(0.90, 'rgba(40,66,74,0.14)');
+    ab.addColorStop(0.965, 'rgba(24,46,54,0.34)');
+    ab.addColorStop(1.00, 'rgba(16,34,40,0.60)');
+    ctx.fillStyle = ab;
+    ctx.fillRect(cx - R * 1.3, topY - g.u * 2, R * 2.6, straight + dome + g.u * 6);
 
-    // internal light bloom from the button's ring
+    // a whisper of green-blue in the mass, like real soda-lime glass
+    const mass = ctx.createLinearGradient(0, topY, 0, baseY);
+    mass.addColorStop(0, 'rgba(150,190,196,0.020)');
+    mass.addColorStop(0.7, 'rgba(120,168,180,0.035)');
+    mass.addColorStop(1, 'rgba(96,140,156,0.075)');
+    ctx.fillStyle = mass;
+    ctx.fillRect(cx - R * 1.3, topY - g.u * 2, R * 2.6, straight + dome + g.u * 6);
+
     ctx.globalCompositeOperation = 'lighter';
-    const ig = ctx.createRadialGradient(cx, g.plateY - baseY + baseY - g.u * 1, 0, cx, baseY - g.u * 2, R * 1.4);
-    ig.addColorStop(0, `rgba(255,150,110,${0.13 * this.btn.glow})`);
-    ig.addColorStop(1, 'rgba(255,150,110,0)');
+    // the warm plate pool leaks up into the glass near its foot
+    const foot = ctx.createLinearGradient(0, baseY, 0, baseY - straight * 0.7);
+    foot.addColorStop(0, `rgba(255,206,150,${0.16 * E})`);
+    foot.addColorStop(1, 'rgba(255,206,150,0)');
+    ctx.fillStyle = foot;
+    ctx.fillRect(cx - R * 1.3, baseY - straight, R * 2.6, straight + g.u * 4);
+    // the switch's own light glowing inside the vessel
+    const ig = ctx.createRadialGradient(cx, baseY - g.u * 3, 0, cx, baseY - g.u * 3, R * 1.5);
+    ig.addColorStop(0, `rgba(255,140,96,${0.14 * this.btn.glow})`);
+    ig.addColorStop(1, 'rgba(255,140,96,0)');
     ctx.fillStyle = ig;
-    ctx.fillRect(cx - R * 1.3, baseY - straight - R * 1.3, R * 2.6, straight + R * 2.6);
+    ctx.fillRect(cx - R * 1.3, baseY - straight - dome, R * 2.6, straight + dome + g.u * 4);
+    // cool bounce off the floor, lower right
+    const bnc = ctx.createRadialGradient(cx + R * 0.66, shoulder + straight * 0.42, 0,
+                                         cx + R * 0.66, shoulder + straight * 0.42, R * 0.95);
+    bnc.addColorStop(0, 'rgba(126,170,235,0.085)');
+    bnc.addColorStop(1, 'rgba(126,170,235,0)');
+    ctx.fillStyle = bnc;
+    ctx.fillRect(cx - R * 1.3, topY, R * 2.6, straight + dome + g.u * 4);
+    ctx.restore();
 
-    // long vertical specular down the left shoulder — soft on every edge,
-    // because a hard-edged highlight is the fastest way to look like plastic
-    ctx.globalCompositeOperation = 'lighter';
+    // ---- 3. the inner surface: a second, dimmer outline inside the first.
+    // Two lines a wall's thickness apart is the entire read of "hollow". ----
     ctx.save();
-    ctx.translate(cx - R * 0.50, baseY - straight * 0.52 - R * 0.34);
-    ctx.rotate(-0.06);
-    ctx.scale(1, 1);
-    const spw = R * 0.115, sph = (straight + R * 0.5) * 0.48;
-    const sp = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    sp.addColorStop(0, 'rgba(255,255,255,0.50)');
-    sp.addColorStop(0.35, 'rgba(255,255,255,0.22)');
-    sp.addColorStop(0.75, 'rgba(255,255,255,0.04)');
-    sp.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.scale(spw, sph);
-    ctx.fillStyle = sp;
-    ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
-    ctx.restore();
-    // a thinner, brighter core inside it
-    ctx.save();
-    ctx.translate(cx - R * 0.52, baseY - straight * 0.56 - R * 0.30);
-    const cw = R * 0.030, ch = (straight + R * 0.4) * 0.36;
-    const cs = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    cs.addColorStop(0, 'rgba(255,255,255,0.72)');
-    cs.addColorStop(0.5, 'rgba(255,255,255,0.20)');
-    cs.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.scale(cw, ch);
-    ctx.fillStyle = cs;
-    ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
-    ctx.restore();
-
-    // tight highlight on the crown
-    const cg = ctx.createRadialGradient(cx - R * 0.36, baseY - straight - R * 0.52, 0,
-                                        cx - R * 0.36, baseY - straight - R * 0.52, R * 0.42);
-    cg.addColorStop(0, 'rgba(255,255,255,0.85)');
-    cg.addColorStop(0.45, 'rgba(255,255,255,0.18)');
-    cg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = cg;
-    ctx.fillRect(cx - R * 1.2, baseY - straight - R * 1.2, R * 2.4, R * 1.6);
-
-    // right-hand bounce
-    const rg2 = ctx.createRadialGradient(cx + R * 0.62, baseY - straight * 0.55, 0,
-                                         cx + R * 0.62, baseY - straight * 0.55, R * 0.7);
-    rg2.addColorStop(0, 'rgba(150,190,255,0.16)');
-    rg2.addColorStop(1, 'rgba(150,190,255,0)');
-    ctx.fillStyle = rg2;
-    ctx.fillRect(cx - R * 1.2, baseY - straight - R * 1.2, R * 2.4, straight + R * 2.4);
-    ctx.restore();
-
-    // rim / edge
-    const rim = ctx.createLinearGradient(cx - R, baseY - straight - R, cx + R, baseY);
-    rim.addColorStop(0, 'rgba(255,255,255,0.92)');
-    rim.addColorStop(0.22, 'rgba(206,232,250,0.42)');
-    rim.addColorStop(0.5, 'rgba(255,255,255,0.16)');
-    rim.addColorStop(0.78, 'rgba(186,212,234,0.5)');
-    rim.addColorStop(1, 'rgba(255,255,255,0.9)');
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = Math.max(1.2, g.u * 0.3);
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
+    ctx.clip();
+    const inner = ctx.createLinearGradient(cx - R, 0, cx + R, 0);
+    inner.addColorStop(0, 'rgba(214,240,255,0.30)');
+    inner.addColorStop(0.14, 'rgba(190,222,240,0.10)');
+    inner.addColorStop(0.5, 'rgba(255,255,255,0.03)');
+    inner.addColorStop(0.86, 'rgba(180,210,232,0.12)');
+    inner.addColorStop(1, 'rgba(206,234,252,0.34)');
+    ctx.strokeStyle = inner;
+    ctx.lineWidth = Math.max(1, g.u * 0.20);
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip, wall);
+    ctx.stroke();
+    // and the thin dark line where the two surfaces sandwich the glass
+    ctx.strokeStyle = 'rgba(10,24,30,0.34)';
+    ctx.lineWidth = Math.max(1, g.u * 0.14);
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip, wall * 0.42);
     ctx.stroke();
     ctx.restore();
 
+    // ---- 4. speculars. Soft, long, following the form. Built from stacked
+    // strokes rather than blobs, because a blob is a lightbulb. ----
+    ctx.save();
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+
+    // key: down the left shoulder, hugging the profile
+    const keyPath = (o) => {
+      ctx.beginPath();
+      ctx.moveTo(cx - R * 0.62 + o, topY + dome * 0.60);
+      ctx.bezierCurveTo(cx - R * 0.86 + o, shoulder - dome * 0.34,
+                        cx - R * 0.90 + o, shoulder + straight * 0.10,
+                        cx - R * 0.885 + o, shoulder + straight * 0.72);
+    };
+    const keyGrad = () => {
+      const lg = ctx.createLinearGradient(0, topY + dome * 0.5, 0, shoulder + straight * 0.8);
+      lg.addColorStop(0, 'rgba(255,252,244,0)');
+      lg.addColorStop(0.16, 'rgba(255,250,240,0.85)');
+      lg.addColorStop(0.62, 'rgba(255,248,238,0.55)');
+      lg.addColorStop(1, 'rgba(255,246,236,0)');
+      return lg;
+    };
+    for (const [wm, a] of [[5.2, 0.055], [2.6, 0.10], [1.15, 0.30]]) {
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = keyGrad();
+      ctx.lineWidth = Math.max(1, g.u * 0.30 * wm);
+      keyPath(0);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // the crown catches the lamp: a soft arc, not a dot
+    for (const [wm, a] of [[4.0, 0.06], [1.8, 0.12], [0.8, 0.26]]) {
+      ctx.strokeStyle = `rgba(255,250,238,${a})`;
+      ctx.lineWidth = Math.max(1, g.u * 0.30 * wm);
+      ctx.beginPath();
+      ctx.ellipse(cx, shoulder - dome * 0.12, R * 0.70, dome * 0.80, 0,
+                  Math.PI * 1.14, Math.PI * 1.54);
+      ctx.stroke();
+    }
+
+    // a second, cold reflection on the right — every real glass photo has two
+    for (const [wm, a] of [[3.4, 0.030], [1.4, 0.065]]) {
+      ctx.strokeStyle = `rgba(196,224,255,${a})`;
+      ctx.lineWidth = Math.max(1, g.u * 0.30 * wm);
+      ctx.beginPath();
+      ctx.moveTo(cx + R * 0.80, shoulder - dome * 0.16);
+      ctx.bezierCurveTo(cx + R * 0.93, shoulder + straight * 0.06,
+                        cx + R * 0.93, shoulder + straight * 0.30,
+                        cx + R * 0.90, shoulder + straight * 0.80);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- 5. Fresnel rim: thin, bright, strongest where we see the wall
+    // edge-on; nearly gone across the top where we look straight through. ----
+    this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
+    const rim = ctx.createLinearGradient(cx - R, 0, cx + R, 0);
+    rim.addColorStop(0, 'rgba(255,253,246,0.90)');
+    rim.addColorStop(0.10, 'rgba(226,242,255,0.44)');
+    rim.addColorStop(0.34, 'rgba(200,224,244,0.10)');
+    rim.addColorStop(0.62, 'rgba(190,216,240,0.10)');
+    rim.addColorStop(0.90, 'rgba(206,228,250,0.42)');
+    rim.addColorStop(1, 'rgba(240,250,255,0.80)');
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = Math.max(1, g.u * 0.19);
+    ctx.stroke();
+
     // ringing shimmer when struck
-    if (this.jar.ringT > 0.01) {
+    if (j.ringT > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = this.jar.ringT * 0.5;
-      const n = 3;
-      for (let i = 0; i < n; i++) {
-        const k = (this.t * 2.2 + i / n) % 1;
+      ctx.globalAlpha = j.ringT * 0.42;
+      for (let i = 0; i < 3; i++) {
+        const k = (this.t * 2.4 + i / 3) % 1;
         ctx.strokeStyle = `rgba(200,235,255,${(1 - k) * 0.5})`;
-        ctx.lineWidth = Math.max(1, g.u * 0.16);
-        this._jarPath(ctx, cx, baseY, R * (1 + k * 0.05), straight * (1 + k * 0.03),
-          g.flangeRx * (1 + k * 0.04), g.flangeRy);
+        ctx.lineWidth = Math.max(1, g.u * 0.14);
+        this._jarPath(ctx, cx, baseY, R * (1 + k * 0.035), straight * (1 + k * 0.022),
+          dome * (1 + k * 0.03), lip * (1 + k * 0.03));
         ctx.stroke();
       }
       ctx.restore();
     }
 
-    // --- flange ring (the brass collar the screws bite into) ---
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, baseY, g.flangeRx, g.flangeRy, 0, 0, TAU);
-    ctx.ellipse(cx, baseY, g.flangeRx * 0.845, g.flangeRy * 0.845, 0, 0, TAU);
-    ctx.save();
-    ctx.clip('evenodd');
-    metalFill(ctx, cx - g.flangeRx, baseY - g.flangeRy, cx + g.flangeRx, baseY + g.flangeRy, PALETTES.brass);
-    // warm pool from the overhead key
-    ctx.globalCompositeOperation = 'lighter';
-    const fg = ctx.createRadialGradient(cx, baseY - g.flangeRy * 0.6, 0, cx, baseY, g.flangeRx);
-    fg.addColorStop(0, 'rgba(255,224,168,0.30)');
-    fg.addColorStop(1, 'rgba(255,224,168,0)');
-    ctx.fillStyle = fg;
-    ctx.fillRect(cx - g.flangeRx, baseY - g.flangeRy * 1.2, g.flangeRx * 2, g.flangeRy * 2.4);
-    ctx.restore();
-    // lit outer lip, shadowed inner lip
-    ctx.lineWidth = Math.max(1, g.u * 0.12);
-    ctx.strokeStyle = 'rgba(255,240,206,0.55)';
-    ctx.beginPath();
-    ctx.ellipse(cx, baseY, g.flangeRx, g.flangeRy, 0, Math.PI * 1.02, Math.PI * 1.98);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.ellipse(cx, baseY, g.flangeRx * 0.845, g.flangeRy * 0.845, 0, 0.05, Math.PI * 0.95);
-    ctx.stroke();
     ctx.restore();
 
-    ctx.restore();
-
-    // glow contribution
+    // a modest halo where the crown burns — bloom, not a headlight
     if (glow) {
       glow.save();
       glow.globalCompositeOperation = 'lighter';
-      glow.globalAlpha = 0.5;
-      const hx = cx - R * 0.36, hy = baseY - straight - R * 0.52;
-      const hg = glow.createRadialGradient(hx, hy, 0, hx, hy, R * 0.34);
-      hg.addColorStop(0, 'rgba(255,250,240,0.65)');
+      const hx = cx - R * 0.42, hy = shoulder - dome * 0.62;
+      const hg = glow.createRadialGradient(hx, hy, 0, hx, hy, R * 0.5);
+      hg.addColorStop(0, 'rgba(255,250,240,0.30)');
       hg.addColorStop(1, 'rgba(255,250,240,0)');
       glow.fillStyle = hg;
-      glow.beginPath(); glow.arc(hx, hy, R * 0.34, 0, TAU); glow.fill();
+      glow.beginPath(); glow.arc(hx, hy, R * 0.5, 0, TAU); glow.fill();
       glow.restore();
     }
   }
 
-  // ---------- the switch ----------
-  _drawButton(ctx, glow) {
-    const g = this.g;
-    const b = this.btn;
-    const cx = g.cx;
-    const baseY = g.plateY - g.u * 0.35;
-    const press = b.press * g.travel;
-    const reveal = this.exposed ? 1 : 0.82;
+  /**
+   * The brass flange. Drawn in two halves: the far half sits BEHIND the
+   * glass (you look through the vessel to see it) and the near half in
+   * front. That, plus the gasket seam, is what bolts the jar to the plate.
+   */
+  _drawFlange(ctx, front) {
+    const g = this.g, j = this.jar;
+    if (j.gone && !j.resting) return;
+    const cx = g.cx + j.x;
+    const baseY = g.jarBaseY - j.lift;
+    const E = this.game.set.lit;
+    const oRx = g.flangeOut, oRy = g.flangeOut * g.K;
+    const iRx = g.flangeIn, iRy = g.flangeIn * g.K;
+    const th = g.flangeTh;
+    const a0 = front ? 0 : Math.PI;
+    const a1 = front ? Math.PI : TAU;
 
-    // --- mounting ring on the plate ---
     ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, baseY, g.btnBaseRx, g.btnBaseRy, 0, 0, TAU);
-    ctx.save(); ctx.clip();
-    metalFill(ctx, cx - g.btnBaseRx, baseY - g.btnBaseRy, cx + g.btnBaseRx, baseY + g.btnBaseRy, PALETTES.gunmetal);
-    ctx.restore();
-    ctx.lineWidth = Math.max(1, g.u * 0.18);
-    ctx.strokeStyle = 'rgba(200,210,225,0.28)';
-    ctx.stroke();
-    ctx.restore();
+    ctx.translate(cx, baseY);
+    ctx.rotate(j.tilt);
+    ctx.translate(-cx, -baseY);
 
-    // --- emissive ring at the base ---
-    const gv = b.committed ? 0.15 : (0.55 + 0.45 * Math.sin(this.t * 1.6)) * (this.exposed ? 1 : 0.55);
-    b.glow = gv;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(255,${b.committed ? 60 : 118},${b.committed ? 40 : 74},${0.5 * gv})`;
-    ctx.lineWidth = Math.max(1.4, g.u * 0.3);
-    ctx.beginPath();
-    ctx.ellipse(cx, baseY - g.u * 0.15, g.collarRx * 1.16, g.collarRx * 1.16 * 0.3, 0, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
-    if (glow) {
-      glow.save();
-      glow.globalCompositeOperation = 'lighter';
-      const rg = glow.createRadialGradient(cx, baseY, 0, cx, baseY, g.u * 12);
-      rg.addColorStop(0, `rgba(255,110,70,${0.34 * gv})`);
-      rg.addColorStop(1, 'rgba(255,110,70,0)');
-      glow.fillStyle = rg;
-      glow.beginPath(); glow.arc(cx, baseY, g.u * 12, 0, TAU); glow.fill();
-      glow.restore();
+    if (front) {
+      // outer side wall of the ring — this is what gives it height
+      ctx.beginPath();
+      ctx.ellipse(cx, baseY + th, oRx, oRy, 0, 0, Math.PI);
+      ctx.lineTo(cx - oRx, baseY);
+      ctx.ellipse(cx, baseY, oRx, oRy, 0, Math.PI, 0, true);
+      ctx.closePath();
+      ctx.save(); ctx.clip();
+      metalFill(ctx, cx - oRx, 0, cx + oRx, 0, PALETTES.brass);
+      const dk = ctx.createLinearGradient(0, baseY, 0, baseY + th + oRy);
+      dk.addColorStop(0, 'rgba(0,0,0,0)');
+      dk.addColorStop(1, 'rgba(0,0,0,0.66)');
+      ctx.fillStyle = dk;
+      ctx.fillRect(cx - oRx, baseY - oRy, oRx * 2, th + oRy * 2);
+      ctx.restore();
+      // the seam: glass flange meeting the black gasket
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = Math.max(1, g.u * 0.16);
+      ctx.beginPath();
+      ctx.ellipse(cx, baseY + th, oRx, oRy, 0, 0.06, Math.PI - 0.06);
+      ctx.stroke();
     }
 
-    // --- collar (knurled cylinder) ---
-    const collarTop = baseY - g.collarH + press * 0.18;
+    // the top face of the annulus
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(cx - g.collarRx, baseY);
-    ctx.lineTo(cx - g.collarRx, collarTop);
-    ctx.ellipse(cx, collarTop, g.collarRx, g.collarRx * 0.3, 0, Math.PI, 0);
-    ctx.lineTo(cx + g.collarRx, baseY);
-    ctx.ellipse(cx, baseY, g.collarRx, g.collarRx * 0.3, 0, 0, Math.PI);
+    ctx.ellipse(cx, baseY, oRx, oRy, 0, a0, a1);
+    ctx.ellipse(cx, baseY, iRx, iRy, 0, a1, a0, true);
     ctx.closePath();
     ctx.save(); ctx.clip();
-    metalFill(ctx, cx - g.collarRx, 0, cx + g.collarRx, 0, PALETTES.steel);
-    knurl(ctx, cx - g.collarRx, collarTop, g.collarRx * 2, g.collarH, Math.max(3, g.u * 0.72), 0.20);
-    // vertical shading
-    const vg = ctx.createLinearGradient(0, collarTop, 0, baseY + g.u);
-    vg.addColorStop(0, 'rgba(255,255,255,0.10)');
-    vg.addColorStop(0.5, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.45)');
-    ctx.fillStyle = vg;
-    ctx.fillRect(cx - g.collarRx, collarTop, g.collarRx * 2, g.collarH + g.u);
+    metalFill(ctx, cx - oRx, baseY - oRy, cx + oRx, baseY + oRy, PALETTES.brass);
+    ctx.globalCompositeOperation = 'lighter';
+    const fg = ctx.createRadialGradient(cx - oRx * 0.22, baseY - oRy * 1.1, 0, cx, baseY, oRx * 1.2);
+    fg.addColorStop(0, `rgba(255,228,172,${0.34 * E})`);
+    fg.addColorStop(1, 'rgba(255,228,172,0)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(cx - oRx, baseY - oRy * 1.4, oRx * 2, oRy * 2.8);
     ctx.restore();
     ctx.restore();
 
-    // top rim of collar
+    // lit outer lip / shadowed inner lip
+    ctx.lineWidth = Math.max(1, g.u * 0.12);
+    if (front) {
+      ctx.strokeStyle = `rgba(255,242,206,${0.34 * E})`;
+      ctx.beginPath(); ctx.ellipse(cx, baseY, oRx, oRy, 0, 0.1, Math.PI - 0.1); ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath(); ctx.ellipse(cx, baseY, iRx, iRy, 0, 0.08, Math.PI - 0.08); ctx.stroke();
+    } else {
+      ctx.strokeStyle = `rgba(255,246,216,${0.72 * E})`;
+      ctx.beginPath(); ctx.ellipse(cx, baseY, oRx, oRy, 0, Math.PI + 0.06, TAU - 0.06); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,238,198,${0.30 * E})`;
+      ctx.beginPath(); ctx.ellipse(cx, baseY, iRx, iRy, 0, Math.PI + 0.1, TAU - 0.1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------- the switch ----------
+  // An industrial mushroom switch, built the way one actually is:
+  // chrome bezel ring bolted to the plate, a knurled steel collar, and a
+  // lacquered cap that travels inside it. The warm indicator light lives
+  // in the GAP between cap skirt and collar — so pressing the switch
+  // closes that gap and extinguishes the light with the travel itself,
+  // rather than on a timer. That coupling is the whole reason the press
+  // reads as mechanical.
+  _drawButton(ctx, glow) {
+    const g = this.g, b = this.btn;
+    const E = this.game.set.lit;
+    const K = g.K;
+    const cx = g.cx;
+    const baseY = g.btnBaseY;
+
+    const bezelTop = baseY - g.bezelH;
+    const collarTop = bezelTop - g.collarH;
+    const gap = g.travel * (1 - b.press);              // shrinks to nothing
+    const capY = collarTop - gap;
+    // the cap widens very slightly as it bottoms out, like real rubber
+    const sq = 1 + b.press * 0.05;
+    const capRx = g.capRx * sq, capRy = g.capRy * sq;
+    const bulge = g.capBulge * (1 - b.press * 0.16);
+    const bezelRy = g.bezelRx * K, collarRy = g.collarRx * K;
+
+    // ---- the whole switch's shadow on the plate ----
+    contactShadow(ctx, cx, baseY + g.u * 0.4, g.bezelRx * 1.22, bezelRy * 1.5,
+      { strength: 0.6 * E });
+
+    // ---- bezel: chromed ring bolted through the plate ----
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, collarTop, g.collarRx, g.collarRx * 0.3, 0, 0, TAU);
-    ctx.fillStyle = '#20242a';
+    ctx.ellipse(cx, baseY, g.bezelRx, bezelRy, 0, 0, Math.PI);
+    ctx.lineTo(cx - g.bezelRx, bezelTop);
+    ctx.ellipse(cx, bezelTop, g.bezelRx, bezelRy, 0, Math.PI, 0, true);
+    ctx.closePath();
+    ctx.save(); ctx.clip();
+    const bz = ctx.createLinearGradient(cx - g.bezelRx, 0, cx + g.bezelRx, 0);
+    bz.addColorStop(0, '#14161a');
+    bz.addColorStop(0.20, '#59616c');
+    bz.addColorStop(0.34, '#aeb7c2');
+    bz.addColorStop(0.46, '#e8eef5');
+    bz.addColorStop(0.60, '#727a86');
+    bz.addColorStop(0.82, '#22262c');
+    bz.addColorStop(1, '#0e1013');
+    ctx.fillStyle = bz;
+    ctx.fillRect(cx - g.bezelRx, bezelTop - bezelRy, g.bezelRx * 2, g.bezelH + bezelRy * 3);
+    ctx.restore();
+    ctx.restore();
+
+    // bezel top face — an annulus, so the collar reads as sunk into it
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, bezelTop, g.bezelRx, bezelRy, 0, 0, TAU);
+    ctx.ellipse(cx, bezelTop, g.collarRx * 1.04, collarRy * 1.04, 0, 0, TAU);
+    ctx.clip('evenodd');
+    const bt = ctx.createLinearGradient(cx - g.bezelRx, bezelTop - bezelRy, cx + g.bezelRx, bezelTop + bezelRy);
+    bt.addColorStop(0, '#666e79');
+    bt.addColorStop(0.20, '#c6cfd9');
+    bt.addColorStop(0.34, '#f4f8fc');
+    bt.addColorStop(0.52, '#8b939e');
+    bt.addColorStop(0.74, '#464d56');
+    bt.addColorStop(1, '#272b31');
+    ctx.fillStyle = bt;
+    ctx.fillRect(cx - g.bezelRx, bezelTop - bezelRy * 1.2, g.bezelRx * 2, bezelRy * 2.4);
+    ctx.restore();
+
+    // ---- collar: knurled steel barrel the cap slides in ----
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - g.collarRx, bezelTop);
+    ctx.lineTo(cx - g.collarRx, collarTop);
+    ctx.ellipse(cx, collarTop, g.collarRx, collarRy, 0, Math.PI, 0);
+    ctx.lineTo(cx + g.collarRx, bezelTop);
+    ctx.ellipse(cx, bezelTop, g.collarRx, collarRy, 0, 0, Math.PI);
+    ctx.closePath();
+    ctx.save(); ctx.clip();
+    const cl = ctx.createLinearGradient(cx - g.collarRx, 0, cx + g.collarRx, 0);
+    cl.addColorStop(0, '#0f1114');
+    cl.addColorStop(0.18, '#363c44');
+    cl.addColorStop(0.36, '#79828e');
+    cl.addColorStop(0.50, '#a7b0bb');
+    cl.addColorStop(0.66, '#4a515a');
+    cl.addColorStop(0.86, '#1a1d21');
+    cl.addColorStop(1, '#0b0d0f');
+    ctx.fillStyle = cl;
+    ctx.fillRect(cx - g.collarRx, collarTop - collarRy, g.collarRx * 2, g.collarH + collarRy * 3);
+    knurl(ctx, cx - g.collarRx, collarTop, g.collarRx * 2, g.collarH + collarRy,
+      Math.max(3, g.u * 0.62), 0.17);
+    // occlusion where the collar meets the bezel
+    const ov = ctx.createLinearGradient(0, bezelTop - g.collarH * 0.5, 0, bezelTop + collarRy);
+    ov.addColorStop(0, 'rgba(0,0,0,0)');
+    ov.addColorStop(1, 'rgba(0,0,0,0.62)');
+    ctx.fillStyle = ov;
+    ctx.fillRect(cx - g.collarRx, bezelTop - g.collarH, g.collarRx * 2, g.collarH + collarRy * 2);
+    ctx.restore();
+    ctx.restore();
+
+    // collar mouth — a dark recess the cap sits in
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, collarTop, g.collarRx, collarRy, 0, 0, TAU);
+    ctx.fillStyle = '#0c0e11';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(226,236,248,0.42)';
+    ctx.strokeStyle = `rgba(226,236,248,${0.44 * E})`;
     ctx.lineWidth = Math.max(1, g.u * 0.16);
     ctx.stroke();
     ctx.restore();
 
-    // --- the red cap ---
-    const capY = collarTop - g.capBulge * 0.34 + press;
-    const squash = 1 + b.press * 0.06;
-    ctx.save();
-    // cap shadow inside the collar
+    // ---- the indicator light escaping from the gap ----
+    // Bright when the switch is armed, snuffed out as the cap seats.
+    const armed = b.committed ? 0 : (this.exposed ? 1 : 0.5);
+    const pulse = 0.62 + 0.38 * Math.sin(this.t * 1.7);
+    const lightK = armed * pulse * clamp01(gap / Math.max(1e-3, g.travel));
+    if (lightK > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const lg = ctx.createLinearGradient(0, capY - g.u * 0.4, 0, collarTop + collarRy);
+      lg.addColorStop(0, `rgba(255,150,86,${0.5 * lightK})`);
+      lg.addColorStop(1, 'rgba(255,110,60,0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.ellipse(cx, capY + gap * 0.5, g.collarRx * 1.02, collarRy + gap * 0.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      if (glow) {
+        glow.save();
+        glow.globalCompositeOperation = 'lighter';
+        const rg = glow.createRadialGradient(cx, capY, 0, cx, capY, g.collarRx * 3.2);
+        rg.addColorStop(0, `rgba(255,124,66,${0.40 * lightK})`);
+        rg.addColorStop(0.5, `rgba(255,104,54,${0.12 * lightK})`);
+        rg.addColorStop(1, 'rgba(255,100,50,0)');
+        glow.fillStyle = rg;
+        glow.beginPath(); glow.arc(cx, capY, g.collarRx * 3.2, 0, TAU); glow.fill();
+        glow.restore();
+      }
+    }
+
+    // ---- the cap ----
+    // skirt shadow thrown down into the collar mouth
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, collarTop, g.collarRx * 0.98, g.collarRx * 0.29, 0, 0, TAU);
+    ctx.ellipse(cx, collarTop, g.collarRx * 0.99, collarRy * 0.99, 0, 0, TAU);
     ctx.clip();
-    ctx.fillStyle = `rgba(0,0,0,${0.35 + b.press * 0.4})`;
-    ctx.fillRect(cx - g.collarRx, collarTop - g.u * 3, g.collarRx * 2, g.u * 6);
+    ctx.fillStyle = `rgba(0,0,0,${0.35 + b.press * 0.45})`;
+    ctx.fillRect(cx - g.collarRx, collarTop - g.u * 4, g.collarRx * 2, g.u * 8);
     ctx.restore();
 
-    // body of the cap: an ellipse with a bulged crown
-    const capRx = g.capRx * squash, capRy = g.capRy * squash;
-    const crown = g.capBulge * (1 - b.press * 0.25);
+    ctx.save();
     ctx.beginPath();
     ctx.moveTo(cx - capRx, capY);
-    ctx.bezierCurveTo(cx - capRx, capY - crown * 1.32, cx + capRx, capY - crown * 1.32, cx + capRx, capY);
+    ctx.bezierCurveTo(cx - capRx, capY - bulge * 1.34, cx + capRx, capY - bulge * 1.34, cx + capRx, capY);
     ctx.ellipse(cx, capY, capRx, capRy, 0, 0, Math.PI);
     ctx.closePath();
     ctx.save();
     ctx.clip();
-    const hot = b.committed ? 0.25 : 1;
+    // lacquer over metal: a deep body, a hot shoulder, a dark skirt
+    const dead = b.committed ? 0.34 : 1;               // it goes dull once thrown
+    const mix = (a, bb) => Math.round(a * dead + bb * (1 - dead));
     const cg = ctx.createRadialGradient(
-      cx - capRx * 0.36, capY - crown * 0.9, capRx * 0.05,
-      cx, capY - crown * 0.2, capRx * 1.5);
-    cg.addColorStop(0, `rgb(${255 * hot + 40 | 0},${120 * hot + 20 | 0},${96 * hot + 16 | 0})`);
-    cg.addColorStop(0.24, `rgb(${232 * hot + 26 | 0},${58 * hot + 14 | 0},${44 * hot + 12 | 0})`);
-    cg.addColorStop(0.6, `rgb(${168 * hot + 18 | 0},${28 * hot + 10 | 0},${26 * hot + 9 | 0})`);
-    cg.addColorStop(1, `rgb(${74 * hot + 12 | 0},${12 * hot + 6 | 0},${12 * hot + 6 | 0})`);
+      cx - capRx * 0.34, capY - bulge * 0.94, capRx * 0.03,
+      cx, capY - bulge * 0.18, capRx * 1.62);
+    cg.addColorStop(0.00, `rgb(${mix(255,96)},${mix(146,44)},${mix(120,40)})`);
+    cg.addColorStop(0.20, `rgb(${mix(238,80)},${mix(64,30)},${mix(48,28)})`);
+    cg.addColorStop(0.56, `rgb(${mix(166,54)},${mix(28,18)},${mix(24,18)})`);
+    cg.addColorStop(1.00, `rgb(${mix(58,24)},${mix(10,8)},${mix(10,8)})`);
     ctx.fillStyle = cg;
-    ctx.fillRect(cx - capRx * 1.2, capY - crown * 2, capRx * 2.4, crown * 2 + capRy * 2);
+    ctx.fillRect(cx - capRx * 1.3, capY - bulge * 2, capRx * 2.6, bulge * 2 + capRy * 2);
 
-    // glossy sweep
     ctx.globalCompositeOperation = 'lighter';
-    const sg = ctx.createLinearGradient(cx - capRx * 0.7, capY - crown, cx + capRx * 0.2, capY);
-    sg.addColorStop(0, 'rgba(255,255,255,0)');
-    sg.addColorStop(0.45, 'rgba(255,236,226,0.42)');
-    sg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = sg;
+    // broad gloss sweep — moves down the dome as the cap travels, which is
+    // what makes the press read as motion rather than a colour change
+    const glX = cx - capRx * 0.30, glY = capY - bulge * (0.86 - b.press * 0.22);
+    const gl = ctx.createRadialGradient(glX, glY, 0, glX, glY, capRx * 0.52);
+    gl.addColorStop(0, `rgba(255,255,255,${0.62 * dead + 0.06})`);
+    gl.addColorStop(0.38, `rgba(255,226,214,${0.16 * dead})`);
+    gl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gl;
     ctx.beginPath();
-    ctx.ellipse(cx - capRx * 0.28, capY - crown * 0.72, capRx * 0.44, crown * 0.42, -0.5, 0, TAU);
+    ctx.ellipse(glX, glY, capRx * 0.52, bulge * 0.40, -0.42, 0, TAU);
     ctx.fill();
-    // rim light from the right
-    const rl = ctx.createLinearGradient(cx + capRx * 0.3, 0, cx + capRx, 0);
-    rl.addColorStop(0, 'rgba(255,140,110,0)');
-    rl.addColorStop(1, 'rgba(255,170,140,0.30)');
+    // rim light from the cool bounce on the right
+    const rl = ctx.createLinearGradient(cx + capRx * 0.24, 0, cx + capRx, 0);
+    rl.addColorStop(0, 'rgba(255,150,120,0)');
+    rl.addColorStop(1, `rgba(255,176,148,${0.34 * dead})`);
     ctx.fillStyle = rl;
-    ctx.fillRect(cx, capY - crown * 2, capRx * 1.2, crown * 2 + capRy * 2);
+    ctx.fillRect(cx, capY - bulge * 2, capRx * 1.3, bulge * 2 + capRy * 2);
     ctx.restore();
 
-    // tight hotspot
+    // tight hotspot, sharp enough to read as lacquer rather than plastic
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const hx = cx - capRx * 0.34, hy = capY - crown * 0.86;
-    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, capRx * 0.3);
-    hg.addColorStop(0, 'rgba(255,255,255,0.9)');
-    hg.addColorStop(0.4, 'rgba(255,240,236,0.25)');
+    const hx = cx - capRx * 0.36, hy = capY - bulge * (0.98 - b.press * 0.2);
+    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, capRx * 0.20);
+    hg.addColorStop(0, `rgba(255,255,255,${0.92 * dead})`);
+    hg.addColorStop(0.45, `rgba(255,242,236,${0.20 * dead})`);
     hg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = hg;
-    ctx.beginPath(); ctx.ellipse(hx, hy, capRx * 0.3, crown * 0.22, -0.4, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy, capRx * 0.20, bulge * 0.15, -0.4, 0, TAU); ctx.fill();
+    ctx.restore();
+
+    // the skirt's own dark underside, so the cap sits ON something
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, capY, capRx, capRy, 0, 0, Math.PI);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = Math.max(1, g.u * 0.2);
+    ctx.stroke();
     ctx.restore();
     ctx.restore();
 
-    // stress ring while fighting the detent
+    // ---- the detent fighting back ----
     if (b.resist > 0.02 && !b.committed) {
+      const a = b.resist;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const a = b.resist;
-      ctx.strokeStyle = `rgba(255,${200 - a * 130 | 0},${140 - a * 110 | 0},${0.25 + a * 0.5})`;
-      ctx.lineWidth = Math.max(1.4, g.u * (0.2 + a * 0.4));
-      const rr = g.collarRx * (1.35 + a * 0.5);
+      ctx.strokeStyle = `rgba(255,${(200 - a * 132) | 0},${(140 - a * 112) | 0},${0.22 + a * 0.5})`;
+      ctx.lineWidth = Math.max(1.4, g.u * (0.18 + a * 0.42));
+      const rr = g.bezelRx * (1.06 + a * 0.42);
       ctx.beginPath();
-      ctx.ellipse(cx, baseY - g.u * 0.2, rr, rr * 0.3, 0, 0, TAU);
+      ctx.ellipse(cx, baseY - g.u * 0.2, rr, rr * K, 0, 0, TAU);
       ctx.stroke();
       ctx.restore();
       if (glow) {
         glow.save();
         glow.globalCompositeOperation = 'lighter';
-        const rg = glow.createRadialGradient(cx, capY, 0, cx, capY, g.u * (8 + a * 12));
-        rg.addColorStop(0, `rgba(255,${170 - a * 120 | 0},110,${0.2 + a * 0.5})`);
+        const r2 = g.collarRx * (1.6 + a * 2.2);
+        const rg = glow.createRadialGradient(cx, capY, 0, cx, capY, r2);
+        rg.addColorStop(0, `rgba(255,${(168 - a * 120) | 0},104,${0.18 + a * 0.5})`);
         rg.addColorStop(1, 'rgba(255,120,90,0)');
         glow.fillStyle = rg;
-        glow.beginPath(); glow.arc(cx, capY, g.u * (8 + a * 12), 0, TAU); glow.fill();
+        glow.beginPath(); glow.arc(cx, capY, r2, 0, TAU); glow.fill();
         glow.restore();
       }
-    }
-
-    // the button flinches when you tap the glass
-    if (this.flinch.active) {
-      // handled by shifting cap — cheap but reads
     }
   }
 }

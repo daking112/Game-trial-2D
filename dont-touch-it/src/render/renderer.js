@@ -27,16 +27,26 @@ export class Layer {
   clear() { this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); return this; }
 }
 
+/**
+ * `refract` gates effects that need an offscreen copy of the scene —
+ * chiefly the glass in Chapter I. It is the first thing to go when a
+ * device can't hold frame, because it is the only effect whose cost is
+ * driven by surface bandwidth rather than by how much we draw.
+ */
 export const QUALITY = {
-  high:   { bloom: true, bloomScale: 0.28, grain: true, shadows: 'soft', dprCap: 2.6, aberration: true, blurPasses: 2 },
-  medium: { bloom: true, bloomScale: 0.22, grain: true, shadows: 'soft', dprCap: 2.0, aberration: false, blurPasses: 1 },
-  low:    { bloom: true, bloomScale: 0.18, grain: false, shadows: 'hard', dprCap: 1.5, aberration: false, blurPasses: 1 },
+  high:   { bloom: true, bloomScale: 0.28, grain: true,  shadows: 'soft', dprCap: 2.6, aberration: true,  blurPasses: 2, refract: true },
+  medium: { bloom: true, bloomScale: 0.22, grain: true,  shadows: 'soft', dprCap: 2.0, aberration: false, blurPasses: 1, refract: false },
+  low:    { bloom: true, bloomScale: 0.18, grain: false, shadows: 'hard', dprCap: 1.5, aberration: false, blurPasses: 1, refract: false },
 };
 
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    // NOTE: no `desynchronized` here. It shaves a frame of latency, but it
+    // can put the canvas behind a swap chain, and levels that refract the
+    // scene through glass read this surface back mid-frame — which on a
+    // desynchronized context costs tens of milliseconds instead of one.
+    this.ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
     this.dpr = 1;
     this.w = 0; this.h = 0;          // CSS pixels
     this.u = 0;                       // layout unit = min(w,h)/100
@@ -251,27 +261,71 @@ export class Renderer {
   }
 }
 
-/** Auto quality: watch frame times, step down when we can't hold budget. */
+/**
+ * Auto quality.
+ *
+ * Two signals, because they fail differently:
+ *  - `drawMs` is our own JS render time. It is what we control, and it is
+ *    the only signal that is meaningful on a machine whose compositor is
+ *    slow for reasons unrelated to us (a software rasteriser, a busy tab).
+ *  - frame delta catches everything else: compositing, GC, thermal
+ *    throttling, another app stealing the GPU.
+ *
+ * Stepping DOWN is fast (about three quarters of a second) because a
+ * player feels a bad frame immediately. Stepping UP is slow and requires
+ * a lot of headroom, because oscillating between tiers is worse than
+ * simply running one tier lower.
+ */
 export class QualityGovernor {
   constructor(renderer) {
     this.r = renderer;
-    this.samples = [];
-    this.cooldown = 3;
-    this.locked = false;
     this.order = ['high', 'medium', 'low'];
+    this.dt = [];
+    this.draw = [];
+    this.cooldown = 1.2;         // seconds to settle after load before judging
+    this.window = 0;             // seconds accumulated in the current sample
+    this.locked = false;
+    this.upStreak = 0;
   }
-  sample(dt) {
+
+  /**
+   * Call once per frame with the real frame delta and our draw time.
+   * Windows are measured in SECONDS, not frames: a device that is
+   * struggling produces fewer frames, and counting frames would make the
+   * governor slowest to react exactly when it is needed most.
+   */
+  sample(dt, drawMs = 0) {
     if (this.locked) return;
-    this.samples.push(dt);
-    if (this.samples.length < 90) return;
-    const sorted = this.samples.slice().sort((a, b) => a - b);
-    const p90 = sorted[(sorted.length * 0.9) | 0];
-    this.samples.length = 0;
-    if (this.cooldown > 0) { this.cooldown--; return; }
-    const idx = this.order.indexOf(this.r.qualityName);
-    if (p90 > 0.0245 && idx < this.order.length - 1) {
-      this.r.setQuality(this.order[idx + 1]);
-      this.cooldown = 4;
+    if (this.cooldown > 0) { this.cooldown -= dt; this.dt.length = 0; this.draw.length = 0; return; }
+    this.dt.push(dt);
+    this.draw.push(drawMs);
+    this.window += dt;
+    if (this.window < 0.75) return;
+    this.window = 0;
+
+    const p = (arr, q) => { const a = arr.slice().sort((x, y) => x - y); return a[Math.min(a.length - 1, (a.length * q) | 0)]; };
+    const dtP90 = p(this.dt, 0.9);
+    const drawP90 = p(this.draw, 0.9);
+    this.dt.length = 0; this.draw.length = 0;
+
+    const i = this.order.indexOf(this.r.qualityName);
+    // 16.7ms is the budget; 8ms of it is ours at most
+    const struggling = drawP90 > 8 || dtP90 > 0.0245;
+    if (struggling && i < this.order.length - 1) {
+      this.r.setQuality(this.order[i + 1]);
+      this.cooldown = 0.8;
+      this.upStreak = 0;
+      return;
+    }
+    // plenty of room, and it has stayed that way for a while
+    if (!struggling && drawP90 < 3.2 && dtP90 < 0.019 && i > 0) {
+      if (++this.upStreak >= 6) {
+        this.r.setQuality(this.order[i - 1]);
+        this.cooldown = 2.0;
+        this.upStreak = 0;
+      }
+    } else {
+      this.upStreak = 0;
     }
   }
 }
