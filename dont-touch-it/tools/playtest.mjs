@@ -29,7 +29,20 @@ const { srv, port } = await serve();
 const s = await launch({ url: `http://127.0.0.1:${port}/?quality=medium` });
 const W = s.device.width, H = s.device.height;
 const P = () => s.probe();
-const solved = async () => { const p = await P(); return p && p.solved; };
+/**
+ * A chapter is finished when it says so OR when the shell has already
+ * moved past it — probe() then belongs to the NEXT chapter and its
+ * `solved` is false, which previously kept a strategy hammering stale
+ * coordinates for five minutes and reporting a failure that had actually
+ * succeeded.
+ */
+let currentId = null;
+const done = async () => {
+  const st = await s.page.evaluate(() => ({ id: window.__DTI__.level, p: window.__DTI__.probe() }));
+  if (st.id !== currentId) return true;
+  return !!(st.p && st.p.solved);
+};
+const solved = done;
 
 await s.wait(1500);
 await s.tap(W / 2, H * 0.55);
@@ -41,7 +54,7 @@ const strategies = {
     const screws = await s.page.evaluate(() =>
       window.__DTI__.game.level.screws.map(x => ({ x: x.x, y: x.y, r: x.r })));
     for (let i = 0; i < screws.length; i++) {
-      for (let a = 0; a < 12 && (await P()).freed <= i; a++)
+      for (let a = 0; a < 12 && !(await done()) && ((await P()) || {}).freed <= i; a++)
         await s.circle(screws[i].x, screws[i].y, Math.max(30, screws[i].r * 3.4), 1.4, 700, -1);
     }
     await s.wait(900);
@@ -120,11 +133,13 @@ const count = loaded.length;
 for (let n = 1; n <= count; n++) {
   if (only && n !== only) continue;
   const id = await s.goto(n);
+  currentId = id;
   await s.wait(1200);
   const before = s.errors.length;
   const t0 = Date.now();
   if (strategies[id]) await strategies[id]();
-  const p = await P();
+  const advanced = (await s.page.evaluate(() => window.__DTI__.level)) !== id;
+  const p = advanced ? { solved: true, note: 'chapter advanced' } : await P();
   const errs = s.errors.slice(before).filter(isRealError);
   await s.page.screenshot({ path: path.join(OUT, `ch${n}-${id}-end.png`), timeout: 60000 }).catch(() => {});
   const ok = !!(p && p.solved) && errs.length === 0;

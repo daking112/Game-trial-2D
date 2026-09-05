@@ -219,6 +219,7 @@ export class L3Squeeze extends Level {
     this.fingers = [];
     this._seed = 0;
     this.splits = 0;
+    this.spentGesture = false;
     this.bursts = 0;
     this.pokes = 0;
     this.beads = 0;
@@ -353,6 +354,7 @@ export class L3Squeeze extends Level {
   // ---------------------------------------------------------
   update(dt) {
     this.flashPulse.update(dt);
+    this._updateGestureGate();
     this._updateFingers(dt);
     this._updateBlobs(dt);
     this.world.step(Math.min(dt, 1 / 50));
@@ -543,7 +545,11 @@ export class L3Squeeze extends Level {
       // ---- the skin complains ----
       this._voice(b, dt);
 
-      if (b.stress >= 1) this._give(b);
+      // One division per gesture. Without this the whole generational
+      // ladder collapses inside a single continuous 1.6s pinch — the
+      // fingers never lift, the children inherit the load, and the
+      // chapter's one idea is over before the player has registered it.
+      if (b.stress >= 1 && !this.spentGesture) this._give(b);
     }
 
     if (anyTwo && !this.everTwoFinger) {
@@ -695,7 +701,13 @@ export class L3Squeeze extends Level {
   // ---------------------------------------------------------
   // THE MOMENT IT GIVES
   // ---------------------------------------------------------
+  /** Cleared only when every finger has left the screen. */
+  _updateGestureGate() {
+    if (this.input.count === 0) this.spentGesture = false;
+  }
+
   _give(b) {
+    this.spentGesture = true;
     const g = this.g;
     const canSplit = b.gen < MAX_GEN
       && b.points.length >= 22
@@ -837,15 +849,23 @@ export class L3Squeeze extends Level {
     }
 
     if (this.splits === 1) {
+      // The first division is the surprise; ending here would give the
+      // player seven seconds with the best idea in the chapter and then
+      // take it away. The second division is theirs to choose, and that
+      // is what resolves it.
       this.interrupt("…", { hold: 0.9, agitated: true });
       this.say("There are two of them now.", { hold: 2.3, agitated: true });
-      this.tl.after(2.4, () => {
-        if (!this.solved) return;
-        this.say("Don't you dare do it again.", { hold: 2.4, agitated: true });
+      this.tl.after(2.6, () => {
+        if (this.splits === 1 && !this.solved)
+          this.say("Don't you dare do it again.", { hold: 2.6, agitated: true });
       });
-      this.solve(7.0);
+      // a safety net, so a player who stops here isn't stranded
+      this.tl.after(20, () => { if (!this.solved) this.solve(1.5); });
     } else if (this.splits === 2) {
-      this.interrupt("Stop. Stop dividing it.", { hold: 2.2, agitated: true });
+      this.interrupt("Stop. Stop dividing it.", { hold: 2.4, agitated: true });
+      this.tl.after(2.6, () => this.say("There is no version of this where you stop, is there.",
+        { hold: 3.0, agitated: true }));
+      this.solve(6.5);
     } else {
       this.interrupt("This is how it spreads.", { hold: 2.2, agitated: true });
     }

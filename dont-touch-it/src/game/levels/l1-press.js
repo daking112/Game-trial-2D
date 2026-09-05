@@ -24,7 +24,6 @@ import {
   glassDome, caustic, engrave, emboss, contactShadow, roundRectPath,
 } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
-import { Layer } from '../../render/renderer.js';
 import { Audio, SFX } from '../../core/audio.js';
 import Haptics from '../../core/haptics.js';
 import { Smooth, Pulse } from '../../core/tween.js';
@@ -819,139 +818,23 @@ export class L1Press extends Level {
   // DRAW
   // =========================================================
   draw(ctx, glow) {
-    // Everything that lives BEHIND the glass is painted into a layer we
-    // own, then blitted. The glass then refracts that layer instead of
-    // reading back the canvas it is being drawn on — see _beginScene.
-    // On capable hardware the interior goes to an owned layer so the glass
-    // can refract it. Where that bandwidth isn't available we draw straight
-    // to the canvas and the glass simply doesn't bend the scene — the one
-    // effect whose cost scales with surface copies rather than draw calls.
-    const sc = this.r.quality.refract ? this._beginScene(ctx) : null;
-    if (!sc) this._sceneRect = null;
-    const t = sc ? sc.ctx : ctx;
-    // Depth order for one bolted object: the brass flange clamps the glass
-    // at its base, so its far half is behind the glass and its near half
-    // is in front of it. Splitting the ring is what stops it reading as a
-    // hoop floating around the jar.
     // Depth order for one bolted object: the clamp ring's far half sits
     // behind the glass and its near half in front of it — until the jar
     // is lifted clear, at which point the whole ring is below it and
     // belongs entirely to the scene behind.
     const jarUp = this.jar.lift > this.g.u * 1.4 || this.jar.gone;
-    this._drawPlate(t, glow);
-    this._drawFlange(t, false);         // far half of the clamp ring
-    if (jarUp) this._drawFlange(t, true);
-    this._drawScrews(t, false);         // back screws, seated on it
-    this._drawButton(t, glow);
-    this._drawShards(t, glow);
-    this._drawDebris(t);
-    if (sc) this._flushScene(ctx, sc);
+    this._drawPlate(ctx, glow);
+    this._drawFlange(ctx, false);       // far half of the clamp ring
+    if (jarUp) this._drawFlange(ctx, true);
+    this._drawScrews(ctx, false);       // back screws, seated on it
+    this._drawButton(ctx, glow);
+    this._drawShards(ctx, glow);
+    this._drawDebris(ctx);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
     if (!jarUp) this._drawFlange(ctx, true);
     this._drawScrews(ctx, true);        // front screws
   }
 
-  /**
-   * Open an offscreen pass for everything behind the glass.
-   *
-   * Reading the presenting canvas mid-frame (drawImage(mainCanvas, ...))
-   * is a hard performance cliff: it forces an eager, unbatched raster of
-   * everything queued so far, and on mobile it can cost a canvas its
-   * acceleration for the rest of the session. Measured here it turned a
-   * 2.7ms frame into an 80ms one.
-   *
-   * So we paint the interior into a layer sized to just the object, seed
-   * it with the room from the Set's own cached layers, and let the jar
-   * sample THAT. Reading a surface we own and have finished writing is
-   * cheap and stays cached.
-   */
-  _beginScene(ctx) {
-    const r = this.r, g = this.g, set = this.game.set, G = set.geom;
-    if (!G) return null;
-    const M = ctx.getTransform();
-    const pad = g.u * 5;
-    const jarTop = g.jarBaseY - this.jar.lift - g.jarStraight - g.jarDome;
-    const wx0 = g.cx + Math.min(0, this.jar.x) - g.plateRx * 1.4;
-    const wx1 = g.cx + Math.max(0, this.jar.x) + g.plateRx * 1.4;
-    const wy0 = Math.min(jarTop, g.plateY - g.plateRy) - pad * 3;
-    const wy1 = g.plateY + g.plateTh + g.plateRy * 2 + pad;
-
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [px, py] of [[wx0, wy0], [wx1, wy0], [wx0, wy1], [wx1, wy1]]) {
-      const dx = M.a * px + M.c * py + M.e;
-      const dy = M.b * px + M.d * py + M.f;
-      if (dx < x0) x0 = dx;
-      if (dx > x1) x1 = dx;
-      if (dy < y0) y0 = dy;
-      if (dy > y1) y1 = dy;
-    }
-    x0 = Math.floor(x0); y0 = Math.floor(y0);
-    // Quantise the SIZE. Camera shake moves this rect every frame, and a
-    // canvas whose width/height changes gets reallocated and cleared by
-    // the browser each time — which cost more than everything it drew.
-    // The origin may drift freely; only the dimensions must stay put.
-    const Q = 32;
-    const w = Math.ceil((x1 - x0) / Q) * Q + Q;
-    const h = Math.ceil((y1 - y0) / Q) * Q + Q;
-    if (w < 8 || h < 8) return null;
-
-    if (!this._scene) this._scene = new Layer();
-    const L = this._scene.size(w, h);
-    const sx = L.ctx;
-    sx.setTransform(1, 0, 0, 1, 0, 0);
-    sx.clearRect(0, 0, w, h);
-    // same world transform as the main canvas, shifted to this layer's origin
-    sx.setTransform(M.a, M.b, M.c, M.d, M.e - x0, M.f - y0);
-
-    // Seed with the room, taken from the Set's cached layers.
-    // Blit ONLY the sub-rectangle this layer covers: handing the whole
-    // 786x1704 room to drawImage and letting it scale down costs ~11ms a
-    // frame even when the destination is small, because the full source
-    // is resampled regardless of how little of it lands.
-    const inv = M.inverse();
-    let rx0 = Infinity, ry0 = Infinity, rx1 = -Infinity, ry1 = -Infinity;
-    for (const [dx, dy] of [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]]) {
-      const pt = inv.transformPoint(new DOMPoint(dx, dy));
-      if (pt.x < rx0) rx0 = pt.x;
-      if (pt.x > rx1) rx1 = pt.x;
-      if (pt.y < ry0) ry0 = pt.y;
-      if (pt.y > ry1) ry1 = pt.y;
-    }
-    rx0 = Math.max(0, rx0 - 2); ry0 = Math.max(0, ry0 - 2);
-    rx1 = Math.min(G.w, rx1 + 2); ry1 = Math.min(G.h, ry1 + 2);
-    const rw = rx1 - rx0, rh = ry1 - ry0;
-    const region = (cvs, alpha, comp) => {
-      if (rw <= 0 || rh <= 0 || alpha <= 0.004) return;
-      const kx = cvs.width / G.w, ky = cvs.height / G.h;
-      sx.globalAlpha = Math.min(1, alpha);
-      if (comp) sx.globalCompositeOperation = comp;
-      sx.drawImage(cvs, rx0 * kx, ry0 * ky, rw * kx, rh * ky, rx0, ry0, rw, rh);
-      if (comp) sx.globalCompositeOperation = 'source-over';
-    };
-    // the same opaque base drawBackdrop uses — without it this layer
-    // composites over transparency and its blit shows as a rectangle
-    sx.save();
-    sx.setTransform(1, 0, 0, 1, 0, 0);
-    sx.fillStyle = '#07070a';
-    sx.fillRect(0, 0, w, h);
-    sx.restore();
-    const lit = Math.min(1, 0.10 + set.lit * 0.90);
-    region(set.wall.canvas, lit);
-    region(set.cone.canvas, set.coneStrength * set.lit, 'lighter');
-    region(set.plinth.canvas, set.plinthOpacity * lit);
-    sx.globalAlpha = 1;
-
-    const rect = { ctx: sx, x0, y0, w, h };
-    this._sceneRect = rect;
-    return rect;
-  }
-
-  _flushScene(ctx, sc) {
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this._scene.canvas, sc.x0, sc.y0);
-    ctx.restore();
-  }
 
   drawFront(ctx, glow) {
     const g = this.g;
@@ -1327,85 +1210,6 @@ export class L1Press extends Level {
    * re-blit them as displaced vertical strips. That's the whole trick, and it
    * is what makes the engraving bend as it passes behind the glass.
    */
-  /**
-   * Bend the scene behind the glass.
-   *
-   * A curved wall compresses what you see through it toward the
-   * silhouette — that squeeze, not the highlights, is what makes a
-   * drawn shape read as a solid transparent object. We do it by
-   * re-sampling the already-composited frame in vertical strips whose
-   * source offset grows with a Fresnel-ish curve.
-   *
-   * PERFORMANCE: the naive version copies through a full-canvas scratch,
-   * which makes every one of the 22 strip reads snapshot a 786x1704
-   * surface — about 80ms a frame. We instead keep one buffer sized to
-   * the band we actually sample, so the readback and every strip read
-   * are ~15x smaller. Same image, ~0.6ms.
-   */
-  _refractEdges(ctx, cx, baseY, R, straight, dome) {
-    const r = this.r;
-    const cw = r.canvas.width, chh = r.canvas.height;
-    if (cw < 8) return;
-    const M = ctx.getTransform();
-    const dx = (x, y) => M.a * x + M.c * y + M.e;
-    const dy = (x, y) => M.b * x + M.d * y + M.f;
-
-    const DCX = dx(cx, baseY);
-    const RD = Math.abs(dx(cx + R, baseY) - DCX);
-    if (RD < 12) return;
-    const yTop = dy(cx, baseY - straight - dome) - RD * 0.06;
-    const yBot = dy(cx, baseY) + RD * 0.10;
-    const sy = Math.max(0, Math.floor(yTop));
-    const sh = Math.min(chh, Math.ceil(yBot)) - sy;
-    if (sh < 8) return;
-
-    const Q0 = 0.40;                       // inside this, glass is a window
-    const AMT = 0.30;                      // strength of the edge squeeze
-    const MAXD = RD * 0.34;
-    const bend = (u) => Math.min(1.9, Math.pow(u, 2.6) / Math.sqrt(Math.max(0.012, 1 - u * u)));
-
-    // the band wide enough to include everything the strips reach for
-    let gx0 = clamp(Math.floor(DCX - RD - MAXD - 2), 0, cw);
-    let gx1 = clamp(Math.ceil(DCX + RD + MAXD + 2), 0, cw);
-    const bw = gx1 - gx0;
-    if (bw < 8) return;
-
-    const SR = this._sceneRect;
-    if (!SR || !this._scene) return;
-    if (!this._bandA) { this._bandA = new Layer(bw, sh); this._bandB = new Layer(bw, sh); }
-    const A = this._bandA.size(bw, sh), B = this._bandB.size(bw, sh);
-    const ax = A.ctx, bx = B.ctx;
-    ax.setTransform(1, 0, 0, 1, 0, 0);
-    ax.clearRect(0, 0, bw, sh);
-    // source is the interior layer, in ITS coordinates
-    ax.drawImage(this._scene.canvas, gx0 - SR.x0, sy - SR.y0, bw, sh, 0, 0, bw, sh);
-
-    // Assemble the bent image OFF-CLIP. Each strip blit is cheap on its
-    // own but ruinous when masked by the bell-jar path, so we build the
-    // whole band flat and pay for the clip exactly once.
-    bx.setTransform(1, 0, 0, 1, 0, 0);
-    bx.globalCompositeOperation = 'copy';
-    bx.drawImage(A.canvas, 0, 0);          // untouched centre
-    bx.globalCompositeOperation = 'source-over';
-    bx.imageSmoothingEnabled = true;
-    const N = 11;                          // strips per side
-    const w = (1 - Q0) * RD / N;
-    for (let side = -1; side <= 1; side += 2) {
-      for (let i = 0; i < N; i++) {
-        const q = Q0 + (i + 0.5) / N * (1 - Q0);
-        const d = side * bend(q) * AMT * RD;
-        const x0 = DCX + side * (Q0 * RD + i * w) - (side < 0 ? w : 0) - gx0;
-        const src = x0 + d;                // band-local
-        if (src + w < 0 || src > bw) continue;
-        bx.drawImage(A.canvas, src, 0, w, sh, x0, 0, w + 0.6, sh);
-      }
-    }
-
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(B.canvas, 0, 0, bw, sh, gx0, sy, bw, sh);
-    ctx.restore();
-  }
 
   /** Shadow + caustic the jar throws down onto the plate. Unrotated. */
   _drawJarContact(ctx) {
@@ -1444,7 +1248,6 @@ export class L1Press extends Level {
     ctx.save();
     this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
     ctx.clip();
-    this._refractEdges(ctx, cx, baseY, R, straight, dome);
 
     // ---- 2. what the glass itself does to transmitted light ----
     // Path length through the wall grows toward the silhouette, so the
