@@ -22,8 +22,15 @@ export async function loadLevels() {
       if (C) out.push(C);
       else console.warn(`[levels] ${path} exported no Level subclass`);
     } catch (e) {
-      if (!/Failed to fetch|404|not found|Cannot find/i.test(String(e && e.message)))
-        console.warn(`[levels] ${path} failed to load:`, e);
+      // A chapter that does not exist yet is fine and expected. A chapter
+      // that exists and throws on import is a BUG, and being quiet about
+      // it means the game silently ships with a chapter missing — which
+      // is exactly what happened once, for a duplicate declaration that
+      // `node --check` did not catch.
+      const missing = /Failed to fetch|404|not found|Cannot find|Failed to resolve/i
+        .test(String(e && e.message));
+      if (missing) console.info(`[levels] ${path} not present, skipping`);
+      else console.error(`[levels] ${path} FAILED TO LOAD — chapter dropped:`, e);
     }
   }
   return out;

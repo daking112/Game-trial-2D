@@ -12,12 +12,22 @@ import { TAU, clamp, clamp01, lerp, rand, makeRng, withAlpha, hexToRgb } from '.
 
 export const LIGHT = { x: -0.55, y: -0.8, z: 0.62 };
 
+/**
+ * Canvas throws on a non-finite gradient coordinate, and a throw inside a
+ * draw helper aborts the whole level's draw() — one bad number from a
+ * physics body blanked an entire chapter's hero object for the rest of
+ * the session. These helpers take caller-computed geometry, so they check
+ * it and skip instead of taking the frame down with them.
+ */
+const ok = (...v) => v.every(Number.isFinite);
+
 // ---------------------------------------------------------------
 // Contact shadow: the single biggest "is this real" cue.
 // Draws an elliptical, distance-falloff shadow under an object.
 // ---------------------------------------------------------------
 export function contactShadow(ctx, x, y, rx, ry, opts = {}) {
   const { strength = 0.62, height = 0, tint = '0,0,0', spread = 1 } = opts;
+  if (!ok(x, y, rx, ry, strength, height, spread) || rx <= 0 || ry <= 0) return;
   // Lifting an object widens + softens + fades its shadow.
   const lift = clamp01(height);
   const w = rx * (1 + lift * 0.55) * spread;
@@ -68,6 +78,7 @@ export function castShadow(renderer, ctx, draw, opts = {}) {
  * Call inside a ctx.save() with the path set as clip.
  */
 export function metalFill(ctx, x0, y0, x1, y1, palette) {
+  if (!ok(x0, y0, x1, y1)) return;
   const g = ctx.createLinearGradient(x0, y0, x1, y1);
   for (const [t, c] of palette) g.addColorStop(t, c);
   ctx.fillStyle = g;
@@ -112,6 +123,7 @@ export function brushedStreaks(ctx, x, y, w, h, seed = 7, opts = {}) {
 /** Radial brushing (turned metal) for discs. Path must already be clipped. */
 export function radialBrush(ctx, cx, cy, r, seed = 11, opts = {}) {
   const { count = 220, alpha = 0.045 } = opts;
+  if (!ok(cx, cy, r) || r <= 0) return;
   const rng = makeRng(seed);
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
@@ -192,6 +204,7 @@ export function specularArc(ctx, cx, cy, r, a0, a1, opts = {}) {
  */
 export function glassDome(ctx, cx, cy, r, opts = {}) {
   const { alpha = 1, tint = '190,214,225', frost = 0, warp = 0 } = opts;
+  if (!ok(cx, cy, r, alpha) || r <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha;
 
@@ -264,6 +277,7 @@ export function glassDome(ctx, cx, cy, r, opts = {}) {
 /** Caustic pool a glass object throws on the surface beneath it. */
 export function caustic(ctx, cx, cy, r, t, opts = {}) {
   const { alpha = 0.35, color = '255,244,214' } = opts;
+  if (!ok(cx, cy, r, t) || r <= 0) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.translate(cx, cy);
@@ -288,6 +302,7 @@ export function caustic(ctx, cx, cy, r, t, opts = {}) {
 /** Rubber / silicone: matte body, wide soft specular, slight SSS at the rim. */
 export function rubberFill(ctx, cx, cy, r, base, opts = {}) {
   const { sss = '255,120,120', hot = 0.34 } = opts;
+  if (!ok(cx, cy, r) || r <= 0) return;
   const [br, bg, bb] = hexToRgb(base);
   const g = ctx.createRadialGradient(
     cx - r * 0.34, cy - r * 0.42, r * 0.04,
@@ -373,6 +388,7 @@ export function plasterTile(w, h, base = '#141418', seed = 21) {
  */
 export function screwHead(ctx, cx, cy, r, angle, opts = {}) {
   const { type = 'hex', palette = PALETTES.steel, seated = 1, glowSeat = 0 } = opts;
+  if (!ok(cx, cy, r, angle) || r <= 0) return;
   ctx.save();
   // recess shadow around the head
   const rec = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.5);

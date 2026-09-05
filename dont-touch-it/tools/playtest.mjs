@@ -7,6 +7,21 @@
 import { serve, launch, ROOT } from './harness.mjs';
 import path from 'node:path'; import fs from 'node:fs';
 
+/**
+ * Which console noise is genuinely benign.
+ *
+ * This filter used to drop ANY message mentioning a chapter file, so that
+ * 404s for chapters not yet written wouldn't show up — and it silently
+ * swallowed real runtime exceptions thrown from those same files. A
+ * per-frame TypeError that blanked an entire chapter's hero object went
+ * unreported for days because of it. Only ignore load failures and the
+ * vibration-permission notice; everything else is a failure.
+ */
+const isRealError = (e) =>
+  !/Blocked call to navigator\.vibrate/.test(e) &&
+  !/(requestfailed|Failed to load resource).*l[0-9]-[a-z]+\.js/.test(e) &&
+  !/^console: Failed to load resource: the server responded with a status of 404/.test(e);
+
 const only = process.argv[2] ? +process.argv[2] : null;
 const OUT = path.join(ROOT, 'shots/playtest');
 fs.mkdirSync(OUT, { recursive: true });
@@ -91,7 +106,17 @@ const strategies = {
   },
 };
 
-const count = await s.page.evaluate(() => window.__DTI__.game.levelClasses.length);
+let failed = false;
+// A chapter that fails to import is silently dropped from the manifest,
+// so assert the full set is present before judging anything else.
+const EXPECTED = ['l1', 'l3', 'l4', 'l5'];
+const loaded = await s.page.evaluate(() => window.__DTI__.game.levelClasses.map(c => c.id));
+const missing = EXPECTED.filter(id => !loaded.includes(id));
+if (missing.length) {
+  failed = true;
+  console.log(`MISSING CHAPTERS: ${missing.join(', ')}  (loaded: ${loaded.join(', ')})`);
+}
+const count = loaded.length;
 for (let n = 1; n <= count; n++) {
   if (only && n !== only) continue;
   const id = await s.goto(n);
@@ -100,9 +125,24 @@ for (let n = 1; n <= count; n++) {
   const t0 = Date.now();
   if (strategies[id]) await strategies[id]();
   const p = await P();
-  const errs = s.errors.slice(before).filter(e => !/vibrate|l[0-9]-[a-z]+\.js/.test(e));
+  const errs = s.errors.slice(before).filter(isRealError);
   await s.page.screenshot({ path: path.join(OUT, `ch${n}-${id}-end.png`), timeout: 60000 }).catch(() => {});
-  console.log(`ch${n} ${id}  SOLVED=${!!(p && p.solved)}  ${((Date.now()-t0)/1000|0)}s  ${JSON.stringify(p).slice(0,200)}`);
-  if (errs.length) console.log('   ERRORS: ' + errs.slice(0, 2).join(' | ').slice(0, 500));
+  const ok = !!(p && p.solved) && errs.length === 0;
+  console.log(`ch${n} ${id}  ${ok ? 'PASS' : 'FAIL'}  solved=${!!(p && p.solved)} errors=${errs.length}  ${((Date.now()-t0)/1000|0)}s  ${JSON.stringify(p).slice(0,180)}`);
+  if (errs.length) {
+    failed = true;
+    // dedupe: a per-frame throw would otherwise print thousands of times
+    const seen = new Set();
+    for (const e of errs) {
+      const key = e.split('\n')[0];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      console.log(`   ERROR x${errs.filter(x => x.split('\n')[0] === key).length}: ${e.slice(0, 400)}`);
+      if (seen.size >= 3) break;
+    }
+  }
+  if (!p || !p.solved) failed = true;
 }
-await s.browser.close(); srv.close(); process.exit(0);
+await s.browser.close(); srv.close();
+console.log(failed ? '\nPLAYTEST FAILED' : '\nplaytest passed');
+process.exit(failed ? 1 : 0);

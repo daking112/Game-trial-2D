@@ -632,7 +632,14 @@ export class L1Press extends Level {
     // and could never be held long enough to reach the detent.
     let holder = this.input.list.find(pt => pt.data && pt.data.btn);
 
-    if (p && !holder && this.input.presses.includes(p)) {
+    // Claim on ANY frame the finger is down over the cap, not only on the
+    // frame it touched down. The switch only becomes live ~0.7s after the
+    // jar lands, and the natural sequence — hold the jar, let go, watch it
+    // smash, reach straight back in — leaves a finger already on screen
+    // when that happens. Requiring a fresh press meant that finger could
+    // never press it at all: the switch was simply dead, and the game's
+    // own idle hint would sit there reading "It resists".
+    if (p && !holder) {
       p.claimedBy = this.tag; p.data.btn = true;
       holder = p;
       b.down = true; b.holdT = 0;

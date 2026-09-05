@@ -420,6 +420,15 @@ export class L3Squeeze extends Level {
     }
   }
 
+  /** Retire any body whose geometry has stopped being a number. */
+  _reapDegenerate() {
+    for (let i = this.blobs.length - 1; i >= 0; i--) {
+      const b = this.blobs[i];
+      if (!b.degenerate) continue;
+      this._destroyBlob(b);
+    }
+  }
+
   _nearestBlob(x, y) {
     let best = null, bd = Infinity;
     for (const b of this.blobs) {
@@ -438,6 +447,7 @@ export class L3Squeeze extends Level {
     for (let bi = this.blobs.length - 1; bi >= 0; bi--) {
       const b = this.blobs[bi];
       this._measure(b, dt);
+      if (b.degenerate) { this._destroyBlob(b); continue; }
 
       // which fingers are actually engaged with THIS blob
       let on = 0, ax = 0, ay = 0, mx = 0, my = 0;
@@ -559,8 +569,20 @@ export class L3Squeeze extends Level {
     b.rx = (maxX - minX) * 0.5; b.ry = (maxY - minY) * 0.5;
     b.minX = minX; b.maxX = maxX; b.minY = minY; b.maxY = maxY;
 
+    // A body whose geometry has gone non-finite cannot be recovered by
+    // clamping — every value derived from it is already poisoned, and it
+    // will feed NaN into a gradient and take the whole level's draw down
+    // with it. Mark it and let the update loop retire it.
+    if (!Number.isFinite(b.cx) || !Number.isFinite(b.cy)
+        || !Number.isFinite(b.rx) || !Number.isFinite(b.ry)) {
+      b.degenerate = true;
+      return;
+    }
+
     const area = Math.abs(b.area.area());
-    b.comp = clamp01(1 - area / b.area.rest);
+    // rest area can be 0 for a degenerate child, and 0/0 is NaN, not 1
+    const restArea = b.area.rest > 1e-6 ? b.area.rest : 1e-6;
+    b.comp = clamp01(1 - area / restArea);
 
     const rest = b.shellRest;
     let maxS = 0;

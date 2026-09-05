@@ -56,7 +56,12 @@ for (let i = 1; i <= count; i++) {
   console.log(`ch${i}`, JSON.stringify(st));
 }
 
-report.errors = s.errors.filter(e => !/l[1-5]-[a-z]+\.js/.test(e));
+// Only load failures for chapters that don't exist are benign. A runtime
+// exception thrown FROM a chapter file is exactly what an audit is for.
+report.errors = s.errors.filter(e =>
+  !/Blocked call to navigator\.vibrate/.test(e) &&
+  !/(requestfailed|Failed to load resource).*l[0-9]-[a-z]+\.js/.test(e) &&
+  !/^console: Failed to load resource: the server responded with a status of 404/.test(e));
 report.finishedAt = new Date().toISOString();
 fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
 
