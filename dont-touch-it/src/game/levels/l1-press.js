@@ -140,7 +140,9 @@ export class L1Press extends Level {
     };
     this.exposed = false;
     this.aftermath = 0;
-    this.phase = 'glass';    // glass | jar | button | done
+    this.phase = 'glass';    // glass | strain | jar | jarfall | button
+    this.strain = 0;         // how hard the jar is being fought against its last bolt
+    this.sheared = false;
     this.idleHint = 0;
     this.narratorStage = 0;
     this.smoke = 0;
@@ -178,7 +180,8 @@ export class L1Press extends Level {
     this.btn.pulse.update(dt);
     for (const s of this.screws) s.hintPulse.update(dt);
 
-    if (this.phase === 'glass' || this.phase === 'jar') this._updateScrews(dt);
+    if (this.phase === 'glass' || this.phase === 'strain' || this.phase === 'jar') this._updateScrews(dt);
+    if (this.phase === 'strain') this._updateStrain(dt);
     if (this.phase === 'jar') this._updateJar(dt);
     else if (this.jar.released && !this.jar.gone) this._updateJarPhysics(dt);
     if (this.phase === 'button') this._updateButton(dt);
@@ -331,12 +334,114 @@ export class L1Press extends Level {
     const l = lines[this.freed - 1];
     if (l) this.interrupt(l, { hold: 1.9, agitated: this.freed >= 2 });
 
+    if (this.freed === 3 && !this.sheared) {
+      this.phase = 'strain';
+      this.interrupt("One. One screw between you and a very bad idea.",
+        { hold: 2.4, agitated: true });
+      this.tl.after(2.8, () => {
+        if (this.phase === 'strain' && this.strain < 0.05)
+          this.say("Undo it properly. Don't you dare pull.", { hold: 2.6, agitated: true });
+      });
+    }
     if (this.freed >= 4) {
       this.phase = 'jar';
       this.interrupt("Don't you dare lift it.", { hold: 2.0, agitated: true });
       SFX.glassLift();
       this.tl.after(0.5, () => { this.jar.ringT = 0.7; });
     }
+  }
+
+  // ---------------- fighting the last bolt ----------------
+  /**
+   * With three screws out the jar is no longer held down — it is HINGED,
+   * on the one bolt left. So it can be grabbed and fought, and a player
+   * impatient enough to haul on it will shear the last screw rather than
+   * turn it.
+   *
+   * This exists because four identical screws is three too many. The
+   * gesture is the same each time, so the fourth repetition teaches
+   * nothing; making impatience a legitimate solution turns the weakest
+   * stretch of the chapter into its best moment, and it is thematically
+   * exactly right for a game about being told not to.
+   */
+  _updateStrain(dt) {
+    const g = this.g, j = this.jar;
+    const last = this.screws.find(s => !s.free);
+    if (!last) { this.phase = 'jar'; return; }
+
+    if (!j.grabbed) {
+      const p = this.input.find(pt =>
+        !pt.claimedBy && pt.down && this._insideJar(pt.x, pt.y), this.tag);
+      if (p && this.input.presses.includes(p)) {
+        p.claimedBy = this.tag;
+        p.data.jar = true;
+        j.grabbed = true;
+        j.grabY = p.y; j.grabX = p.x;
+        SFX.glassLift();
+        Haptics.press();
+      }
+    }
+    const held = this.input.list.find(pt => pt.data && pt.data.jar);
+    if (j.grabbed && held) {
+      // it hinges about the remaining bolt: pull is resisted, and the far
+      // side lifts much more than the bolted side
+      const pull = Math.max(0, j.grabY - held.y);
+      const side = Math.sign(g.cx - last.x) || 1;
+      const want = clamp01(pull / (g.R * 0.62));
+      this.strain = damp(this.strain, want, 9, dt);
+      j.lift = damp(j.lift, this.strain * g.u * 3.2, 14, dt);
+      j.tilt = damp(j.tilt, side * this.strain * 0.13, 9, dt);
+      j.x = damp(j.x, (held.x - j.grabX) * 0.10, 8, dt);
+      last.wobble = this.strain;
+      if (rand() < this.strain * 0.5) {
+        SFX.glassStress(this.strain * 0.8);
+        Haptics.stress(this.strain);
+      }
+      this.shake(this.strain * 0.05);
+      if (this.strain > 0.28 && !this._strainedOnce) {
+        this._strainedOnce = true;
+        this.interrupt("No — no, don't PULL it—", { hold: 2.2, agitated: true });
+      }
+      if (this.strain >= 0.985) this._shearScrew(last);
+    } else if (j.grabbed) {
+      j.grabbed = false;
+      const rel = this.input.releases.find(pt => pt.data && pt.data.jar);
+      if (rel) { rel.claimedBy = null; rel.data.jar = false; }
+      SFX.glassSet(0.5);
+      Haptics.thunk();
+    }
+    if (!j.grabbed) {
+      this.strain = damp(this.strain, 0, 6, dt);
+      j.lift = damp(j.lift, 0, 12, dt);
+      j.tilt = damp(j.tilt, 0, 10, dt);
+      j.x = damp(j.x, 0, 10, dt);
+    }
+  }
+
+  _shearScrew(s) {
+    const g = this.g, j = this.jar;
+    this.sheared = true;
+    this.strain = 0;
+    // Hand the grab straight over to the lift, re-anchored to where the
+    // finger actually is, so the jar comes away IN THE PLAYER'S HAND in
+    // one continuous motion instead of snapping back and being re-grabbed.
+    const held = this.input.list.find(pt => pt.data && pt.data.jar);
+    if (held) { j.grabY = held.y; j.grabX = held.x; }
+    j.grabLift = j.lift;
+    j.baseX = j.x;
+    SFX.threadSnap((s.x - g.cx) / (g.u * 20));
+    SFX.glassSet(1.2);
+    Haptics.shatter();
+    this.shake(0.6);
+    this.slowmo(0.3, 0.36);
+    this.flash('255,226,190', 0.16, 0.3);
+    this.p.burst(s.x, s.y, 20, {
+      speed: 340, dir: -Math.PI / 2, spread: TAU, life: 0.6, size: 1.6,
+      kind: 0, grav: 1800, drag: 1.8, color: [255, 214, 150], alpha: 0.9,
+    });
+    s.turned = s.target;
+    this._freeScrew(s, null);
+    this.interrupt("You SHEARED it.", { hold: 2.4, agitated: true });
   }
 
   // ---------------- the jar ----------------
