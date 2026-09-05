@@ -18,6 +18,10 @@ if (game.debug) document.body.classList.add('debug');
 // An explicit ?quality= pins the tier and disables the governor, so art
 // review always looks at the same image instead of whatever the machine
 // happened to settle on.
+// Phones with no vibration motor (every iPhone, on the web) get a very
+// small camera impulse for the heavy beats instead of nothing at all.
+Haptics.fallback = (i) => { game.cam.shake(0.05 + i * 0.16); };
+
 if (params.has('quality')) { game.r.setQuality(params.get('quality')); game.gov.locked = true; }
 
 // ------------------------------------------------------------

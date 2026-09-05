@@ -87,10 +87,20 @@ export class Game {
    * dark, and the lights come back up. No cross-fades, no wipes — the
    * room itself is the transition.
    */
-  async goto(i, { card = true, instant = false } = {}) {
+  /**
+   * Chapter changes QUEUE rather than drop. A transition takes a couple of
+   * seconds, and silently ignoring a request that arrives during one means
+   * a caller can skip a chapter without ever being told.
+   */
+  async goto(i, opts = {}) {
+    if (this._changing) { try { await this._changing; } catch (_) {} }
+    const p = this._goto(i, opts);
+    this._changing = p;
+    try { return await p; } finally { if (this._changing === p) this._changing = null; }
+  }
+
+  async _goto(i, { card = true, instant = false } = {}) {
     if (i >= this.levelClasses.length) return this.finish();
-    if (this._changing) return null;
-    this._changing = true;
     this.state = 'transition';
     this.hud.hideHint();
 
@@ -137,7 +147,6 @@ export class Game {
     }
     this.hud.showBar(true);
     lv.intro();
-    this._changing = false;
     return lv;
   }
 

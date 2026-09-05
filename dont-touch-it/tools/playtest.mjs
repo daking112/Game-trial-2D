@@ -94,9 +94,8 @@ const strategies = {
 const count = await s.page.evaluate(() => window.__DTI__.game.levelClasses.length);
 for (let n = 1; n <= count; n++) {
   if (only && n !== only) continue;
-  await s.page.evaluate((i) => window.__DTI__.goto(i), n);
-  await s.wait(2600);
-  const id = await s.page.evaluate(() => window.__DTI__.level);
+  const id = await s.goto(n);
+  await s.wait(1200);
   const before = s.errors.length;
   const t0 = Date.now();
   if (strategies[id]) await strategies[id]();

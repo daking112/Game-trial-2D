@@ -29,8 +29,8 @@ const count = await s.page.evaluate(() => window.__DTI__.game.levelClasses.lengt
 report.chapterCount = count;
 
 for (let i = 1; i <= count; i++) {
-  await s.page.evaluate((n) => window.__DTI__.goto(n), i);
-  await s.wait(2600);
+  await s.goto(i);
+  await s.wait(1400);
   await s.shot(`ch${i}-idle`, OUT);
 
   // generic curiosity probe: a tap, a drag, and a two-finger squeeze,

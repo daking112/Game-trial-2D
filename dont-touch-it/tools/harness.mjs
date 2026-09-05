@@ -119,6 +119,20 @@ export class Session {
   wait(ms) { return this.page.waitForTimeout(ms); }
 
   async probe() { return this.page.evaluate(() => window.__DTI__ && window.__DTI__.probe()); }
+
+  /** Go to a chapter and WAIT until it is actually the running one. */
+  async goto(n, timeoutMs = 15000) {
+    await this.page.evaluate((i) => window.__DTI__.goto(i), n);
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      const st = await this.page.evaluate(() => ({
+        s: window.__DTI__.state, i: window.__DTI__.game.index, l: window.__DTI__.level,
+      }));
+      if (st.s === 'playing' && st.i === n - 1 && st.l) return st.l;
+      await this.wait(200);
+    }
+    throw new Error(`goto(${n}) never became the running chapter`);
+  }
   async state() {
     return this.page.evaluate(() => ({
       state: window.__DTI__?.state, level: window.__DTI__?.level,
