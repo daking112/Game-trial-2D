@@ -443,6 +443,7 @@ export class L1Press extends Level {
       kind: 0, grav: 1800, drag: 1.8, color: [255, 214, 150], alpha: 0.9,
     });
     s.turned = s.target;
+    s.sheared = true;
     this._freeScrew(s, null);
     this.interrupt("You SHEARED it.", { hold: 2.4, agitated: true });
   }
@@ -826,13 +827,13 @@ export class L1Press extends Level {
     this._drawPlate(ctx, glow);
     this._drawFlange(ctx, false);       // far half of the clamp ring
     if (jarUp) this._drawFlange(ctx, true);
-    this._drawScrews(ctx, false);       // back screws, seated on it
+    this._drawScrews(ctx, glow, false); // back screws, seated on it
     this._drawButton(ctx, glow);
     this._drawShards(ctx, glow);
     this._drawDebris(ctx);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
     if (!jarUp) this._drawFlange(ctx, true);
-    this._drawScrews(ctx, true);        // front screws
+    this._drawScrews(ctx, glow, true);  // front screws
   }
 
 
@@ -1053,12 +1054,12 @@ export class L1Press extends Level {
   }
 
   // ---------- screws ----------
-  _drawScrews(ctx, front) {
+  _drawScrews(ctx, glow, front) {
     const g = this.g;
     for (const s of this.screws) {
       const isFront = Math.sin(s.angle) > 0;
       if (isFront !== front) continue;
-      if (s.free) continue;
+      if (s.free) { this._drawScrewHole(ctx, glow, s); continue; }
       const lift = s.lift * g.u * 1.6;
       const wob = s.wobble * Math.sin(this.t * 46) * g.u * 0.13;
       const x = s.x + wob, y = s.y - lift;
@@ -1119,6 +1120,156 @@ export class L1Press extends Level {
         ctx.stroke();
         ctx.restore();
       }
+    }
+  }
+
+  /**
+   * What the flange keeps.
+   *
+   * Three of these are empty holes — the record of the work, and the
+   * reason the ring stops reading as decoration the moment the first one
+   * opens. The fourth is the stud, and it is the only physical evidence
+   * anywhere in the chapter that the player forced the jar instead of
+   * undoing it: a stump of shank standing in the hole with a torn face on
+   * top, still bright, because the break happened forty seconds ago and
+   * brass does not go dull that fast. A machined screw head has facets;
+   * a twisted-off one has a ragged, cupped, crystalline break that catches
+   * the downlight harder than anything else on the plate.
+   */
+  _drawScrewHole(ctx, glow, s) {
+    const g = this.g, u = g.u;
+    const E = this.game.set.lit;
+    // the bore is narrower than the head that sat over it — a hole the
+    // same size as the screw reads as a painted dot
+    const rx = s.r * 0.60, ry = s.r * 0.34;
+
+    // ---- the bore
+    ctx.save();
+    // the shadow the countersink casts on the brass around it
+    const ao = ctx.createRadialGradient(s.x, s.y, rx * 0.7, s.x, s.y, rx * 2.0);
+    ao.addColorStop(0, 'rgba(0,0,0,0.42)');
+    ao.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ao;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y + ry * 0.3, rx * 2.0, ry * 2.0, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, rx, ry, 0, 0, TAU);
+    ctx.fillStyle = '#070502';
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    // the far wall of the bore is the only part of it the lamp reaches
+    const wall = ctx.createLinearGradient(0, s.y - ry, 0, s.y + ry * 0.4);
+    wall.addColorStop(0, `rgba(158,124,68,${0.46 * E})`);
+    wall.addColorStop(1, 'rgba(30,24,12,0)');
+    ctx.fillStyle = wall;
+    ctx.fillRect(s.x - rx, s.y - ry, rx * 2, ry * 2);
+    // thread crests on that far wall
+    ctx.strokeStyle = `rgba(220,186,120,${0.22 * E})`;
+    ctx.lineWidth = Math.max(0.7, u * 0.085);
+    for (let k = -2; k <= 0; k++) {
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y + k * ry * 0.34, rx * 0.86, ry * 0.5, 0, Math.PI, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // countersink lip: shadowed near, lit far
+    ctx.lineWidth = Math.max(1, u * 0.11);
+    ctx.strokeStyle = 'rgba(0,0,0,0.62)';
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0.1, Math.PI - 0.1); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,238,196,${0.46 * E})`;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, Math.PI + 0.08, TAU - 0.08); ctx.stroke();
+    ctx.restore();
+
+    if (!s.sheared) return;
+
+    // ---- the stud
+    const h = u * 0.72;
+    const srx = rx * 0.80, sry = ry * 0.80;
+    const topY = s.y - h;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(s.x - srx, topY, srx * 2, h);
+    ctx.ellipse(s.x, s.y, srx, sry, 0, 0, TAU);
+    ctx.clip();
+    metalFill(ctx, s.x - srx, 0, s.x + srx, 0, PALETTES.brass);
+    const dk = ctx.createLinearGradient(0, topY, 0, s.y + sry);
+    dk.addColorStop(0, 'rgba(0,0,0,0)');
+    dk.addColorStop(1, 'rgba(0,0,0,0.72)');
+    ctx.fillStyle = dk;
+    ctx.fillRect(s.x - srx, topY, srx * 2, h + sry * 2);
+    // a couple of thread turns left on the exposed shank
+    ctx.strokeStyle = 'rgba(0,0,0,0.34)';
+    ctx.lineWidth = Math.max(0.8, u * 0.10);
+    for (let k = 0; k < 3; k++) {
+      const yy = topY + u * 0.20 + k * u * 0.26;
+      ctx.beginPath();
+      ctx.moveTo(s.x - srx, yy);
+      ctx.lineTo(s.x + srx, yy + u * 0.13);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- the torn face
+    const rng = makeRng(1200 + s.i * 97);
+    const face = new Path2D();
+    const N = 15;
+    const rr = [];
+    for (let k = 0; k < N; k++) rr.push(0.78 + rng() * 0.36);
+    for (let k = 0; k <= N; k++) {
+      const a = (k / N) * TAU;
+      const q = rr[k % N];
+      const px = s.x + Math.cos(a) * srx * q;
+      const py = topY + Math.sin(a) * sry * q;
+      k ? face.lineTo(px, py) : face.moveTo(px, py);
+    }
+    face.closePath();
+    ctx.save();
+    const tg = ctx.createRadialGradient(
+      s.x - srx * 0.34, topY - sry * 0.6, 0, s.x, topY, srx * 1.6);
+    tg.addColorStop(0, `rgba(255,246,218,${0.55 + 0.45 * E})`);
+    tg.addColorStop(0.42, '#dcc08a');
+    tg.addColorStop(1, '#7a6436');
+    ctx.fillStyle = tg;
+    ctx.fill(face);
+    // the break is cupped and crystalline, not machined
+    ctx.save();
+    ctx.clip(face);
+    ctx.strokeStyle = `rgba(120,92,44,${0.5})`;
+    ctx.lineWidth = Math.max(0.7, u * 0.08);
+    for (let k = 0; k < 7; k++) {
+      const a = rng() * TAU;
+      ctx.beginPath();
+      ctx.moveTo(s.x + Math.cos(a) * srx, topY + Math.sin(a) * sry);
+      ctx.lineTo(s.x + Math.cos(a + 2.4) * srx * 0.3, topY + Math.sin(a + 2.4) * sry * 0.3);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,250,232,${0.34 * E})`;
+    for (let k = 0; k < 5; k++) {
+      const a = rng() * TAU, q = rng() * 0.8;
+      ctx.beginPath();
+      ctx.ellipse(s.x + Math.cos(a) * srx * q, topY + Math.sin(a) * sry * q,
+        srx * (0.10 + rng() * 0.16), sry * (0.12 + rng() * 0.2), rng() * 3, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle = `rgba(255,244,210,${0.5 * E})`;
+    ctx.lineWidth = Math.max(0.8, u * 0.09);
+    ctx.stroke(face);
+    ctx.restore();
+
+    // fresh metal is the brightest thing on the plate, and should be
+    if (glow) {
+      glow.save();
+      glow.globalCompositeOperation = 'lighter';
+      const gg = glow.createRadialGradient(s.x, topY, 0, s.x, topY, srx * 3.4);
+      gg.addColorStop(0, `rgba(255,238,196,${0.30 * E})`);
+      gg.addColorStop(1, 'rgba(255,238,196,0)');
+      glow.fillStyle = gg;
+      glow.beginPath(); glow.arc(s.x, topY, srx * 3.4, 0, TAU); glow.fill();
+      glow.restore();
     }
   }
 

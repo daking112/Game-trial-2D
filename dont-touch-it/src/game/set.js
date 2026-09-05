@@ -450,6 +450,17 @@ export class Set {
     c.globalCompositeOperation = 'overlay';
     c.globalAlpha = 0.55;
     c.drawImage(this._stoneTile(), cx - hw, yB, hw * 2, yT - yB);
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    this._grain2(c, w, h, 0.62, 0.7);
+    // Dust. Nobody wipes the back of a plinth top, and the thin pale band
+    // that collects against the wall edge is worth more than any amount of
+    // extra gradient.
+    const dg = c.createLinearGradient(0, yB, 0, yB + (yT - yB) * 0.30);
+    dg.addColorStop(0, 'rgba(198,190,176,0.11)');
+    dg.addColorStop(1, 'rgba(198,190,176,0)');
+    c.fillStyle = dg;
+    c.fillRect(cx - hw, yB, hw * 2, (yT - yB) * 0.30);
     c.restore();
 
     // ---- arrises -------------------------------------------------
@@ -468,6 +479,33 @@ export class Set {
     c.lineTo(cx + hw, yT - aw * 0.5);
     c.stroke();
 
+    // Chips. That arris is the brightest line in the room, and an unbroken
+    // one reads as a vector graphic. Three or four nicks in it are the
+    // cheapest possible proof that the object has a history.
+    {
+      const rng = makeRng(4471);
+      c.save();
+      c.lineCap = 'butt';
+      for (let i = 0; i < 5; i++) {
+        const bx = cx - hw + (0.08 + rng() * 0.84) * hw * 2;
+        const bl = aw * (1.2 + rng() * 3.4);
+        c.strokeStyle = `rgba(14,13,16,${0.5 + rng() * 0.4})`;
+        c.lineWidth = aw * (0.8 + rng() * 0.7);
+        c.beginPath();
+        c.moveTo(bx, yT - aw * 0.5);
+        c.lineTo(bx + bl, yT - aw * 0.5);
+        c.stroke();
+        // the exposed board under the paint catches a little light
+        c.strokeStyle = `rgba(196,178,150,${0.10 + rng() * 0.12})`;
+        c.lineWidth = Math.max(0.6, aw * 0.4);
+        c.beginPath();
+        c.moveTo(bx, yT + aw * 0.35);
+        c.lineTo(bx + bl, yT + aw * 0.35);
+        c.stroke();
+      }
+      c.restore();
+    }
+
     // back top edge: dark against the wall, with a hair of bounce
     c.strokeStyle = 'rgba(0,0,0,0.40)';
     c.lineWidth = Math.max(1, u * 0.11);
@@ -482,6 +520,48 @@ export class Set {
     c.beginPath(); c.moveTo(cx - hw, yT); c.lineTo(cx - bw, yB); c.stroke();
     c.strokeStyle = 'rgba(0,0,0,0.34)';
     c.beginPath(); c.moveTo(cx + hw, yT); c.lineTo(cx + bw, yB); c.stroke();
+  }
+
+  /**
+   * The tooth of the paint itself — high frequency, one pixel across, and
+   * the difference between a box that is dark grey and a box that is made
+   * of something. The mottle tile below is the low-frequency half of the
+   * same job; blurred blobs stretched over a whole face have no scale to
+   * them, so at arm's length the plinth read as a gradient.
+   */
+  _grainTile() {
+    if (this._grain) return this._grain;
+    const N = 128;
+    const cv = document.createElement('canvas');
+    cv.width = N; cv.height = N;
+    const x = cv.getContext('2d');
+    const img = x.createImageData(N, N);
+    const d = img.data;
+    const rng = makeRng(8821);
+    for (let i = 0; i < N * N; i++) {
+      // two octaves: a per-pixel tooth over a coarser cloud, both centred
+      // on 128 so an `overlay` pass leaves the average value alone
+      const v = 128 + (rng() - 0.5) * 34 + (rng() - 0.5) * 16;
+      const o = i * 4;
+      d[o] = d[o + 1] = d[o + 2] = v;
+      d[o + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    this._grain = cv;
+    return cv;
+  }
+
+  /** Lay the tooth over a face at its own scale rather than stretched. */
+  _grain2(x, w, h, alpha, scale = 0.5) {
+    const pat = x.createPattern(this._grainTile(), 'repeat');
+    if (!pat) return;
+    try { pat.setTransform(new DOMMatrix([scale, 0, 0, scale, 0, 0])); } catch (_) {}
+    x.save();
+    x.globalCompositeOperation = 'overlay';
+    x.globalAlpha = alpha;
+    x.fillStyle = pat;
+    x.fillRect(0, 0, w, h);
+    x.restore();
   }
 
   /** The stone mottle tile — low frequency, painted small, reused. */
@@ -574,6 +654,74 @@ export class Set {
     x.globalCompositeOperation = 'overlay';
     x.globalAlpha = 0.42;
     x.drawImage(this._stoneTile(), 0, 0, pw, ph);
+    x.restore();
+    this._grain2(x, pw, ph, 0.80, 0.7);
+
+    // Roller nap. Gallery plinths are rolled, not sprayed, and the faint
+    // vertical banding that leaves is the single most recognisable thing
+    // about a painted MDF box. Isotropic noise alone reads as film grain,
+    // which is a property of the photograph, not of the object.
+    x.save();
+    const rn = makeRng(6607);
+    x.globalCompositeOperation = 'overlay';
+    for (let i = 0; i < 54; i++) {
+      const bx = rn() * pw;
+      const bw2 = pw * (0.006 + rn() * 0.026);
+      const v = rn() > 0.5 ? 255 : 0;
+      x.globalAlpha = 0.020 + rn() * 0.045;
+      const gg = x.createLinearGradient(bx - bw2, 0, bx + bw2, 0);
+      gg.addColorStop(0, `rgba(${v},${v},${v},0)`);
+      gg.addColorStop(0.5, `rgba(${v},${v},${v},1)`);
+      gg.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      x.fillStyle = gg;
+      x.fillRect(bx - bw2, ph * (rn() * 0.2), bw2 * 2, ph * (0.55 + rn() * 0.45));
+    }
+    x.restore();
+
+    // The lid joint. A gallery plinth is a box with a removable top, and
+    // the hairline where the two meet is the one piece of evidence that
+    // this is joinery and not a solid block of dark.
+    const jy = Math.round(ph * 0.062) + 0.5;
+    x.strokeStyle = 'rgba(0,0,0,0.44)';
+    x.lineWidth = 1;
+    x.beginPath(); x.moveTo(0, jy); x.lineTo(pw, jy); x.stroke();
+    x.strokeStyle = 'rgba(226,220,208,0.10)';
+    x.beginPath(); x.moveTo(0, jy + 1); x.lineTo(pw, jy + 1); x.stroke();
+
+    // Satin, not matte: eggshell paint holds one very broad, very soft
+    // highlight, and its softness is what tells you the surface is smooth.
+    x.save();
+    x.globalCompositeOperation = 'lighter';
+    const sh = x.createLinearGradient(pw * 0.10, 0, pw * 0.72, ph);
+    sh.addColorStop(0, 'rgba(255,246,228,0)');
+    sh.addColorStop(0.34, 'rgba(255,246,228,0.055)');
+    sh.addColorStop(0.62, 'rgba(255,246,228,0.012)');
+    sh.addColorStop(1, 'rgba(255,246,228,0)');
+    x.fillStyle = sh;
+    x.fillRect(0, 0, pw, ph);
+    x.restore();
+
+    // Wear. This box has been dragged across a gallery floor more than
+    // once, and the scuffs live where a box gets scuffed: along the bottom
+    // and down the two arrises.
+    const rng = makeRng(20114);
+    x.save();
+    for (let i = 0; i < 26; i++) {
+      const edge = rng();
+      const bx = edge < 0.55 ? rng() * pw
+        : (edge < 0.78 ? rng() * ch * 2.2 : pw - rng() * ch * 2.2);
+      const by = edge < 0.55 ? ph - rng() ** 1.6 * ph * 0.16 : rng() * ph;
+      const l = (1.5 + rng() * 7) * (edge < 0.55 ? 1 : 0.5);
+      const light = rng() > 0.55;
+      x.strokeStyle = light
+        ? `rgba(226,220,208,${0.05 + rng() * 0.09})`
+        : `rgba(0,0,0,${0.10 + rng() * 0.16})`;
+      x.lineWidth = 0.6 + rng() * 0.9;
+      x.beginPath();
+      x.moveTo(bx, by);
+      x.lineTo(bx + (rng() - 0.5) * l * 2.4, by + (rng() - 0.5) * l * 0.5);
+      x.stroke();
+    }
     x.restore();
     return cv;
   }
