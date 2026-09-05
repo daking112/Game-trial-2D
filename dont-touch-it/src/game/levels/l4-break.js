@@ -869,6 +869,8 @@ export class L4Break extends Level {
       // the slab behind stops being a slab
       this.tl.after(3.0, () => {
         this.active = 1;
+        // fresh pane, fresh reading of how the player is touching it
+        this.oneFingerPeak = 0;
         this.phase = 'reveal';
         this.revealT = 4.0;
         this._buildReflection();
@@ -986,9 +988,13 @@ export class L4Break extends Level {
     const P = this._activePane();
     if (!P || P.broken) { this.hideHint(); return; }
     if (this.phase === 'cracking') { this.hideHint(); return; }
-    if (this.phase === 'arrested' && idle > 5) { this.hint('Finish it, or leave it'); return; }
-    if (this.oneFingerPeak > 0.85 && idle > 4.5) { this.hint('Two fingers'); return; }
-    if (idle > 9) { this.hint('Press and hold'); return; }
+    // Late, and describing what the player can see rather than naming the
+    // gesture. "TWO FINGERS" was also carrying over onto the mirror after
+    // the first pane broke, because oneFingerPeak was never reset — so the
+    // answer to the puzzle just solved was on screen during its reveal.
+    if (this.phase === 'arrested' && idle > 12) { this.hint('It stopped'); return; }
+    if (this.oneFingerPeak > 0.85 && idle > 13) { this.hint('One is not enough'); return; }
+    if (idle > 18) { this.hint('It is under tension'); return; }
     this.hideHint();
   }
 
@@ -1990,8 +1996,8 @@ export class L4Break extends Level {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const d of P.shards) {
-      if (cn++ > 22) break;
-      const a = (d.rest ? 0.20 : 0.13) * lit;
+      if (cn++ > 14) break;
+      const a = (d.rest ? 0.09 : 0.05) * lit;
       const r = d.data.r * 1.5;
       const cy = d.rest ? d.floorY + u * 0.5 : d.floorY + u * 0.4;
       const gg = ctx.createRadialGradient(d.x + u * 0.6, cy, 0, d.x + u * 0.6, cy, r);
@@ -2019,6 +2025,10 @@ export class L4Break extends Level {
     for (const d of P.shards) {
       ctx.save();
       ctx.translate(d.x, d.y);
+      // Once a piece stops moving it is lying ON the plinth, seen at a
+      // shallow angle — not standing on its edge. Without this squash the
+      // pile grows into a hedge of vertical slivers.
+      if (d.rest) ctx.scale(1, 0.52);
       ctx.rotate(d.a);
       if (mirror && d.img) {
         // the shard still shows its piece of the reflection
@@ -2041,29 +2051,34 @@ export class L4Break extends Level {
     const LX = -0.55, LY = -0.8;
     for (const d of P.shards) {
       const ca = Math.cos(d.a), sa = Math.sin(d.a);
+      const fl = d.rest ? 0.52 : 1;          // matches the body pass
       const poly = d.poly, n = poly.length >> 1;
       let px = d.x + poly[(n - 1) * 2] * ca - poly[(n - 1) * 2 + 1] * sa;
-      let py = d.y + poly[(n - 1) * 2] * sa + poly[(n - 1) * 2 + 1] * ca;
+      let py = d.y + (poly[(n - 1) * 2] * sa + poly[(n - 1) * 2 + 1] * ca) * fl;
       for (let i = 0; i < n; i++) {
         const qx = d.x + poly[i * 2] * ca - poly[i * 2 + 1] * sa;
-        const qy = d.y + poly[i * 2] * sa + poly[i * 2 + 1] * ca;
+        const qy = d.y + (poly[i * 2] * sa + poly[i * 2 + 1] * ca) * fl;
         // outward normal of this edge (CCW polygon → normal is (dy,-dx))
         const ex = qx - px, ey = qy - py;
         const L = Math.hypot(ex, ey) || 1;
         const nx = ey / L, ny = -ex / L;
-        const tgt = (nx * LX + ny * LY) > 0.12 ? litP : dimP;
+        // 0.12 put roughly half of every shard's outline in the lit
+        // bucket, and 158 shards stroked bright white read as a scribble
+        // rather than as glass. Only edges genuinely turned toward the key
+        // light should catch it.
+        const tgt = (nx * LX + ny * LY) > 0.52 ? litP : dimP;
         tgt.moveTo(px, py); tgt.lineTo(qx, qy);
         px = qx; py = qy;
       }
     }
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.strokeStyle = `rgba(90,128,150,${0.35 * lit})`;
-    ctx.lineWidth = Math.max(0.7, u * 0.11);
+    ctx.strokeStyle = `rgba(96,134,156,${0.20 * lit})`;
+    ctx.lineWidth = Math.max(0.6, u * 0.08);
     ctx.stroke(dimP);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(255,255,255,${0.82 * lit})`;
-    ctx.lineWidth = Math.max(0.9, u * 0.15);
+    ctx.strokeStyle = `rgba(255,255,255,${0.38 * lit})`;
+    ctx.lineWidth = Math.max(0.7, u * 0.10);
     ctx.stroke(litP);
     ctx.restore();
 
@@ -2081,7 +2096,7 @@ export class L4Break extends Level {
         k++;
         const r = d.data.r * (0.8 + tw * 0.8);
         const gg = glow.createRadialGradient(d.x, d.y, 0, d.x, d.y, r);
-        gg.addColorStop(0, `rgba(236,250,255,${0.28 * tw * lit})`);
+        gg.addColorStop(0, `rgba(236,250,255,${0.13 * tw * lit})`);
         gg.addColorStop(1, 'rgba(236,250,255,0)');
         glow.fillStyle = gg;
         glow.beginPath(); glow.arc(d.x, d.y, r, 0, TAU); glow.fill();
@@ -2099,11 +2114,15 @@ export class L4Break extends Level {
       g.addColorStop(0.72, 'rgba(120,160,200,0.05)');
       g.addColorStop(1, 'rgba(255,255,255,0.16)');
     } else {
-      g.addColorStop(0, 'rgba(226,248,244,0.42)');
-      g.addColorStop(0.28, 'rgba(178,220,224,0.14)');
-      g.addColorStop(0.55, 'rgba(240,252,255,0.20)');
-      g.addColorStop(0.8, 'rgba(126,178,190,0.12)');
-      g.addColorStop(1, 'rgba(200,236,240,0.34)');
+      // Deliberately faint. A hundred and sixty of these overlap, and
+      // transparency ACCUMULATES — at 0.5 each the pile composites to
+      // solid white and stops being glass. Individually almost invisible
+      // is what makes the heap read as a heap.
+      g.addColorStop(0, 'rgba(228,250,246,0.30)');
+      g.addColorStop(0.28, 'rgba(176,220,226,0.11)');
+      g.addColorStop(0.55, 'rgba(242,254,255,0.17)');
+      g.addColorStop(0.8, 'rgba(124,178,190,0.10)');
+      g.addColorStop(1, 'rgba(200,238,242,0.26)');
     }
     return g;
   }

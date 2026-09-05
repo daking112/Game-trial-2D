@@ -186,15 +186,25 @@ export class Debris {
       const pen = lowest - floorY;
       this.y -= pen;
       if (this.vy > 0) {
-        this.vy *= -this.restitution;
-        this.vx *= this.friction;
+        const impact = this.vy;
         // torque from off-centre contact
-        this.va += (lx - this.x) * 0.0016 * Math.abs(this.vy);
+        this.va += (lx - this.x) * 0.0016 * impact;
         this.va *= 0.72;
+        this.vx *= this.friction;
+        // A bounce smaller than what one frame of gravity adds is not a
+        // bounce, it is contact. Comparing against a fixed speed instead
+        // meant a body re-accelerated past the threshold every single
+        // frame and could never satisfy it: 158 of 159 glass shards were
+        // still jittering on the plinth minutes after they landed, so
+        // they never settled, never lay flat, and never stopped sparkling.
+        const bounce = impact * this.restitution;
+        this.vy = bounce < this.grav * dt * 2 ? 0 : -bounce;
       }
-      if (Math.abs(this.vy) < 22 && Math.abs(this.va) < 0.6) {
-        this.vy = 0; this.vx *= 0.82; this.va *= 0.6;
-        if (Math.abs(this.vx) < 4 && Math.abs(this.va) < 0.12) { this.rest = true; this.vx = 0; this.va = 0; }
+      if (this.vy === 0 && Math.abs(this.va) < 0.5) {
+        this.vx *= 0.72; this.va *= 0.6;
+        if (Math.abs(this.vx) < 3 && Math.abs(this.va) < 0.10) {
+          this.rest = true; this.vx = 0; this.va = 0;
+        }
       }
     }
   }
