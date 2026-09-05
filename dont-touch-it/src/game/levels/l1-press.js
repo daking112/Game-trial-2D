@@ -666,13 +666,19 @@ export class L1Press extends Level {
     const sc = this.r.quality.refract ? this._beginScene(ctx) : null;
     if (!sc) this._sceneRect = null;
     const t = sc ? sc.ctx : ctx;
+    // Depth order for one bolted object: the brass flange clamps the glass
+    // at its base, so its far half is behind the glass and its near half
+    // is in front of it. Splitting the ring is what stops it reading as a
+    // hoop floating around the jar.
     this._drawPlate(t, glow);
-    this._drawScrews(t, false);         // back screws
+    this._drawFlange(t, false);         // far half of the clamp ring
+    this._drawScrews(t, false);         // back screws, seated on it
     this._drawButton(t, glow);
     this._drawShards(t, glow);
     this._drawDebris(t);
     if (sc) this._flushScene(ctx, sc);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
+    if (!this.jar.gone || this.jar.resting) this._drawFlange(ctx, true);
     this._drawScrews(ctx, true);        // front screws
   }
 
@@ -1117,17 +1123,23 @@ export class L1Press extends Level {
     const lip = lipRx - inset * 0.4;
     const sh = baseY - straight;                       // shoulder
     const topY = sh - dome + inset * 1.15;
-    const footY = baseY - inset * 0.5;
+    // The foot is a ROUND flange seen in the room's projection, so its
+    // lower edge has to be an ellipse. Closing it with a straight line
+    // turns the bell jar into a glass table — the single detail that most
+    // reliably breaks the illusion of a vessel standing on a plate.
+    const lipRy = lip * g.K;
+    const footY = baseY - inset * 0.5 - lipRy;
     ctx.beginPath();
     ctx.moveTo(cx - lip, footY);
-    ctx.lineTo(cx - lip, footY - g.u * 0.55);
-    ctx.lineTo(cx - r, footY - g.u * 2.2);
+    ctx.lineTo(cx - lip, footY - g.u * 0.5);
+    ctx.lineTo(cx - r, footY - g.u * 2.3);
     ctx.lineTo(cx - r, sh);
     ctx.bezierCurveTo(cx - r, sh - dome * 0.60, cx - r * 0.615, topY, cx, topY);
     ctx.bezierCurveTo(cx + r * 0.615, topY, cx + r, sh - dome * 0.60, cx + r, sh);
-    ctx.lineTo(cx + r, footY - g.u * 2.2);
-    ctx.lineTo(cx + lip, footY - g.u * 0.55);
+    ctx.lineTo(cx + r, footY - g.u * 2.3);
+    ctx.lineTo(cx + lip, footY - g.u * 0.5);
     ctx.lineTo(cx + lip, footY);
+    ctx.ellipse(cx, footY, lip, lipRy, 0, 0, Math.PI);
     ctx.closePath();
   }
 
@@ -1241,7 +1253,7 @@ export class L1Press extends Level {
     const cx = g.cx + j.x;
     const baseY = g.jarBaseY - j.lift;
     const R = g.jarR, straight = g.jarStraight, dome = g.jarDome;
-    const lip = g.flangeOut;
+    const lip = g.flangeOut * 0.93;   // the brass clamps OVER the glass brim
     const wall = g.jarWall;
     const shoulder = baseY - straight;
     const topY = shoulder - dome;

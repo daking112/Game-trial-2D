@@ -141,7 +141,7 @@ function ringPath(ctx, pts) {
 // ============================================================
 export class L3Squeeze extends Level {
   static id = 'l3';
-  static chapter = 'III';
+  static chapter = 'II';
   static rule = 'Do not squeeze';
   static hint = 'Squeeze it';
 

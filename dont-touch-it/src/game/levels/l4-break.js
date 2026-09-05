@@ -238,7 +238,7 @@ function polyCentroid(p) {
 
 export class L4Break extends Level {
   static id = 'l4';
-  static chapter = 'IV';
+  static chapter = 'III';
   static rule = 'Do not break';
 
   // ---------------------------------------------------------

@@ -8,7 +8,6 @@
 
 const MANIFEST = [
   './l1-press.js',
-  './l2-pull.js',
   './l3-squeeze.js',
   './l4-break.js',
   './l5-dark.js',
