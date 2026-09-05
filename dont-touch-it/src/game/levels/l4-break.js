@@ -1258,10 +1258,10 @@ export class L4Break extends Level {
     // Kept deliberately below saturation: the bloom pass amplifies this,
     // and a specular that clips to white stops reading as a reflection of
     // something and starts reading as a hole in the image.
-    const cw = G.w * 0.024, ch = G.h * 0.42 * breathe;
+    const cw = G.w * 0.022, ch = G.h * 0.40 * breathe;
     const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    cg.addColorStop(0, `rgba(255,253,247,${0.34 * brightness})`);
-    cg.addColorStop(0.42, `rgba(255,252,246,${0.11 * brightness})`);
+    cg.addColorStop(0, `rgba(255,253,247,${0.22 * brightness})`);
+    cg.addColorStop(0.42, `rgba(255,252,246,${0.08 * brightness})`);
     cg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.scale(cw, ch);
     ctx.fillStyle = cg;
@@ -1311,11 +1311,15 @@ export class L4Break extends Level {
       glow.save();
       glow.globalCompositeOperation = 'lighter';
       const hx = G.x0 + G.w * 0.29, hy = G.y0 + G.h * 0.24;
-      const hg = glow.createRadialGradient(hx, hy, 0, hx, hy, G.w * 0.34);
-      hg.addColorStop(0, `rgba(255,252,244,${(0.36 + this.glare * 0.3) * brightness})`);
+      // Small and low. The bloom pass blurs this wide and composites it
+      // additively, so a generous value here becomes a sun that erases the
+      // pane — and with it the crack network, which is the chapter.
+      const hr = G.w * 0.19;
+      const hg = glow.createRadialGradient(hx, hy, 0, hx, hy, hr);
+      hg.addColorStop(0, `rgba(255,252,244,${(0.13 + this.glare * 0.12) * brightness})`);
       hg.addColorStop(1, 'rgba(255,252,244,0)');
       glow.fillStyle = hg;
-      glow.beginPath(); glow.arc(hx, hy, G.w * 0.34, 0, TAU); glow.fill();
+      glow.beginPath(); glow.arc(hx, hy, hr, 0, TAU); glow.fill();
       glow.restore();
     }
   }
@@ -1698,10 +1702,15 @@ export class L4Break extends Level {
       const hr = u * (2.2 + s * 9);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      // Kept low deliberately. Two of these, drawn additively and then
+      // amplified by the bloom pass, were compounding into a single white
+      // sun that swallowed the pane — including the crack network, which
+      // is the best thing in the chapter. The fringes below carry the
+      // information; this is only the warmth under them.
       const hg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, hr);
-      hg.addColorStop(0, `rgba(255,236,206,${0.30 + s * 0.34})`);
-      hg.addColorStop(0.3, `rgba(255,180,132,${0.13 + s * 0.2})`);
-      hg.addColorStop(0.68, `rgba(206,132,196,${0.05 + s * 0.13})`);
+      hg.addColorStop(0, `rgba(255,214,170,${0.08 + s * 0.13})`);
+      hg.addColorStop(0.3, `rgba(255,172,124,${0.05 + s * 0.09})`);
+      hg.addColorStop(0.68, `rgba(196,124,190,${0.03 + s * 0.07})`);
       hg.addColorStop(1, 'rgba(160,110,210,0)');
       ctx.fillStyle = hg;
       ctx.beginPath(); ctx.arc(f.x, f.y, hr, 0, TAU); ctx.fill();
@@ -1719,7 +1728,7 @@ export class L4Break extends Level {
         const k = (i + 1) / rings;
         const rr = R0 + Math.pow(k, 0.72) * u * (5 + s * 16);
         const col = FRINGE[i % FRINGE.length];
-        const a = (0.055 + s * 0.24) * (1 - k * 0.55);
+        const a = (0.10 + s * 0.38) * (1 - k * 0.5);
         ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${a})`;
         ctx.lineWidth = Math.max(0.9, u * (0.34 - k * 0.16));
         ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke();
@@ -1729,7 +1738,7 @@ export class L4Break extends Level {
       const rOut = R0 + u * (5 + s * 16) * 1.05;
       for (let i = 0; i < spokes; i++) {
         const a0 = (i / spokes) * TAU + this.t * 0.12;
-        const dim = 0.10 + s * 0.20;
+        const dim = 0.13 + s * 0.28;
         const grd = ctx.createLinearGradient(
           Math.cos(a0) * R0, Math.sin(a0) * R0,
           Math.cos(a0) * rOut, Math.sin(a0) * rOut);
@@ -1748,9 +1757,9 @@ export class L4Break extends Level {
       if (glow) {
         glow.save();
         glow.globalCompositeOperation = 'lighter';
-        const gr = u * (2 + s * 7);
+        const gr = u * (1.6 + s * 4.2);
         const gg = glow.createRadialGradient(f.x, f.y, 0, f.x, f.y, gr);
-        gg.addColorStop(0, `rgba(255,214,170,${0.24 + s * 0.4})`);
+        gg.addColorStop(0, `rgba(255,206,164,${0.06 + s * 0.15})`);
         gg.addColorStop(1, 'rgba(255,170,150,0)');
         glow.fillStyle = gg;
         glow.beginPath(); glow.arc(f.x, f.y, gr, 0, TAU); glow.fill();
@@ -1940,9 +1949,10 @@ export class L4Break extends Level {
       if (glow) {
         glow.save();
         glow.globalCompositeOperation = 'lighter';
-        const rr = u * (2.4 - tip.gen * 0.5);
-        const gg = glow.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, rr * 2.4);
-        gg.addColorStop(0, 'rgba(255,244,222,0.85)');
+        // the running tip is a spark, not a floodlight
+        const rr = u * (1.5 - tip.gen * 0.3);
+        const gg = glow.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, rr * 2.2);
+        gg.addColorStop(0, 'rgba(255,244,222,0.30)');
         gg.addColorStop(1, 'rgba(255,214,180,0)');
         glow.fillStyle = gg;
         glow.beginPath(); glow.arc(tip.x, tip.y, rr * 2.4, 0, TAU); glow.fill();

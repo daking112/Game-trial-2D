@@ -162,7 +162,10 @@ export class Renderer {
     c.save();
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = clamp01(0.85 * strength);
+    // 0.85 was enough to let any single emitter erase the object it was
+    // attached to. Bloom should be the halo around a bright thing, never
+    // brighter than the thing itself.
+    c.globalAlpha = clamp01(0.55 * strength);
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
     c.drawImage(src.canvas, 0, 0, this.w, this.h);
