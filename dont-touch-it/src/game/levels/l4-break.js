@@ -240,6 +240,10 @@ export class L4Break extends Level {
   static id = 'l4';
   static chapter = 'III';
   static rule = 'Do not break';
+  static label = {
+    title: 'Pane (with reverse)',
+    medium: ['Tempered glass, 6mm.', 'Silvered on the far face.'],
+  };
 
   // ---------------------------------------------------------
   // layout

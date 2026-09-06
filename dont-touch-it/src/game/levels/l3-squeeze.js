@@ -156,6 +156,10 @@ export class L3Squeeze extends Level {
   static id = 'l3';
   static chapter = 'II';
   static rule = 'Do not squeeze';
+  static label = {
+    title: 'Specimen',
+    medium: ['Unidentified. Kept under glass', 'at eleven degrees.'],
+  };
   static hint = 'Squeeze it';
   // the smallest object in the game; the room comes to it
   static push = 1.13;

@@ -129,20 +129,6 @@ html,body{
 }
 #hint.on{opacity:1;}
 
-/* ---------- chapter card ---------- */
-#chapter{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
-  opacity:0;pointer-events:none;
-}
-#chapter .num{
-  font-size:10.5px;font-weight:600;letter-spacing:.42em;text-transform:uppercase;color:var(--ink-faint);
-  margin-bottom:16px;
-}
-#chapter .rule{
-  font-family:var(--sans);font-weight:800;text-transform:uppercase;
-  font-size:clamp(30px,9.6vw,52px);letter-spacing:-.02em;line-height:1;
-}
-
 /* ---------- end card ---------- */
 #endcard{
   position:absolute;inset:0;display:flex;align-items:center;flex-direction:column;

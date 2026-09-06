@@ -35,6 +35,10 @@ export class L1Press extends Level {
   static id = 'l1';
   static chapter = 'I';
   static rule = 'Do not press';
+  static label = {
+    title: 'Untitled (Switch)',
+    medium: ['Brass, tempered glass,', 'tungsten, painted steel. Wired.'],
+  };
 
   // ---------------------------------------------------------
   // layout
@@ -1124,21 +1128,16 @@ export class L1Press extends Level {
       this._sealStroke(ctx, { x, y, r: s.r }, s.markA + s.spin,
         s.r * 0.12, s.r * 0.98, 1);
 
-      // progress arc while being turned
+      // There used to be a dashed-plus-solid progress ring orbiting each
+      // head here — a loading spinner, in a museum. The torque seal above
+      // is the readout: one unbroken stripe becomes two, and how far the
+      // two have separated is how far the screw has come. A gauge that is
+      // part of the object beats a gauge drawn on top of it.
       if (s.glow > 0.02) {
+        // the seal's lacquer catches the light while the screw is moving
         ctx.save();
-        ctx.globalAlpha = s.glow;
-        ctx.strokeStyle = 'rgba(255,214,150,0.22)';
-        ctx.lineWidth = Math.max(1.4, g.u * 0.28);
-        ctx.setLineDash([g.u * 0.5, g.u * 0.8]);
-        ctx.beginPath(); ctx.arc(x, y, s.r * 2.3, 0, TAU); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.strokeStyle = 'rgba(255,226,180,0.85)';
-        ctx.lineWidth = Math.max(1.6, g.u * 0.32);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.arc(x, y, s.r * 2.3, -Math.PI / 2, -Math.PI / 2 + TAU * (s.turned / s.target));
-        ctx.stroke();
+        ctx.globalAlpha = s.glow * 0.5;
+        this._sealStroke(ctx, { x, y, r: s.r }, s.markA + s.spin, s.r * 0.12, s.r * 0.98, 1);
         ctx.restore();
       }
     }

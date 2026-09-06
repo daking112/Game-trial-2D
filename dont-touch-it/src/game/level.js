@@ -24,6 +24,13 @@ export class Level {
   static id = 'level';
   static chapter = 'I';
   static rule = 'DO NOT TOUCH';
+  /**
+   * What the gallery prints on the card beside your object: a title, and
+   * the medium line every museum label carries. The rule above is set
+   * underneath it. Naming what a thing is made of is most of what makes a
+   * label read as a label rather than as a caption.
+   */
+  static label = { title: 'Untitled', medium: ['Mixed media.'] };
   static hint = '';
   /**
    * Camera push for this chapter, applied by the shell on entry. Only
@@ -82,8 +89,10 @@ export class Level {
   // -------- helpers --------
   say(text, opts) { this.game.narrator.say(text, opts); return this; }
   interrupt(text, opts) { this.game.narrator.interrupt(text, opts); return this; }
-  hint(text) { this.game.hud.hint(text); }
-  hideHint() { this.game.hud.hideHint(); }
+  // A hint is a second card pinned under the wall label, not a chip
+  // floating over the room. See Set.setNote.
+  hint(text) { this.game.set.setNote(text); }
+  hideHint() { this.game.set.setNote(null); }
   shake(a) { this.cam.shake(a); }
   slowmo(s, d) { this.cam.slowmo(s, d); }
   flash(c, a, d) { this.cam.flash(c, a, d); }

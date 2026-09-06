@@ -128,7 +128,15 @@ export class Game {
     this.hud.setChapter(i + 1, this.levelClasses.length);
     this.hud.showBar(false);
 
-    if (card) await this.hud.card(`Chapter ${C.chapter}`, C.rule);
+    // The room is the transition. A chapter is announced by its label
+    // going up and the lamp coming on over it, never by a black slide.
+    this.set.setNote(null);
+    this.set.setLabel({
+      numeral: `Chapter ${C.chapter}`,
+      title: (C.label && C.label.title) || 'Untitled',
+      medium: (C.label && C.label.medium) || [],
+      rule: C.rule,
+    });
 
     const lv = this.previewed && this.previewed.constructor === C ? this.previewed : this._build(C);
     this.previewed = null;
@@ -290,6 +298,8 @@ export class Game {
     if (this.level) this.level.drawBack(ctx, g);
     this.set.drawLightCone(ctx);
     this.set.drawPlinth(ctx);
+    this.set.drawLabel(ctx);
+    this.set.drawNote(ctx);
     // Everything previous chapters destroyed, still lying where it fell.
     // A chapter that lights the room itself (Chapter V) paints it instead.
     if (!this.level || !this.level.ownsWreckage) this.wreck.draw(ctx);

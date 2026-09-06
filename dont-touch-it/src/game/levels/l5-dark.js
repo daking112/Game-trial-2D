@@ -31,6 +31,10 @@ export class L5Dark extends Level {
   static id = 'l5';
   static chapter = 'IV';
   static rule = 'Do not turn it off';
+  static label = {
+    title: 'The Light',
+    medium: ['Brass, enamel, ball chain.', 'Lit continuously since 1974.'],
+  };
 
   // ---------------------------------------------------------
   layout(w, h, u) {

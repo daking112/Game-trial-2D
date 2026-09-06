@@ -55,7 +55,7 @@
 //                      (cx-halfW, yTop) .. (cx+halfW, yBase).
 // ============================================================
 
-import { TAU, clamp, clamp01, lerp, rand, rrange, makeRng, smoothstep } from '../core/math.js';
+import { TAU, clamp, clamp01, damp, lerp, rand, rrange, makeRng, smoothstep } from '../core/math.js';
 import { Layer } from '../render/renderer.js';
 import { contactShadow } from '../render/materials.js';
 
@@ -68,6 +68,8 @@ export class Set {
     this.warmth = 1;          // 1 = tungsten key, 0 = cold emergency
     this.coneStrength = 1;
     this.plinthOpacity = 1;
+    this.label = null; this._labelL = null; this.labelBox = null;
+    this._noteText = null; this._noteL = null; this.noteA = 0;
     this.tint = null;         // css colour graded additively over the room
     this.tintAmount = 0.12;
     this.flicker = 0;
@@ -354,6 +356,214 @@ export class Set {
   }
 
   // ---------------------------------------------------------
+  // ---------------------------------------------------------
+  // The wall label
+  // ---------------------------------------------------------
+  /**
+   * A chapter used to arrive as a full-screen black slide with its rule
+   * set in 800-weight caps: a title card from a different genre of game,
+   * and a two-second wipe in a room whose entire conceit is that the room
+   * IS the transition.
+   *
+   * The rule now lives where a rule lives in a gallery — printed on a card
+   * on the plinth, hung before the lamp comes up on the object, and still
+   * there afterwards when the player wants to check what they were told.
+   * A label is also the only place a museum ever admits what a thing is
+   * made of, which is a free excuse to name the materials.
+   */
+  setLabel(l) {
+    this.label = l || null;
+    this._labelL = null;
+  }
+
+  _renderLabel(dpr) {
+    const G = this.geom, L = this.label;
+    if (!G || !L) return null;
+    const u = G.u;
+    const w = u * 15.0, h = u * 10.7;
+    const lay = (this._labelL = new Layer())
+      .size(Math.max(1, Math.ceil(w * dpr)), Math.max(1, Math.ceil(h * dpr)));
+    const c = lay.ctx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // the card: matte board, warm white, very slightly uneven
+    const bg = c.createLinearGradient(0, 0, w * 0.3, h);
+    bg.addColorStop(0, '#efeade');
+    bg.addColorStop(0.55, '#e6e0d2');
+    bg.addColorStop(1, '#d9d2c2');
+    c.fillStyle = bg;
+    c.fillRect(0, 0, w, h);
+    // print is never quite at the edge of the board
+    const pad = u * 1.15;
+    let y = u * 1.95;
+
+    c.fillStyle = 'rgba(66,60,50,0.62)';
+    c.font = `600 ${u * 0.84}px Inter, sans-serif`;
+    c.letterSpacing = `${u * 0.22}px`;
+    c.textBaseline = 'alphabetic';
+    c.fillText(L.numeral, pad, y);
+    c.letterSpacing = '0px';
+
+    // Set copy is written by hand, so any of it can overrun the board on a
+    // narrow phone. Squeeze the line rather than let it run off the card.
+    const inner = w - pad * 2;
+    const fit = (text, size, weight, family) => {
+      let px = size;
+      for (let i = 0; i < 6; i++) {
+        c.font = `${weight} ${px}px ${family}`;
+        if (c.measureText(text).width <= inner) break;
+        px *= 0.94;
+      }
+      c.fillText(text, pad, y);
+    };
+
+    y += u * 2.05;
+    c.fillStyle = '#221f19';
+    fit(L.title, u * 1.86, 'italic', `'Instrument Serif', Georgia, serif`);
+
+    y += u * 1.40;
+    c.fillStyle = 'rgba(74,68,58,0.86)';
+    for (const line of L.medium) { fit(line, u * 0.86, '400', 'Inter, sans-serif'); y += u * 1.12; }
+
+    // a hairline rule, then the instruction — the only thing on the card
+    // set in caps, because it is the only thing that is an instruction
+    y += u * 0.46;
+    c.strokeStyle = 'rgba(90,84,72,0.42)';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(pad, Math.round(y) + 0.5);
+    c.lineTo(w - pad, Math.round(y) + 0.5);
+    c.stroke();
+
+    y += u * 1.62;
+    c.fillStyle = '#1b1814';
+    c.letterSpacing = `${u * 0.13}px`;
+    fit(L.rule.toUpperCase(), u * 0.94, '700', 'Inter, sans-serif');
+    c.letterSpacing = '0px';
+
+    // the board is printed, not glowing: a little paper tooth over it
+    c.save();
+    c.globalCompositeOperation = 'multiply';
+    c.globalAlpha = 0.5;
+    c.drawImage(this._stoneTile(), 0, 0, w, h);
+    c.restore();
+
+    lay.w = w; lay.h = h;
+    return lay;
+  }
+
+  /**
+   * Blitted onto the plinth's front face, top left, where a gallery puts
+   * the label for a work that stands on a plinth. It is the one bright
+   * rectangle on the largest dark surface in the frame, so it also gives
+   * that surface something to be lit against.
+   */
+  drawLabel(ctx) {
+    const G = this.geom;
+    if (!G || !this.label) return;
+    const a = clamp01(0.06 + this.lit * 0.94) * this.plinthOpacity;
+    if (a <= 0.01) return;
+    const lay = this._labelL || this._renderLabel(this.r.dpr);
+    if (!lay) return;
+    const u = G.u, P = G.plinth;
+    const x = G.cx - P.halfW + u * 2.4;
+    const y = P.yTop + u * 3.4;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // the card stands a millimetre off the board it is stuck to
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fillRect(x + u * 0.16, y + u * 0.22, lay.w, lay.h);
+    ctx.drawImage(lay.canvas, x, y, lay.w, lay.h);
+    this.labelBox = { x, y, w: lay.w, h: lay.h };
+    // and the same downlight falls across it as everything else
+    const g2 = ctx.createLinearGradient(x, y, x + lay.w * 0.7, y + lay.h);
+    g2.addColorStop(0, `rgba(255,238,208,${0.16 * this.lit})`);
+    g2.addColorStop(1, 'rgba(10,10,14,0.14)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(x, y, lay.w, lay.h);
+    ctx.restore();
+  }
+
+  /**
+   * The conservator's note.
+   *
+   * Hints used to arrive as a rounded pill chip floating at the top of the
+   * screen in letterspaced caps — Material vocabulary in a museum. A
+   * gallery that wants to tell you one more thing pins a second, smaller
+   * card under the first one, and whoever pinned it was in a hurry, so it
+   * is never quite straight.
+   */
+  setNote(text) {
+    const t = text || null;
+    if (t === this._noteText) return;
+    this._noteText = t;
+    this._noteL = null;
+  }
+
+  _renderNote(dpr) {
+    const G = this.geom, txt = this._noteText;
+    if (!G || !txt) return null;
+    const u = G.u;
+    const w = u * 11.4, pad = u * 0.95;
+    // measure first: the card is as tall as the note needs
+    const probe = document.createElement('canvas').getContext('2d');
+    probe.font = `italic ${u * 1.02}px 'Instrument Serif', Georgia, serif`;
+    const words = String(txt).split(/\s+/);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (probe.measureText(next).width > w - pad * 2 && line) { lines.push(line); line = word; }
+      else line = next;
+    }
+    if (line) lines.push(line);
+    const lh = u * 1.30;
+    const h = pad * 2 + lines.length * lh;
+
+    const lay = (this._noteL = new Layer())
+      .size(Math.max(1, Math.ceil(w * dpr)), Math.max(1, Math.ceil(h * dpr)));
+    const c = lay.ctx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bg = c.createLinearGradient(0, 0, w * 0.4, h);
+    bg.addColorStop(0, '#e8e3d6');
+    bg.addColorStop(1, '#d5cec0');
+    c.fillStyle = bg;
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = 'rgba(52,46,38,0.88)';
+    c.font = `italic ${u * 1.02}px 'Instrument Serif', Georgia, serif`;
+    let y = pad + u * 1.0;
+    for (const l of lines) { c.fillText(l, pad, y); y += lh; }
+    c.save();
+    c.globalCompositeOperation = 'multiply';
+    c.globalAlpha = 0.45;
+    c.drawImage(this._stoneTile(), 0, 0, w, h);
+    c.restore();
+    lay.w = w; lay.h = h;
+    return lay;
+  }
+
+  drawNote(ctx) {
+    const G = this.geom;
+    const a = this.noteA * clamp01(0.06 + this.lit * 0.94) * this.plinthOpacity;
+    if (!G || a <= 0.012) return;
+    const lay = this._noteL || this._renderNote(this.r.dpr);
+    if (!lay || !this.labelBox) return;
+    const u = G.u, B = this.labelBox;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(B.x + u * 1.1, B.y + B.h + u * 1.5);
+    ctx.rotate(-0.021);                       // nobody pins these straight
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
+    ctx.fillRect(u * 0.16, u * 0.22, lay.w, lay.h);
+    ctx.drawImage(lay.canvas, 0, 0, lay.w, lay.h);
+    const g2 = ctx.createLinearGradient(0, 0, lay.w * 0.7, lay.h);
+    g2.addColorStop(0, `rgba(255,238,208,${0.14 * this.lit})`);
+    g2.addColorStop(1, 'rgba(10,10,14,0.16)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, 0, lay.w, lay.h);
+    ctx.restore();
+  }
+
   // The plinth: a rectangular box of painted stone, dead-on.
   // Layer contents, back to front:
   //   cast shadow on the floor → reflection in the floor →
@@ -760,7 +970,10 @@ export class Set {
   // ---------------------------------------------------------
   // per-frame
   // ---------------------------------------------------------
-  update(dt) { this.t += dt; }
+  update(dt) {
+    this.t += dt;
+    this.noteA = damp(this.noteA, this._noteText ? 1 : 0, 7, dt);
+  }
 
   get lit() {
     return this.exposure * (1 - this.flicker * (0.35 + 0.65 * Math.abs(Math.sin(this.t * 37))));

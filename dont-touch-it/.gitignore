@@ -13,3 +13,6 @@ tools/refdump.mjs
 tools/play-l1b.mjs
 tools/bell.mjs
 tools/zoomshot.mjs
+tools/crop.mjs
+tools/crit-*.mjs
+lum.py
