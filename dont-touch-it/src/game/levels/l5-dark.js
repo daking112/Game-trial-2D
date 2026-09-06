@@ -442,7 +442,7 @@ export class L5Dark extends Level {
       this.plinths.push({
         x: this.g.cx + side * this.g.topRx * (0.52 + (1 - t) * 0.95) * jitter,
         y: this.g.topY - (this.g.topY - horizon) * (0.16 + t * 0.62),
-        s: 0.44 * (1 - t * 0.62),
+        s: 0.38 * (1 - t * 0.60),
         a: 0,
         delay: 0.5 + t * 1.7 + (side > 0 ? 0.11 : 0),
       });
@@ -462,31 +462,76 @@ export class L5Dark extends Level {
     const g = this.g;
     // farthest first, so nearer plinths occlude the ones behind them
     const order = this.plinths.slice().sort((a, b) => a.s - b.s);
+    const SG = this.game.set.geom;
+    const K = (SG && SG.plinth && SG.plinth.k) || 0.86;
     for (const pl of order) {
       if (pl.a <= 0.01) continue;
       ctx.save();
-      // haze with distance: the far end of the room is barely there
-      const fade = 0.24 + pl.s * 0.76;
-      ctx.globalAlpha = pl.a * fade * this.reveal;
-      const hw = g.topRx * pl.s, hh = (g.h - pl.y) * 0.9;
-      const grd = ctx.createLinearGradient(pl.x - hw, 0, pl.x + hw, 0);
-      grd.addColorStop(0, '#0d0e12');
-      grd.addColorStop(0.42, '#282b32');
-      grd.addColorStop(0.62, '#1c1e24');
-      grd.addColorStop(1, '#0a0b0e');
+      // haze with distance: the far end of the room is barely there, and
+      // this multiplies EVERYTHING. Applying it to the body but not to the
+      // lit top face left the far plinths measuring brighter than the near
+      // ones — the depth cue inverted on the one frame the game builds to.
+      // Steeply, or they read as a skyline rather than as a room that
+      // keeps going. The nearest rank sits at about half the hero's
+      // exposure and the furthest at a quarter of that.
+      // Steeply, and non-linearly. A gentle ramp left the far ranks with
+      // MORE contrast against their own background than the near ones —
+      // the depth cue inverted on the one frame the whole game builds to,
+      // because a small plinth is mostly lit top face while a near one is
+      // mostly dark front face. The nearest rank now reads about three
+      // times the furthest.
+      const fade = (0.03 + (pl.s / 0.34) ** 1.7 * 0.44) * pl.a * this.reveal;
+      ctx.globalAlpha = clamp01(fade);
+      const hw = g.topRx * pl.s;
+      const bw = hw * K;                       // back edge, as the hero's
+      const ry = hw * 0.19;
+      const hh = (g.h - pl.y) * 0.9;
+
+      // These are the same object as the one you are standing at, further
+      // away: a box, not a cylinder. Rendering them as cylinders was the
+      // one thing stopping the shot reading as a room full of plinths.
+      // top face, a trapezoid narrowing to the back
+      ctx.beginPath();
+      ctx.moveTo(pl.x - hw, pl.y);
+      ctx.lineTo(pl.x + hw, pl.y);
+      ctx.lineTo(pl.x + bw, pl.y - ry * 1.9);
+      ctx.lineTo(pl.x - bw, pl.y - ry * 1.9);
+      ctx.closePath();
+      const tg = ctx.createLinearGradient(pl.x, pl.y - ry * 1.9, pl.x, pl.y);
+      tg.addColorStop(0, 'rgba(52,50,52,0.9)');
+      tg.addColorStop(0.5, 'rgba(112,108,102,0.92)');
+      tg.addColorStop(1, 'rgba(148,142,132,0.94)');
+      ctx.fillStyle = tg;
+      ctx.fill();
+
+      // front face, tuned to the hero's own paint
+      const grd = ctx.createLinearGradient(0, pl.y, 0, pl.y + hh);
+      grd.addColorStop(0, '#3b3a3e');
+      grd.addColorStop(0.22, '#2b2b31');
+      grd.addColorStop(0.62, '#17171c');
+      grd.addColorStop(1, '#0b0b0f');
       ctx.fillStyle = grd;
       ctx.fillRect(pl.x - hw, pl.y, hw * 2, hh);
-      // lit top face, and a hint of a light pool above each one
-      const tg = ctx.createRadialGradient(pl.x, pl.y, 0, pl.x, pl.y, hw);
-      tg.addColorStop(0, `rgba(186,180,172,${0.62 * pl.a})`);
-      tg.addColorStop(1, `rgba(96,94,98,${0.34 * pl.a})`);
-      ctx.fillStyle = tg;
+      // and its chamfered left arris, which is what tells you it is a box
+      const lc = ctx.createLinearGradient(pl.x - hw, 0, pl.x - hw + hw * 0.10, 0);
+      lc.addColorStop(0, 'rgba(210,200,182,0.20)');
+      lc.addColorStop(1, 'rgba(210,200,182,0)');
+      ctx.fillStyle = lc;
+      ctx.fillRect(pl.x - hw, pl.y, hw * 0.10, hh);
+
+      // the front-top arris: the brightest line on the hero, so also here
+      ctx.strokeStyle = 'rgba(255,242,214,0.42)';
+      ctx.lineWidth = Math.max(0.6, hw * 0.022);
       ctx.beginPath();
-      ctx.ellipse(pl.x, pl.y, hw, hw * 0.19, 0, 0, TAU);
-      ctx.fill();
+      ctx.moveTo(pl.x - hw, pl.y);
+      ctx.lineTo(pl.x + hw, pl.y);
+      ctx.stroke();
+
+      // its own little pool of light — the thing that reads as ANOTHER
+      // room rather than another box
       ctx.globalCompositeOperation = 'lighter';
       const lp = ctx.createRadialGradient(pl.x, pl.y - hw * 0.9, 0, pl.x, pl.y - hw * 0.9, hw * 2.1);
-      lp.addColorStop(0, `rgba(255,222,178,${0.10 * pl.a * fade})`);
+      lp.addColorStop(0, 'rgba(255,222,178,0.10)');
       lp.addColorStop(1, 'rgba(255,222,178,0)');
       ctx.fillStyle = lp;
       ctx.fillRect(pl.x - hw * 2.2, pl.y - hw * 3, hw * 4.4, hw * 4);
