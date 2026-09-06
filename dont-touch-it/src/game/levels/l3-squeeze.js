@@ -32,7 +32,7 @@ import {
 import {
   VerletWorld, BendConstraint, makeSoftBody,
 } from '../../physics/verlet.js';
-import { contactShadow, engrave, PALETTES, metalFill } from '../../render/materials.js';
+import { contactShadow, engrave, PALETTES, KEY, metalFill } from '../../render/materials.js';
 import { Audio } from '../../core/audio.js';
 import Haptics from '../../core/haptics.js';
 import { Pulse } from '../../core/tween.js';
@@ -1323,23 +1323,56 @@ export class L3Squeeze extends Level {
     // glint's little circle from the pass above (a path survives
     // save/restore), so stroking here without this drew a bright arc
     // floating outside the body.
-    ringPath(ctx, pts);
+    // A single stroke of one width around the whole contour is the tell
+    // that makes a filled shape read as vector art. A gradient across the
+    // bounding box does not fix it either: two points on opposite sides of
+    // the body can face completely different ways and still project to the
+    // same place along it. So the rim is walked SEGMENT BY SEGMENT and
+    // bucketed by which way each one actually turns — bright and narrow
+    // where it faces the key, dark and wide through the terminator, cool
+    // where the plinth bounces back into it.
+    // A rim has to change as the surface turns, and it has to do it
+    // CONTINUOUSLY — a thin bright line on a dark ground is the most
+    // banding-sensitive thing on the screen, and every piecewise version
+    // of this (buckets, then per-segment strokes, then twenty-four spline
+    // runs) read as a chain of links rather than as one wet edge.
+    //
+    // A linear gradient across the bounding box does not work either, and
+    // that is what used to be here: two points on opposite sides of the
+    // body can face completely different ways and still project to the
+    // same place along it, so the bottom-right of the contour came out the
+    // same pale pink as the top-left.
+    //
+    // A RADIAL gradient centred out beyond the body on the key side does
+    // work. On a convex body a point's position relative to the centre
+    // tracks its normal closely, so distance-from-the-light is a good
+    // stand-in for the cosine — and a gradient is continuous by
+    // construction, in one stroke.
     const rimw = Math.max(1, rr * 0.045);
+    const lxc = b.cx + KEY.x * rr * 2.4, lyc = b.cy + KEY.y * rr * 2.4;
+    const rg = ctx.createRadialGradient(lxc, lyc, rr * 1.05, lxc, lyc, rr * 4.3);
+    rg.addColorStop(0, 'rgba(255,240,230,0.86)');
+    rg.addColorStop(0.30, 'rgba(255,196,182,0.50)');
+    rg.addColorStop(0.56, 'rgba(126,28,46,0.62)');
+    rg.addColorStop(0.82, 'rgba(132,84,120,0.50)');
+    rg.addColorStop(1, 'rgba(152,182,230,0.50)');
+    ringPath(ctx, pts);
+    ctx.lineCap = 'round';
     ctx.lineWidth = rimw;
-    const rg = ctx.createLinearGradient(b.cx - rx, b.cy - ry, b.cx + rx, b.cy + ry);
-    rg.addColorStop(0, 'rgba(255,236,224,0.72)');
-    rg.addColorStop(0.26, 'rgba(255,190,176,0.24)');
-    rg.addColorStop(0.58, 'rgba(120,26,44,0.30)');
-    rg.addColorStop(1, 'rgba(168,196,240,0.40)');
     ctx.strokeStyle = rg;
     ctx.stroke();
 
-    // a hairline of pure specular along the very top-left edge
+    // and a hairline of pure specular inside the key-facing arc only
     ctx.save();
+    ringPath(ctx, pts);
     ctx.clip();
-    ctx.lineWidth = rimw * 0.55;
-    ctx.strokeStyle = 'rgba(255,252,246,0.55)';
-    ctx.translate(-rimw * 0.5, -rimw * 0.6);
+    // a hairline of pure specular, fading out as the contour turns away
+    const sh = ctx.createRadialGradient(lxc, lyc, rr * 1.05, lxc, lyc, rr * 3.0);
+    sh.addColorStop(0, 'rgba(255,252,246,0.66)');
+    sh.addColorStop(1, 'rgba(255,252,246,0)');
+    ctx.lineWidth = rimw * 0.5;
+    ctx.strokeStyle = sh;
+    ctx.translate(-rimw * 0.45, -rimw * 0.55);
     ringPath(ctx, pts);
     ctx.stroke();
     ctx.restore();

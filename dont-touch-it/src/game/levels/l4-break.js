@@ -42,6 +42,7 @@ import {
 import {
   PALETTES, metalFill, contactShadow, engrave, caustic, roundRectPath,
 } from '../../render/materials.js';
+import { KEY, facetNormal } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
 import { Layer } from '../../render/renderer.js';
 import { Audio } from '../../core/audio.js';
@@ -2220,6 +2221,8 @@ export class L4Break extends Level {
 
     // --- bodies
     for (const d of P.shards) {
+      if (!d.nrm) d.nrm = facetNormal((d.data.restX ?? d.x) * 131 + (d.data.restY ?? d.y) * 71);
+      d.diff = Math.max(0, d.nrm.x * KEY.x + d.nrm.y * KEY.y + d.nrm.z * KEY.z);
       ctx.save();
       ctx.translate(d.x, d.y);
       // Once a piece stops moving it is lying ON the plinth, seen at a
@@ -2251,20 +2254,39 @@ export class L4Break extends Level {
           ctx.restore();
         }
       } else {
-        if (!d.grad) d.grad = this._shardGrad(ctx, d.data.r, false);
-        ctx.fillStyle = d.grad;
+        // Clear glass over a lit surface IS that surface, darkened, plus a
+        // caustic on its edges. This was a cached screen-space gradient
+        // that did not know which way its own piece was facing, so a
+        // hundred and sixty of them had one value between them — a decal
+        // sheet, and at moderate alpha the middle of the heap composited
+        // to solid white. A flat fill keyed to the facet is both cheaper
+        // and the only thing that gives a pile a range.
+        ctx.fillStyle = `rgba(10,16,24,${(0.34 - d.diff * 0.16) * lit})`;
         ctx.fill(d.p2);
+        if (d.diff > 0.66) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = `rgba(216,240,255,${(d.diff - 0.66) * 0.9 * lit})`;
+          ctx.fill(d.p2);
+          ctx.restore();
+        }
       }
       ctx.restore();
     }
 
-    // --- edges, batched: one path for lit edges, one for shaded
-    const litP = new Path2D(), dimP = new Path2D();
+    // --- edges, bucketed
+    // Batching all the lit edges into one path made every caustic in the
+    // heap the same weight and the same white, whatever the piece was
+    // doing — a hundred and sixty identical 2px strokes, which is exactly
+    // what cut paper looks like. Three buckets instead of one still costs
+    // three strokes for the whole pile, and gives the pile a range.
+    const dimP = new Path2D(), litLo = new Path2D(), litHi = new Path2D();
     const LX = -0.55, LY = -0.8;
     for (const d of P.shards) {
       const ca = Math.cos(d.a), sa = Math.sin(d.a);
       const fl = d.rest ? (d.tilt ?? 0.52) : 1;   // matches the body pass
       const poly = d.poly, n = poly.length >> 1;
+      const hot = (d.diff ?? 0.5) > 0.55;
       let px = d.x + poly[(n - 1) * 2] * ca - poly[(n - 1) * 2 + 1] * sa;
       let py = d.y + (poly[(n - 1) * 2] * sa + poly[(n - 1) * 2 + 1] * ca) * fl;
       for (let i = 0; i < n; i++) {
@@ -2274,11 +2296,11 @@ export class L4Break extends Level {
         const ex = qx - px, ey = qy - py;
         const L = Math.hypot(ex, ey) || 1;
         const nx = ey / L, ny = -ex / L;
-        // 0.12 put roughly half of every shard's outline in the lit
-        // bucket, and 158 shards stroked bright white read as a scribble
-        // rather than as glass. Only edges genuinely turned toward the key
-        // light should catch it.
-        const tgt = (nx * LX + ny * LY) > (mirror ? 0.42 : 0.62) ? litP : dimP;
+        // Only edges genuinely turned toward the key light catch it: at a
+        // loose threshold roughly half of every outline landed in the lit
+        // bucket, which reads as a scribble rather than as glass.
+        const tgt = (nx * LX + ny * LY) > (mirror ? 0.42 : 0.62)
+          ? (hot ? litHi : litLo) : dimP;
         tgt.moveTo(px, py); tgt.lineTo(qx, qy);
         px = qx; py = qy;
       }
@@ -2289,9 +2311,12 @@ export class L4Break extends Level {
     ctx.lineWidth = Math.max(0.6, u * 0.08);
     ctx.stroke(dimP);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(255,255,255,${(mirror ? 0.66 : 0.30) * lit})`;
-    ctx.lineWidth = Math.max(0.7, u * (mirror ? 0.13 : 0.10));
-    ctx.stroke(litP);
+    ctx.strokeStyle = `rgba(226,244,255,${(mirror ? 0.30 : 0.13) * lit})`;
+    ctx.lineWidth = Math.max(0.6, u * (mirror ? 0.10 : 0.075));
+    ctx.stroke(litLo);
+    ctx.strokeStyle = `rgba(255,255,255,${(mirror ? 0.72 : 0.42) * lit})`;
+    ctx.lineWidth = Math.max(0.7, u * (mirror ? 0.14 : 0.10));
+    ctx.stroke(litHi);
     ctx.restore();
 
     // --- sparkle: a rotating subset so the pile never sits still
