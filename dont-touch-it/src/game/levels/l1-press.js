@@ -2015,7 +2015,43 @@ export class L1Press extends Level {
     ctx.fillStyle = cg;
     ctx.fillRect(cx - capRx * 1.3, capY - bulge * 2, capRx * 2.6, bulge * 2 + capRy * 2);
 
+    // ---- what a dome does at its own contour ----
+    // The red at the extreme edge of this cap used to be the same red as
+    // the red in the middle of it, which means the dome had no curvature
+    // at its silhouette and read as a disc with a highlight stuck on. A
+    // curved dielectric darkens AND saturates as it turns away, and then
+    // picks up a narrow Fresnel rim right at the grazing angle.
+    const ccx = cx, ccy = capY - bulge * 0.42;
+    ctx.save();
+    ctx.translate(ccx, ccy);
+    // circular gradients, squashed to the dome's own proportions
+    ctx.scale(1, bulge / capRx);
+    const fr = ctx.createRadialGradient(0, 0, capRx * 0.30, 0, 0, capRx * 1.12);
+    fr.addColorStop(0, 'rgba(52,4,8,0)');
+    fr.addColorStop(0.62, `rgba(58,5,9,${0.26 * dead})`);
+    fr.addColorStop(0.88, `rgba(36,2,5,${0.58 * dead})`);
+    fr.addColorStop(1, `rgba(22,1,3,${0.82 * dead})`);
+    ctx.fillStyle = fr;
+    ctx.fillRect(-capRx * 1.5, -capRx * 1.5, capRx * 3, capRx * 3);
     ctx.globalCompositeOperation = 'lighter';
+    const fz = ctx.createRadialGradient(0, 0, capRx * 0.86, 0, 0, capRx * 1.06);
+    fz.addColorStop(0, 'rgba(255,150,120,0)');
+    fz.addColorStop(0.72, `rgba(255,168,138,${0.30 * dead})`);
+    fz.addColorStop(1, 'rgba(255,190,166,0)');
+    ctx.fillStyle = fz;
+    ctx.fillRect(-capRx * 1.5, -capRx * 1.5, capRx * 3, capRx * 3);
+    ctx.restore();
+
+    ctx.globalCompositeOperation = 'lighter';
+    // The brass ring is ten pixels below this thing under a tungsten key
+    // and used to contribute nothing to it. Warm bounce, into the skirt.
+    const bb = ctx.createLinearGradient(0, capY + capRy * 0.4, 0, capY - bulge * 0.72);
+    bb.addColorStop(0, `rgba(255,176,84,${0.30 * dead})`);
+    bb.addColorStop(0.5, `rgba(255,166,96,${0.10 * dead})`);
+    bb.addColorStop(1, 'rgba(255,166,96,0)');
+    ctx.fillStyle = bb;
+    ctx.fillRect(cx - capRx * 1.3, capY - bulge * 2, capRx * 2.6, bulge * 2 + capRy * 2);
+
     // broad gloss sweep — moves down the dome as the cap travels, which is
     // what makes the press read as motion rather than a colour change
     const glX = cx - capRx * 0.30, glY = capY - bulge * (0.86 - b.press * 0.22);
@@ -2033,6 +2069,41 @@ export class L1Press extends Level {
     rl.addColorStop(1, `rgba(255,176,148,${0.34 * dead})`);
     ctx.fillStyle = rl;
     ctx.fillRect(cx, capY - bulge * 2, capRx * 1.3, bulge * 2 + capRy * 2);
+    ctx.restore();
+
+    // ---- the incident ----
+    // A moulded cap has a parting line where the two halves of the tool
+    // met, and a switch that has been pressed for fifty years has a ring
+    // of polish on its crown where the lacquer has gone glassy and the
+    // matte around it has gone slightly grey. Neither costs anything and
+    // between them they are the difference between an object and a shape.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx + capRx * 0.055, capY + capRy * 0.5);
+    ctx.quadraticCurveTo(cx + capRx * 0.10, capY - bulge * 0.72,
+      cx + capRx * 0.02, capY - bulge * 1.30);
+    ctx.strokeStyle = `rgba(24,2,4,${0.34 * dead})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.13);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,178,158,${0.20 * dead})`;
+    ctx.lineWidth = Math.max(0.7, g.u * 0.07);
+    ctx.translate(-g.u * 0.09, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    // the polish: a soft patch where a thumb has always landed
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const px2 = cx + capRx * 0.10, py2 = capY - bulge * (0.80 - b.press * 0.18);
+    const pg2 = ctx.createRadialGradient(px2, py2, 0, px2, py2, capRx * 0.62);
+    pg2.addColorStop(0, `rgba(255,214,198,${0.11 * dead})`);
+    pg2.addColorStop(0.55, `rgba(255,206,192,${0.045 * dead})`);
+    pg2.addColorStop(1, 'rgba(255,206,192,0)');
+    ctx.fillStyle = pg2;
+    ctx.beginPath();
+    ctx.ellipse(px2, py2, capRx * 0.62, bulge * 0.46, -0.2, 0, TAU);
+    ctx.fill();
     ctx.restore();
 
     // tight hotspot, sharp enough to read as lacquer rather than plastic

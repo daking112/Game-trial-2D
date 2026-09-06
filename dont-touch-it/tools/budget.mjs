@@ -16,8 +16,26 @@ const BUDGET = +(process.env.BUDGET || 8);      // ms of draw, our half of 16.7
 const LEVELS = (process.env.LEVELS || '1,2,3,4').split(',');
 const DEVS = (process.env.DEVICES_ || 'phone,tall,tablet').split(',');
 
+const EXPECTED = ['l1', 'l3', 'l4', 'l5'];
 const { srv, port } = await serve();
 let failed = false;
+
+// A chapter whose module throws on import is silently dropped from the
+// manifest by the fault-tolerant loader, and every ?level= after it then
+// points at the wrong chapter — so this tool would go on reporting twelve
+// green rows while measuring a game with a hole in it. Check first.
+{
+  const s = await launch({ device: 'phone', url: `http://127.0.0.1:${port}/?level=1&quality=high` });
+  await s.wait(2600);
+  const loaded = await s.page.evaluate(() => window.__DTI__.game.levelClasses.map(c => c.id));
+  const missing = EXPECTED.filter(id => !loaded.includes(id));
+  if (missing.length) {
+    console.log(`MISSING CHAPTERS: ${missing.join(', ')}  (loaded: ${loaded.join(', ')})`);
+    console.log('\nBUDGET FAILED');
+    await s.browser.close(); srv.close(); process.exit(1);
+  }
+  await s.browser.close();
+}
 for (const device of DEVS) {
   for (const level of LEVELS) {
     // pinned to `high`: the governor would otherwise quietly demote and
