@@ -50,6 +50,26 @@ await s.wait(420);  await shot('04-mirror-shatter');
 await s.wait(1400); await shot('05-falling');
 await s.wait(2400); await shot('06-pile');
 await s.wait(2600); await shot('06b-closeup');
+// The pile while the camera is still pushed in on it. This is the frame
+// the whole chapter is built toward — the one that has to answer whether
+// there is a picture in any of these pieces — so it gets a tight crop of
+// its own, derived from the pane rather than from magic numbers.
+{ const g = await s.page.evaluate(() => {
+    const l = window.__DTI__.game.level, P = l.g.panes[1], c = window.__DTI__.game.cam;
+    const z = c.ozoom, w = window.__DTI__.game.r.w, h = window.__DTI__.game.r.h;
+    // world -> screen under the camera the chapter is holding
+    const sx = (P.cx - w / 2 + c.ox) * z + w / 2;
+    const sy = (P.y1 - h / 2 + c.oy) * z + h / 2;
+    return { x: sx, y: sy, w: P.w * z, h: P.h * z, sw: w, sh: h };
+  });
+  const cw = Math.min(g.sw, g.w * 1.5), ch = Math.min(g.sh, g.h * 0.62);
+  await s.page.evaluate(() => window.__DTI__.pause());
+  await s.page.screenshot({ path: path.join(dir, '06z-pile-crop.png'), timeout: 60000,
+    clip: { x: Math.max(0, Math.min(g.sw - cw, g.x - cw / 2)),
+            y: Math.max(0, Math.min(g.sh - ch, g.y - ch * 0.82)),
+            width: cw, height: ch } });
+  await s.page.evaluate(() => window.__DTI__.resume());
+  console.log('-> 06z-pile-crop'); }
 await s.wait(1600); await shot('06c-closeup2');
 // a close look at the pile: is there a picture in any of these?
 { await s.page.evaluate(() => window.__DTI__.pause());
