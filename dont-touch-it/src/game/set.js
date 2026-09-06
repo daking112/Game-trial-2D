@@ -263,10 +263,10 @@ export class Set {
 
     // the downlight pool landing on the floor around the plinth
     const py = sy + fh * 0.70;
-    const pool = c.createRadialGradient(cx, py, 0, cx, py, w * 0.80);
-    pool.addColorStop(0, 'rgba(255,222,178,0.105)');
-    pool.addColorStop(0.34, 'rgba(250,208,164,0.045)');
-    pool.addColorStop(0.68, 'rgba(226,184,146,0.011)');
+    const pool = c.createRadialGradient(cx, py, 0, cx, py, w * 0.95);
+    pool.addColorStop(0, 'rgba(255,224,182,0.30)');
+    pool.addColorStop(0.30, 'rgba(252,212,170,0.155)');
+    pool.addColorStop(0.62, 'rgba(230,190,150,0.055)');
     pool.addColorStop(1, 'rgba(220,180,142,0)');
     c.save();
     c.translate(cx, py); c.scale(1, 0.52); c.translate(-cx, -py);
@@ -589,16 +589,21 @@ export class Set {
     c.beginPath(); c.rect(0, G.floorY, w, h - G.floorY); c.clip();
     const sc0 = (yBase + yBB) * 0.5;
     // wide ambient pool
+    // A near-vertical downlight throws a TIGHT shadow that hugs the base.
+    // This used to be a disc of 70%-opaque black one and a half plinth-
+    // widths across, which is most of the visible floor — so the strongest
+    // light in the room landed on the object and the ground around it
+    // measured L=16 against a wall of 27. The room had no floor.
     c.save();
-    c.translate(cx + hw * 0.07, sc0 + (yBase - yBB) * 0.18);
-    c.scale(1, (yBase - yBB) * 0.95 / (hw * 1.6));
-    const sg = c.createRadialGradient(0, 0, 0, 0, 0, hw * 1.6);
-    sg.addColorStop(0, 'rgba(0,0,0,0.70)');
-    sg.addColorStop(0.44, 'rgba(0,0,0,0.50)');
-    sg.addColorStop(0.76, 'rgba(0,0,0,0.16)');
+    c.translate(cx + hw * 0.06, sc0 + (yBase - yBB) * 0.16);
+    c.scale(1, (yBase - yBB) * 0.95 / (hw * 1.15));
+    const sg = c.createRadialGradient(0, 0, 0, 0, 0, hw * 1.15);
+    sg.addColorStop(0, 'rgba(0,0,0,0.58)');
+    sg.addColorStop(0.46, 'rgba(0,0,0,0.36)');
+    sg.addColorStop(0.78, 'rgba(0,0,0,0.10)');
     sg.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = sg;
-    c.beginPath(); c.arc(0, 0, hw * 1.6, 0, TAU); c.fill();
+    c.beginPath(); c.arc(0, 0, hw * 1.15, 0, TAU); c.fill();
     c.restore();
     // tight occlusion right at the base line
     c.save();
