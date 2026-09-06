@@ -16,3 +16,4 @@ tools/zoomshot.mjs
 tools/crop.mjs
 tools/crit-*.mjs
 lum.py
+__pycache__/
