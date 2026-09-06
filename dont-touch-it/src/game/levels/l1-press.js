@@ -135,6 +135,10 @@ export class L1Press extends Level {
       intact: true, restX: 0, restY: 0, restRot: 0, resting: false,
       ringT: 0, stress: 0,
     };
+    this.jar.breaking = false;
+    this.jar.fracture = 0;
+    this.jar.cracks = null;
+    this.jar.impactX = 0;
     this.strikes = [];       // expanding wavefronts from each contact
     this.prints = [];        // grease, and it stays
     this.jarSpring = { v: 0 };
@@ -199,6 +203,7 @@ export class L1Press extends Level {
     if (this.phase === 'strain') this._updateStrain(dt);
     if (this.phase === 'jar') this._updateJar(dt);
     else if (this.jar.released && !this.jar.gone) this._updateJarPhysics(dt);
+    if (this.jar.breaking) this.jar.fracture = Math.min(1, this.jar.fracture + dt / 0.135);
     if (this.phase === 'button') this._updateButton(dt);
     if (this.phase === 'glass') this._updateGlassTaps(dt);
 
@@ -584,11 +589,80 @@ export class L1Press extends Level {
     this._expose(0.5);
   }
 
+  /**
+   * Glass does not teleport.
+   *
+   * This used to set `gone` on the frame of impact and spawn the debris in
+   * the same breath: filmed at fifty frames a second, the jar was whole
+   * and falling in one frame and did not exist in the next, with a warm
+   * wash over the cut. Eighty-five milliseconds, no intermediate state —
+   * which is a particle system firing, not a body breaking.
+   *
+   * So impact starts a FRACTURE. The jar stays where it is and stays
+   * whole while a crack network runs up the shell from the point that
+   * struck the plate; only when the cracks reach the shoulder does it
+   * actually come apart. It is a tenth of a second, and it is the
+   * difference between a cut and an event.
+   */
   _shatterJar(impact) {
     const g = this.g, j = this.jar;
     j.released = false;
-    j.gone = true;
     j.intact = false;
+    j.breaking = true;
+    j.fracture = 0;
+    j.impact = impact;
+    j.impactX = (j.x >= 0 ? -1 : 1) * g.jarR * rrange(0.30, 0.62);
+    j.cracks = this._jarCracks(j.impactX);
+    SFX.glassRing(760 + rrange(-90, 90), 0.7);
+    Haptics.tick();
+    this.shake(0.30);
+    this.slowmo(0.24, 0.62);
+    this.tl.after(0.135, () => this._burstJar(impact));
+  }
+
+  /**
+   * The crack network, in jar-local coordinates, generated once at impact.
+   * Branches leave the strike and run up and outward, dividing as they go
+   * and thinning with every division, the way a shell actually fails.
+   */
+  _jarCracks(ix) {
+    const g = this.g;
+    const rng = makeRng(1301 + ((ix * 100) | 0));
+    const H = g.jarStraight + g.jarDome;
+    const out = [];
+    const grow = (x, y, ang, len, w, depth) => {
+      const pts = [x, y];
+      let px = x, py = y, a = ang;
+      const steps = 3 + ((rng() * 3) | 0);
+      for (let i = 0; i < steps; i++) {
+        a += rrange(-0.42, 0.42);
+        const l = len / steps;
+        px += Math.cos(a) * l;
+        py += Math.sin(a) * l;
+        pts.push(px, py);
+        if (depth < 2 && rng() < 0.42 && i > 0) {
+          grow(px, py, a + (rng() < 0.5 ? 1 : -1) * rrange(0.5, 1.0),
+            len * rrange(0.30, 0.55), w * 0.6, depth + 1);
+        }
+      }
+      out.push({ pts, w, at: Math.hypot(x - ix, y) / H });
+      return out;
+    };
+    const n = 5 + ((rng() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      // upward and away from the strike, never straight down into the plate
+      const a = -Math.PI / 2 + rrange(-1.15, 1.15);
+      // Wide enough to actually see. At a tenth of a layout unit these
+      // were sub-pixel hairlines on a phone and the fracture was invisible.
+      grow(ix, 0, a, H * rrange(0.45, 0.95), g.u * rrange(0.34, 0.62), 0);
+    }
+    return out;
+  }
+
+  _burstJar(impact) {
+    const g = this.g, j = this.jar;
+    j.breaking = false;
+    j.gone = true;
     SFX.glassShatter(clamp01(0.6 + impact / 1600));
     Haptics.shatter();
     this.shake(0.62);
@@ -598,12 +672,24 @@ export class L1Press extends Level {
 
     const rng = makeRng(77);
     const cx = g.cx + j.x, baseY = g.jarBaseY;
-    for (let i = 0; i < 46; i++) {
+    // A bell jar of this volume does not go to gravel of one grade. It
+    // deposits a HIERARCHY — a few big curved shells that rock as they
+    // settle, a scatter of mid pieces and a lot of fines — and it does not
+    // stay tidily inside the flange it was standing in. Forty-six
+    // identically-sized pieces in a ring is what a particle emitter makes.
+    const N = 62;
+    for (let i = 0; i < N; i++) {
       const a = rng() * TAU;
       const rr = Math.sqrt(rng()) * g.jarR;
       const px = cx + Math.cos(a) * rr;
       const py = baseY - rng() * (g.jarStraight + g.jarR) * 0.95;
-      const size = g.u * (0.7 + rng() * 2.1);
+      // power law: six or seven shells, then everything else
+      const big = i < 7;
+      const size = big
+        ? g.u * (3.4 + rng() * 2.2)
+        : g.u * (0.5 + 2.0 * rng() ** 2.6);
+      // and roughly one in five is thrown hard enough to clear the plate
+      const away = !big && rng() < 0.22 ? rrange(2.2, 3.4) : 1;
       // A jar dropped onto a plate does not launch upward. Its rim blows
       // out sideways and its body COLLAPSES: the higher a piece started,
       // the further it has to fall, so height adds downward speed rather
@@ -611,9 +697,10 @@ export class L1Press extends Level {
       // symmetric fountain, which is the look of confetti, not of glass.
       const height = (baseY - py) / Math.max(1, g.jarStraight + g.jarDome);
       const d = new Debris(px, py, shardPoly(size, rng), {
-        vx: (px - cx) * rrange(3.0, 6.0) + rrange(-120, 120),
+        vx: ((px - cx) * rrange(3.0, 6.0) + rrange(-120, 120)) * away,
         vy: rrange(-210, -40) * (1 - height) + height * rrange(220, 620),
-        va: rrange(-16, 16), restitution: 0.28, friction: 0.80, grav: 2700,
+        va: rrange(-16, 16) / (big ? 2.4 : 1),
+        restitution: big ? 0.14 : 0.28, friction: big ? 0.92 : 0.80, grav: 2700,
         data: { kind: 'shard', size },
       });
       d.baseFloor = g.plateY + rrange(-1, 5);
@@ -1422,9 +1509,13 @@ export class L1Press extends Level {
       const gg = ctx.createLinearGradient(
         d.x - KEY.x * s * 1.5, d.y - KEY.y * s * 1.5,
         d.x + KEY.x * s * 1.5, d.y + KEY.y * s * 1.5);
-      gg.addColorStop(0, `rgba(8,12,18,${(0.36 - diff * 0.12) * lit})`);
-      gg.addColorStop(0.55, `rgba(58,76,92,${0.14 * lit})`);
-      gg.addColorStop(1, `rgba(190,220,240,${(0.15 + diff * 0.34) * lit})`);
+      // A piece in the air has nothing behind it to darken — over a dark
+      // wall it should be nearly invisible except for the light on its
+      // edges. Only a piece lying on the lit plinth reads as tinted glass.
+      const solid = d.rest ? 1 : 0.34;
+      gg.addColorStop(0, `rgba(8,12,18,${(0.36 - diff * 0.12) * lit * solid})`);
+      gg.addColorStop(0.55, `rgba(58,76,92,${0.14 * lit * solid})`);
+      gg.addColorStop(1, `rgba(190,220,240,${(0.15 + diff * 0.34) * lit * (d.rest ? 1 : 0.7)})`);
       ctx.fillStyle = gg;
       ctx.fill();
       ctx.restore();
@@ -1708,6 +1799,54 @@ export class L1Press extends Level {
         }
       }
       ctx.restore();
+    }
+
+    // the fracture running up the shell, in the tenth of a second between
+    // the base striking the plate and the jar coming apart
+    if (j.breaking && j.cracks) {
+      const f = j.fracture;
+      ctx.save();
+      this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
+      ctx.clip();
+      ctx.lineCap = 'round';
+      for (const br of j.cracks) {
+        const t = clamp01((f - br.at * 0.30) / 0.70);
+        if (t <= 0) continue;
+        const n = br.pts.length >> 1;
+        const upto = Math.max(1, Math.ceil((n - 1) * t));
+        // A crack in clear glass over a dark room is not an ink line: it
+        // SCATTERS, so the lamp finds it and it is the bright thing. The
+        // dark is only the thin opening underneath. And it tapers — a
+        // fracture is widest where it started and runs out to nothing.
+        for (let i = 1; i <= upto; i++) {
+          const k = 1 - (i - 1) / Math.max(1, n - 1);      // 1 at the root
+          const x0 = cx + br.pts[(i - 1) * 2], y0 = baseY + br.pts[(i - 1) * 2 + 1];
+          const x1 = cx + br.pts[i * 2], y1 = baseY + br.pts[i * 2 + 1];
+          ctx.strokeStyle = `rgba(6,14,22,${0.42 * k * E})`;
+          ctx.lineWidth = Math.max(0.6, br.w * k * 0.62);
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          ctx.strokeStyle = `rgba(238,250,255,${(0.55 + 0.4 * k) * E})`;
+          ctx.lineWidth = Math.max(0.5, br.w * k * 0.34);
+          ctx.beginPath();
+          ctx.moveTo(x0 - br.w * 0.3, y0 - br.w * 0.3);
+          ctx.lineTo(x1 - br.w * 0.3, y1 - br.w * 0.3);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+      // the whole shell goes white a moment before it lets go
+      if (glow && f > 0.45) {
+        glow.save();
+        glow.globalCompositeOperation = 'lighter';
+        const k = (f - 0.45) / 0.55;
+        const gg = glow.createRadialGradient(
+          cx + j.impactX, baseY, 0, cx + j.impactX, baseY, R * 2.6);
+        gg.addColorStop(0, `rgba(226,244,255,${0.42 * k})`);
+        gg.addColorStop(1, 'rgba(226,244,255,0)');
+        glow.fillStyle = gg;
+        glow.beginPath(); glow.arc(cx + j.impactX, baseY, R * 2.6, 0, TAU); glow.fill();
+        glow.restore();
+      }
     }
 
     // every print anyone has left on it
