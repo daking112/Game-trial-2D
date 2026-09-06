@@ -318,6 +318,14 @@ export class L3Squeeze extends Level {
       gen,
       r,
       points: sb.points,
+      // The outline the player SEES is not the one the solver keeps. A
+      // verlet perimeter rings, and the spline was faithfully drawing the
+      // ringing: under a pinch the silhouette grew eighteen evenly spaced
+      // scallops of near-constant amplitude, including at twelve and six
+      // o'clock where nothing was touching it. It read as a bottle cap.
+      // Two Laplacian passes a frame, into a separate array, and
+      // constraint noise never reaches the picture.
+      draw: sb.points.map(p => ({ x: p.x, y: p.y })),
       area: sb.area,
       shell, bend,
       shellRest: 2 * r * Math.sin(Math.PI / n),
@@ -363,6 +371,7 @@ export class L3Squeeze extends Level {
     this._updateBlobs(dt);
     this.world.step(Math.min(dt, 1 / 50));
     this._postSim(dt);
+    for (const b of this.blobs) this._smoothOutline(b);
     this._updateSpill(dt);
     this._updateStrainVoice(dt);
     this._hints(dt);
@@ -403,7 +412,34 @@ export class L3Squeeze extends Level {
     // feed the solver
     const cols = this.world.colliders;
     cols.length = 0;
-    for (const f of this.fingers) cols.push({ type: 'circle', x: f.x, y: f.y, r: f.r, friction: 0.42 });
+    // Soft, and smaller than it looks. A hard collider at 0.21R pushed
+    // every nearby perimeter point clean out of the disc, so the specimen
+    // recoiled from a fingertip and left it standing in a notch of empty
+    // air with nothing to press against. At 0.15R and 55% resolution the
+    // finger sinks in and the surface closes around it, which is both
+    // what silicone does and the only way the contact shading has a
+    // surface to sit on.
+    for (const f of this.fingers)
+      cols.push({ type: 'circle', x: f.x, y: f.y, r: f.r * 0.72, friction: 0.42, soft: 0.55 });
+  }
+
+  /** Two Laplacian passes, draw-only. Never feed this back to the solver. */
+  _smoothOutline(b) {
+    const src = b.points, out = b.draw, n = src.length;
+    if (!out || out.length !== n) return;
+    for (let i = 0; i < n; i++) { out[i].x = src[i].x; out[i].y = src[i].y; }
+    for (let pass = 0; pass < 2; pass++) {
+      let px = out[n - 1].x, py = out[n - 1].y;
+      const fx = out[0].x, fy = out[0].y;
+      for (let i = 0; i < n; i++) {
+        const nx2 = i === n - 1 ? fx : out[i + 1].x;
+        const ny2 = i === n - 1 ? fy : out[i + 1].y;
+        const cx2 = out[i].x, cy2 = out[i].y;
+        out[i].x = cx2 + 0.5 * ((px + nx2) * 0.5 - cx2);
+        out[i].y = cy2 + 0.5 * ((py + ny2) * 0.5 - cy2);
+        px = cx2; py = cy2;
+      }
+    }
   }
 
   _knock(x, y) {
@@ -1147,7 +1183,9 @@ export class L3Squeeze extends Level {
   // ---------- the specimen ----------
   _drawBlob(ctx, glow, b) {
     const g = this.g;
-    const pts = b.points, n = pts.length;
+    // the smoothed outline, not the solver's — see `draw` in _makeBlob
+    const pts = b.draw && b.draw.length === b.points.length ? b.draw : b.points;
+    const n = pts.length;
     const rx = Math.max(4, b.rx), ry = Math.max(4, b.ry);
     const rr = Math.max(rx, ry);
     const load = b.load, stress = b.stress;
@@ -1210,21 +1248,38 @@ export class L3Squeeze extends Level {
     if (b.maxStretch > 0.05 || stress > 0.02) this._drawWhitening(ctx, b, rr);
 
     // --- the seam: a translucent line where it is going to fail ---
-    if (stress > 0.28) this._drawSeam(ctx, b, rx, ry, stress);
+    if (stress > 0.28) this._drawSeam(ctx, b, rx, ry, stress, pts);
 
     // --- fingertip dimples: a dark contact ring and a wet crescent ---
     for (const f of this.fingers) {
       const d = Math.hypot(f.x - b.cx, f.y - b.cy);
       if (d > b.r * 1.6) continue;
-      const cg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 2.1);
-      cg.addColorStop(0, 'rgba(48,6,18,0.46)');
-      cg.addColorStop(0.55, 'rgba(48,6,18,0.16)');
+      // The outline only moves a fingertip's worth; most of what reads as
+      // pressing into something soft is the shading — an occluded well
+      // under the finger and a lit ridge on the far side of it, both
+      // offset toward the room's key so they agree with the rest of the
+      // lighting rather than being drawn on centre.
+      const cg = ctx.createRadialGradient(
+        f.x - f.r * 0.30, f.y - f.r * 0.34, 0, f.x, f.y, f.r * 2.0);
+      cg.addColorStop(0, 'rgba(40,4,14,0.56)');
+      cg.addColorStop(0.42, 'rgba(48,6,18,0.30)');
       cg.addColorStop(1, 'rgba(48,6,18,0)');
       ctx.fillStyle = cg;
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 2.1, 0, TAU); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,214,196,0.30)';
-      ctx.lineWidth = Math.max(0.8, rr * 0.018);
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.02, -2.5, 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 2.0, 0, TAU); ctx.fill();
+      // the ridge of material welling up around the contact
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const wg = ctx.createRadialGradient(f.x, f.y, f.r * 0.86, f.x, f.y, f.r * 1.9);
+      wg.addColorStop(0, 'rgba(255,196,178,0)');
+      wg.addColorStop(0.34, 'rgba(255,206,186,0.22)');
+      wg.addColorStop(1, 'rgba(255,196,178,0)');
+      ctx.fillStyle = wg;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.9, 0, TAU); ctx.fill();
+      ctx.restore();
+      // and the wet crescent, on the lit side
+      ctx.strokeStyle = 'rgba(255,224,208,0.42)';
+      ctx.lineWidth = Math.max(0.8, rr * 0.020);
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.06, -2.55, -0.35); ctx.stroke();
     }
 
     // --- broad wide specular (the silicone read) ---
@@ -1396,35 +1451,64 @@ export class L3Squeeze extends Level {
     ctx.restore();
   }
 
-  _drawSeam(ctx, b, rx, ry, stress) {
+  /**
+   * Light coming through where the body is about to fail.
+   *
+   * It used to be a straight round-capped STROKE of constant width and a
+   * fixed length, so it overshot the silhouette at both ends with square
+   * caps — the one thing light through a translucent thing never does. It
+   * is now a lens: clipped to the body, no width at the ends, widest
+   * where the seam is actually opening.
+   */
+  _drawSeam(ctx, b, rx, ry, stress, pts) {
     const k = (stress - 0.28) / 0.72;
-    const px = -b.axY, py = b.axX;
-    const len = Math.max(rx, ry) * (1.0 + k * 0.25);
-    const x0 = b.mx - px * len, y0 = b.my - py * len;
-    const x1 = b.mx + px * len, y1 = b.my + py * len;
+    const px = -b.axY, py = b.axX;          // along the seam
+    const ax = b.axX, ay = b.axY;           // across it
+    const rr = Math.max(rx, ry);
+    const len = rr * (1.02 + k * 0.22);
+    const wMax = Math.max(1, rr * (0.040 + k * 0.075));
+    const N = 24;
     ctx.save();
-    ctx.lineCap = 'round';
-    // translucent flesh pulling apart
-    const sg = ctx.createLinearGradient(x0, y0, x1, y1);
+    ringPath(ctx, pts);
+    ctx.clip();
+
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const u = (i / N) * 2 - 1;
+      const w = Math.cos(u * Math.PI / 2) ** 1.35 * wMax;
+      const bx2 = b.mx + px * len * u, by2 = b.my + py * len * u;
+      i ? ctx.lineTo(bx2 + ax * w, by2 + ay * w) : ctx.moveTo(bx2 + ax * w, by2 + ay * w);
+    }
+    for (let i = N; i >= 0; i--) {
+      const u = (i / N) * 2 - 1;
+      const w = Math.cos(u * Math.PI / 2) ** 1.35 * wMax;
+      ctx.lineTo(b.mx + px * len * u - ax * w, b.my + py * len * u - ay * w);
+    }
+    ctx.closePath();
+    const sg = ctx.createLinearGradient(
+      b.mx - px * len, b.my - py * len, b.mx + px * len, b.my + py * len);
     sg.addColorStop(0, 'rgba(255,220,190,0)');
-    sg.addColorStop(0.5, `rgba(255,232,206,${0.20 + k * 0.62})`);
+    sg.addColorStop(0.28, `rgba(255,228,200,${0.10 + k * 0.34})`);
+    sg.addColorStop(0.5, `rgba(255,236,212,${0.20 + k * 0.66})`);
+    sg.addColorStop(0.72, `rgba(255,228,200,${0.10 + k * 0.34})`);
     sg.addColorStop(1, 'rgba(255,220,190,0)');
-    ctx.strokeStyle = sg;
-    ctx.lineWidth = Math.max(1, Math.max(rx, ry) * (0.055 + k * 0.06));
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.fillStyle = sg;
+    ctx.fill();
+
     // micro-tears opening along it
     if (k > 0.25) {
       const rng = makeRng(b.seed + 17);
       ctx.strokeStyle = `rgba(255,250,244,${(k - 0.25) * 0.9})`;
-      ctx.lineWidth = Math.max(0.7, Math.max(rx, ry) * 0.016);
+      ctx.lineWidth = Math.max(0.7, rr * 0.016);
+      ctx.lineCap = 'round';
       for (let i = 0; i < 7; i++) {
         const t = rng() * 2 - 1;
-        const cxp = b.mx + px * len * t * 0.86;
-        const cyp = b.my + py * len * t * 0.86;
-        const l = (0.4 + rng() * 0.7) * Math.max(rx, ry) * 0.16 * k;
+        const cxp = b.mx + px * len * t * 0.82;
+        const cyp = b.my + py * len * t * 0.82;
+        const l = (0.4 + rng() * 0.7) * rr * 0.16 * k;
         ctx.beginPath();
-        ctx.moveTo(cxp - b.axX * l, cyp - b.axY * l);
-        ctx.lineTo(cxp + b.axX * l, cyp + b.axY * l);
+        ctx.moveTo(cxp - ax * l, cyp - ay * l);
+        ctx.lineTo(cxp + ax * l, cyp + ay * l);
         ctx.stroke();
       }
     }

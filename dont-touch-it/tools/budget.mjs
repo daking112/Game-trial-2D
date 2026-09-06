@@ -10,7 +10,10 @@
 import { serve, launch, DEVICES } from './harness.mjs';
 
 const BUDGET = +(process.env.BUDGET || 8);      // ms of draw, our half of 16.7
-const LEVELS = (process.env.LEVELS || '0,1,3,4').split(',');
+// ?level is 1-based (main.js does level-1), so these are chapters I..IV.
+// They were '0,1,3,4' for a while, which measured Chapter I twice and
+// Chapter II never.
+const LEVELS = (process.env.LEVELS || '1,2,3,4').split(',');
 const DEVS = (process.env.DEVICES_ || 'phone,tall,tablet').split(',');
 
 const { srv, port } = await serve();

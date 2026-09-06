@@ -174,7 +174,13 @@ export class VerletWorld {
           const dx = p.x - c.x, dy = p.y - c.y;
           const d = Math.hypot(dx, dy);
           if (d < c.r && d > 1e-6) {
-            const s = (c.r - d) / d;
+            // `soft` < 1 resolves the overlap only partly, so the collider
+            // SINKS INTO the body instead of carving a disc out of it.
+            // A hard circle makes the surface run away from a fingertip:
+            // the finger ends up standing in the void it just made, with
+            // nothing under it for a contact shadow or a dimple to sit on,
+            // and the silhouette reads as a bite rather than a press.
+            const s = ((c.r - d) / d) * (c.soft ?? 1);
             p.x += dx * s; p.y += dy * s;
             // friction
             const fx = (p.x - p.ox), fy = (p.y - p.oy);
