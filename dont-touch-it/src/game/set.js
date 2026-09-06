@@ -68,6 +68,7 @@ export class Set {
     this.warmth = 1;          // 1 = tungsten key, 0 = cold emergency
     this.coneStrength = 1;
     this.plinthOpacity = 1;
+    this.vignette = 0;              // extra corner falloff a chapter can pull in
     this.label = null; this._labelL = null; this.labelBox = null;
     this._noteText = null; this._noteL = null; this.noteA = 0;
     this.tint = null;         // css colour graded additively over the room

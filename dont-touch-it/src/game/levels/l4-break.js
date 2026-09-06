@@ -858,9 +858,10 @@ export class L4Break extends Level {
     const isMirror = P.kind === 'mirror';
     S.failure(1, isMirror);
     Haptics.shatter();
-    this.shake(0.72);
-    this.slowmo(0.13, 0.9);
-    this.flash(isMirror ? '210,222,255' : '224,242,255', 0.30, 0.36);
+    this.transgress(ix, iy, {
+      zoom: 1.14, flash: isMirror ? '210,222,255' : '224,242,255', flashA: 0.30,
+      slow: 0.13, hold: 0.9, release: 0.6, shake: 0.72, lean: 0.30,
+    });
     Audio.setRoom(3.0, 2.0, 0.40);
     this.tl.after(2.6, () => Audio.setRoom(1.9, 2.6, 0.26));
     this.dust = 1;

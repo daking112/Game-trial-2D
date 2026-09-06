@@ -89,6 +89,43 @@ export class Level {
   // -------- helpers --------
   say(text, opts) { this.game.narrator.say(text, opts); return this; }
   interrupt(text, opts) { this.game.narrator.interrupt(text, opts); return this; }
+  /**
+   * The moment the rule breaks.
+   *
+   * Every chapter's climax used to be a held still frame: three captures
+   * spanning the three most dramatic seconds in Chapter I came back
+   * pixel-identical apart from the narrator's line. The shell has owned a
+   * camera with trauma, push, slowmo and flash the whole time and none of
+   * it was legible at the payoff.
+   *
+   * Three phases, about nine hundred milliseconds:
+   *
+   *   overdrive   a warm flash and a kick, on the frame it happens;
+   *   the look    time drops to a quarter and the camera pushes in and
+   *               LEANS toward the event — a drift, not a recentre, so
+   *               the player watches the thing rather than being carried
+   *               to it;
+   *   release     back out, on a slower ease than it went in, because a
+   *               camera that snaps home undoes the beat it just made.
+   *
+   * (x, y) is the world point that just happened.
+   */
+  transgress(x, y, opts = {}) {
+    const {
+      zoom = 1.12, flash = '255,226,180', flashA = 0.28,
+      slow = 0.26, hold = 0.34, release = 0.52, shake = 0.5, lean = 0.34,
+    } = opts;
+    const cam = this.game.cam, r = this.r;
+    const base = Math.max(1, this.constructor.push || 1);
+    if (flashA > 0) this.flash(flash, flashA, 0.3);
+    if (shake > 0) this.shake(shake);
+    if (slow < 1) this.slowmo(slow, hold);
+    if (r && r.w) {
+      cam.focus((r.w / 2 - x) * lean, (r.h / 2 - y) * lean, base * zoom, 2.4);
+      this.tl.after(hold + release, () => cam.focus(0, 0, base, 1.05));
+    }
+  }
+
   // A hint is a second card pinned under the wall label, not a chip
   // floating over the room. See Set.setNote.
   hint(text) { this.game.set.setNote(text); }

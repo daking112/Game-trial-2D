@@ -717,9 +717,11 @@ export class L1Press extends Level {
     b.target = 1;
     SFX.buttonBottom();
     Haptics.bottom();
-    this.shake(0.85);
-    this.slowmo(0.18, 0.42);
-    this.flash('255,190,150', 0.34, 0.4);
+    // watch the switch bottom out, then watch the room lose its light
+    this.transgress(g.cx, g.btnBaseY - g.bezelH - g.collarH, {
+      zoom: 1.16, flash: '255,190,150', flashA: 0.34,
+      slow: 0.18, hold: 0.42, release: 0.70, shake: 0.85, lean: 0.42,
+    });
     this.p.burst(g.cx, g.plateY - g.u * 0.4, 34, {
       speed: 420, dir: -Math.PI / 2, spread: TAU, life: 0.7, size: 2,
       kind: 0, grav: 1400, drag: 2.0, color: [255, 200, 130], alpha: 0.9,
@@ -734,6 +736,9 @@ export class L1Press extends Level {
       SFX.powerDown();
       this.game.tl.to(this.game.set, 'exposure', 0.06, 0.55, 'inQuart');
       this.game.tl.to(this.game.set, 'coneStrength', 0, 0.4, 'inQuart');
+      // and the corners come in with it, so the dark arrives from the
+      // edges of the room rather than as a fill over the whole frame
+      this.game.tl.to(this.game.set, 'vignette', 1.5, 0.7, 'inQuart');
       if (this.game.ambience) this.game.ambience.set(0.002, 0.3);
     });
     this.tl.after(1.05, () => {
@@ -749,6 +754,7 @@ export class L1Press extends Level {
       this.game.set.tint = null;
       this.game.tl.to(this.game.set, 'exposure', 1, 1.4, 'outCubic');
       this.game.tl.to(this.game.set, 'coneStrength', 1, 1.4, 'outCubic');
+      this.game.tl.to(this.game.set, 'vignette', 0, 1.6, 'outCubic');
       this.game.set.warmth = 1;
       if (this.game.ambience) this.game.ambience.set(0.035, 1.2);
       Audio.setRoom(1.9, 2.6, 0.26);

@@ -248,7 +248,13 @@ export class L5Dark extends Level {
     this.hideHint();
     SFX.lampClick();
     Haptics.bottom();
-    this.shake(0.28);
+    // The one climax that must NOT push in: the payoff here is the room
+    // disappearing, so the camera leans a little toward the lamp and then
+    // lets the dark arrive. Zoom of 1 keeps the beat and drops the push.
+    this.transgress(this.g.cx, this.g.shadeBot, {
+      zoom: 1.05, flash: '255,214,150', flashA: 0.16,
+      slow: 0.34, hold: 0.30, release: 0.75, shake: 0.28, lean: 0.22,
+    });
     // the chain snaps back up
     for (const p of this.chain.points) { p.ox = p.x; p.oy = p.y + this.g.u * 2.4; }
 
@@ -256,6 +262,8 @@ export class L5Dark extends Level {
     this.tl.to(this.lamp, 'filament', 0.34, 0.10, 'outQuad');
     this.tl.to(this.lamp, 'on', 0, 0.55, 'inQuart');
     this.tl.to(set, 'exposure', 0, 0.62, 'inQuart');
+    // the corners close before the middle does
+    this.tl.to(set, 'vignette', 1.9, 0.8, 'inQuart');
     this.tl.to(set, 'coneStrength', 0, 0.34, 'inQuart');
     this.tl.to(set, 'plinthOpacity', 0, 0.7, 'inQuart');
     this.tl.after(0.06, () => { SFX.powerDown(); });

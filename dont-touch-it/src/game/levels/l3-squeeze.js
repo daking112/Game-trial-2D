@@ -806,9 +806,10 @@ export class L3Squeeze extends Level {
     this.flashPulse.fire(0.55);
     S.rip(clamp01(0.7 + parentR / g.R * 0.4));
     Haptics.shatter();
-    this.shake(0.55);
-    this.slowmo(0.24, 0.55);
-    this.flash('255,150,130', 0.26, 0.34);
+    this.transgress(bx, by, {
+      zoom: 1.15, flash: '255,150,130', flashA: 0.26,
+      slow: 0.24, hold: 0.55, release: 0.6, shake: 0.55, lean: 0.32,
+    });
     this.tl.after(0.22, () => { S.seal((bx - g.cx) / (g.u * 22)); });
 
     // it disgorges. Along the cut, perpendicular to the fingers.

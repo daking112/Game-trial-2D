@@ -324,7 +324,10 @@ export class Game {
     ctx.restore();
 
     r.applyBloom(1);
-    r.applyVignette(0.66);
+    // A chapter can pull the corners in. Fading the room out with a flat
+    // black fill is a CSS transition; closing the vignette is a room
+    // losing its light from the edges inward, which is what it looks like.
+    r.applyVignette(0.66 + this.set.vignette);
     r.applyGrain(0.028);
 
     this.cam.drawFlashes(ctx, r.w, r.h);
