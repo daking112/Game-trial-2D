@@ -12,6 +12,76 @@ import { TAU, clamp, clamp01, lerp, rand, makeRng, withAlpha, hexToRgb } from '.
 
 export const LIGHT = { x: -0.55, y: -0.8, z: 0.62 };
 
+/** The key, normalised. Anything that shades per-facet wants this, not LIGHT. */
+export const KEY = (() => {
+  const m = Math.hypot(LIGHT.x, LIGHT.y, LIGHT.z);
+  return { x: LIGHT.x / m, y: LIGHT.y / m, z: LIGHT.z / m };
+})();
+
+/**
+ * Stroke a polygon outline edge by edge, with the light in mind.
+ *
+ * An edge turned toward the lamp catches a caustic and is the brightest
+ * thing on the piece; every other edge is a dark line against the ground,
+ * and THAT is what reads as thickness. Stroking the whole outline bright
+ * is the single tell that makes a filled polygon read as cut paper, and
+ * every debris renderer in this project did it until it was measured.
+ *
+ * `pts` is a flat screen-space [x,y,x,y,…]. The winding is derived here,
+ * so callers do not have to keep track of it.
+ */
+export function litEdges(ctx, pts, L, litStyle, dimStyle, width) {
+  const n = pts.length;
+  if (n < 6) return;
+  let area = 0;
+  for (let i = 0; i < n; i += 2) {
+    const j = (i + 2) % n;
+    area += pts[i] * pts[j + 1] - pts[j] * pts[i + 1];
+  }
+  const flip = area > 0 ? 1 : -1;
+  const litP = new Path2D(), dimP = new Path2D();
+  let px = pts[n - 2], py = pts[n - 1];
+  for (let i = 0; i < n; i += 2) {
+    const qx = pts[i], qy = pts[i + 1];
+    const ex = qx - px, ey = qy - py;
+    const len = Math.hypot(ex, ey) || 1;
+    const t = ((ey / len) * L.x + (-ex / len) * L.y) * flip > 0.35 ? litP : dimP;
+    t.moveTo(px, py); t.lineTo(qx, qy);
+    px = qx; py = qy;
+  }
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = dimStyle;
+  ctx.lineWidth = width;
+  ctx.stroke(dimP);
+  ctx.strokeStyle = litStyle;
+  ctx.lineWidth = width * 1.15;
+  ctx.stroke(litP);
+  ctx.restore();
+}
+
+/**
+ * A resting fragment's facet normal, derived from a seed.
+ *
+ * Nothing in this game deposits one — levels hand over a position and an
+ * angle — so it is invented, deterministically, from whatever stable
+ * number the caller has. Most pieces come to rest lying flat and face the
+ * lamp squarely; a few caught on the ones beneath them and are tilted.
+ * That spread is what gives a heap a range of values instead of one.
+ */
+export function facetNormal(seed) {
+  const rng = makeRng((seed | 0) >>> 0);
+  const tilt = rng() ** 1.8;
+  const az = rng() * TAU;
+  const t = tilt * 1.2;
+  return {
+    x: Math.sin(t) * Math.cos(az),
+    y: Math.sin(t) * Math.sin(az),
+    z: Math.cos(t),
+    tilt,
+  };
+}
+
 /**
  * Canvas throws on a non-finite gradient coordinate, and a throw inside a
  * draw helper aborts the whole level's draw() — one bad number from a

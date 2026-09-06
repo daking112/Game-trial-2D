@@ -22,6 +22,7 @@ import {
 import {
   PALETTES, metalFill, radialBrush, brushedStreaks, knurl, screwHead,
   glassDome, caustic, engrave, emboss, contactShadow, roundRectPath,
+  KEY, litEdges, facetNormal,
 } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
 import { Audio, SFX } from '../../core/audio.js';
@@ -1344,33 +1345,70 @@ export class L1Press extends Level {
     }
   }
 
+  /**
+   * The jar, after.
+   *
+   * This used to be a fixed screen-space gradient plus a 1px white stroke
+   * all the way round, with no reference to the room's exposure at all.
+   * Two consequences, both measured: every fragment had the same value
+   * regardless of which way it faced, so a pile of glass read as a sheet
+   * of decals; and when the player killed the gallery lamp, the debris
+   * stayed exactly as bright as before. In the blackout it measured three
+   * and a half times brighter than the plinth it was lying on and ten
+   * times brighter than the wall. The reward for the whole chapter was a
+   * heap of luminous paper in a dark room.
+   */
   _drawShards(ctx, glow) {
-    const g = this.g;
+    const lit = clamp01(this.game.set.lit);
+    if (lit < 0.015) return;
+    const pts = [];
     for (const d of this.shards) {
+      if (!d.nrm) d.nrm = facetNormal((d.data.restX ?? d.x) * 131 + (d.data.restY ?? d.y) * 71);
+      const n = d.nrm;
+      const diff = Math.max(0, n.x * KEY.x + n.y * KEY.y + n.z * KEY.z);
+      const s = d.data.size;
+
       ctx.save();
-      contactShadow(ctx, d.x, d.floorY + 1, d.data.size * 1.4, d.data.size * 0.5, { strength: 0.4 });
+      contactShadow(ctx, d.x, d.floorY + 1, s * (1.3 + n.tilt), s * (0.4 + n.tilt * 0.3),
+        { strength: (0.55 - n.tilt * 0.15) * lit });
       d.path(ctx);
-      const gg = ctx.createLinearGradient(d.x - d.data.size, d.y - d.data.size, d.x + d.data.size, d.y + d.data.size);
-      gg.addColorStop(0, 'rgba(206,228,244,0.30)');
-      gg.addColorStop(0.45, 'rgba(255,255,255,0.62)');
-      gg.addColorStop(1, 'rgba(150,186,214,0.24)');
+      // Clear glass over a lit surface is that surface, darkened, plus a
+      // caustic. Filling it with 0.62 white is what made it paper.
+      const gg = ctx.createLinearGradient(
+        d.x - KEY.x * s * 1.5, d.y - KEY.y * s * 1.5,
+        d.x + KEY.x * s * 1.5, d.y + KEY.y * s * 1.5);
+      gg.addColorStop(0, `rgba(8,12,18,${(0.36 - diff * 0.12) * lit})`);
+      gg.addColorStop(0.55, `rgba(58,76,92,${0.14 * lit})`);
+      gg.addColorStop(1, `rgba(190,220,240,${(0.15 + diff * 0.34) * lit})`);
       ctx.fillStyle = gg;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 0.9;
-      ctx.stroke();
       ctx.restore();
-      // sparkle
-      if (glow && d.rest && ((d.x * 7 + d.y * 3) | 0) % 3 === 0) {
+
+      // per-edge, using the body's own polygon rather than an invented one
+      const poly = d.poly;
+      if (poly && poly.length >= 6) {
+        const ca = Math.cos(d.a), sa = Math.sin(d.a);
+        pts.length = 0;
+        for (let i = 0; i < poly.length; i += 2) {
+          pts.push(d.x + poly[i] * ca - poly[i + 1] * sa,
+            d.y + poly[i] * sa + poly[i + 1] * ca);
+        }
+        litEdges(ctx, pts, KEY,
+          `rgba(246,254,255,${(0.13 + diff * 0.54) * lit})`,
+          `rgba(10,16,24,${0.46 * lit})`,
+          Math.max(0.7, s * 0.11));
+      }
+
+      // sparkle — only on the pieces actually turned toward the lamp
+      if (glow && d.rest && diff > 0.66 && ((d.x * 7 + d.y * 3) | 0) % 3 === 0) {
         glow.save();
         glow.globalCompositeOperation = 'lighter';
-        const s = d.data.size * 0.9;
-        const a = 0.25 + 0.25 * Math.sin(this.t * 2 + d.x * 0.1);
-        const rg = glow.createRadialGradient(d.x, d.y, 0, d.x, d.y, s * 2);
-        rg.addColorStop(0, `rgba(220,240,255,${a})`);
+        const a = (0.16 + 0.24 * Math.sin(this.t * 2 + d.x * 0.1)) * lit * (diff - 0.66) / 0.34;
+        const rg = glow.createRadialGradient(d.x, d.y, 0, d.x, d.y, s * 1.8);
+        rg.addColorStop(0, `rgba(220,240,255,${clamp01(a)})`);
         rg.addColorStop(1, 'rgba(220,240,255,0)');
         glow.fillStyle = rg;
-        glow.beginPath(); glow.arc(d.x, d.y, s * 2, 0, TAU); glow.fill();
+        glow.beginPath(); glow.arc(d.x, d.y, s * 1.8, 0, TAU); glow.fill();
         glow.restore();
       }
     }
