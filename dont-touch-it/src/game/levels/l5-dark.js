@@ -62,7 +62,11 @@ export class L5Dark extends Level {
     this.ownsLighting = true;           // ...so the shell must not dim us
     this.phase = 'lit';                 // lit | dying | dark | found | ringing | restored
     this.darkT = 0;
-    this.lamp = { on: 1, filament: 1, swing: 0, vswing: 0, flicker: 0 };
+    // `ember` is deliberately independent of `on`. A tungsten filament
+    // that has just been switched off glows for SECONDS, and five and a
+    // half seconds of literal black with one line of dialogue over it
+    // reads to a real player as a crash rather than as a dark room.
+    this.lamp = { on: 1, filament: 1, ember: 0, swing: 0, vswing: 0, flicker: 0 };
     this.pull = 0;                      // 0..1 chain travel
     this.pulled = false;
     this.torch = { x: g.cx, y: g.h * 0.42, r: 0, on: 0, seen: 0, armed: false };
@@ -146,10 +150,17 @@ export class L5Dark extends Level {
     const g = this.g, set = this.game.set;
     this.world.step(dt);
     this._updateChain(dt);
+    // tungsten cools fast, then slowly, and is still faintly alive at
+    // eight seconds — which covers the whole of the dark before the
+    // player starts feeling around in it
+    if (this.lamp.ember > 0) {
+      this.lamp.ember = Math.max(0, this.lamp.ember - dt * (0.035 + this.lamp.ember * 0.30));
+    }
 
     if (this.phase === 'lit') {
       // the lamp breathes very slightly, like a real filament on mains
       this.lamp.filament = 1 + Math.sin(this.t * 2.1) * 0.012 + noise1(this.t * 3.4) * 0.02;
+      this.lamp.ember = 0;
       if (this.pull > 0.98) this._killTheLight();
       if (this.input.idle() > 8) this.hint('Pull the chain'); else this.hideHint();
     } else if (this.phase === 'dying') {
@@ -260,6 +271,15 @@ export class L5Dark extends Level {
 
     // filament dies faster than the room: a real bulb goes orange, then out
     this.tl.to(this.lamp, 'filament', 0.34, 0.10, 'outQuad');
+    // ...but it does not go out. It cools, and for the next few seconds it
+    // is the only thing in the room, which is what makes the dark a place
+    // rather than an absence.
+    // Decayed directly rather than tweened: two tweens on one property
+    // fought each other and it was cold inside five seconds. A filament
+    // cools fast and then slowly, which is what this curve is, and it is
+    // still faintly alive at eight seconds — long enough to cover the
+    // whole of the dark before the player starts feeling around.
+    this.lamp.ember = 1;
     this.tl.to(this.lamp, 'on', 0, 0.55, 'inQuart');
     this.tl.to(set, 'exposure', 0, 0.62, 'inQuart');
     // the corners close before the middle does
@@ -420,6 +440,7 @@ export class L5Dark extends Level {
     Audio.setRoom(1.9, 2.6, 0.26);
     if (this.game.ambience) this.game.ambience.set(0.035, 1.6);
     this.tl.to(this.lamp, 'filament', 1, 1.4, 'outCubic');
+    this.lamp.ember = 0;
     // The gallery turns out to be much larger than one plinth. They have
     // to RECEDE — converging toward the room's own horizon and shrinking —
     // or the line lands as a couple of slivers cropped off the edges of
@@ -635,6 +656,14 @@ export class L5Dark extends Level {
     ctx.drawImage(M.canvas, 0, 0, g.w, g.h);
     ctx.restore();
 
+    // the cooling filament, over the dark rather than under it
+    ctx.save();
+    ctx.translate(g.cx, g.shadeY - g.shadeH);
+    ctx.rotate(this.lamp.swing);
+    ctx.translate(-g.cx, -(g.shadeY - g.shadeH));
+    this._drawEmber(ctx);
+    ctx.restore();
+
     if (T.on <= 0.02) return;
 
     // The bell throws a glint before it is close enough to be seen. It is
@@ -742,12 +771,13 @@ export class L5Dark extends Level {
     ctx.fillStyle = mg;
     ctx.fill();
 
-    // the filament
-    if (on > 0.005) {
+    const em = this.lamp.ember || 0;
+    const fil = on;
+    if (fil > 0.004) {
       const fy = bot + rx * 0.10;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(255,${200 * on + 40 | 0},${110 * on + 20 | 0},${Math.min(1, on * 1.4)})`;
+      ctx.strokeStyle = `rgba(255,${200 * fil + 40 | 0},${110 * fil + 12 | 0},${Math.min(1, fil * 1.4)})`;
       ctx.lineWidth = Math.max(1, g.u * 0.22);
       ctx.beginPath();
       for (let i = 0; i <= 14; i++) {
@@ -761,9 +791,9 @@ export class L5Dark extends Level {
       if (glow) {
         glow.save();
         glow.globalCompositeOperation = 'lighter';
-        const r2 = rx * (1.4 + on * 1.6);
+        const r2 = rx * (1.4 + fil * 1.6);
         const fg = glow.createRadialGradient(g.cx, fy, 0, g.cx, fy, r2);
-        fg.addColorStop(0, `rgba(255,214,150,${0.75 * on})`);
+        fg.addColorStop(0, `rgba(255,214,150,${0.75 * fil})`);
         fg.addColorStop(0.35, `rgba(255,190,120,${0.22 * on})`);
         fg.addColorStop(1, 'rgba(255,180,110,0)');
         glow.fillStyle = fg;
@@ -771,10 +801,52 @@ export class L5Dark extends Level {
         glow.restore();
       }
     }
+
+
     ctx.restore();
   }
 
   // ---------------- the chain ----------------
+  /**
+   * What is left of the filament once the lamp is off.
+   *
+   * A tungsten filament that has just been switched off glows for
+   * seconds. Without it, killing the light gave five and a half seconds of
+   * literal black with one line of dialogue over it, which a real player
+   * reads as a crash rather than as a dark room.
+   *
+   * Drawn AFTER the darkness mask, because it is a light SOURCE rather
+   * than a lit object. Inside _drawLamp it went under the mask with
+   * everything else and was, correctly, invisible.
+   */
+  _drawEmber(ctx) {
+    const g = this.g;
+    const em = this.lamp.ember || 0;
+    if (em <= 0.004) return;
+    const rx = g.shadeRx;
+    const ey = g.shadeBot + rx * 0.10;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,${(84 + 76 * em) | 0},${(22 + 34 * em) | 0},${clamp01(0.34 + 0.62 * em)})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.20);
+    ctx.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const tt = i / 14;
+      const px = g.cx + (tt - 0.5) * rx * 0.42;
+      const py = ey + Math.sin(tt * Math.PI * 5) * rx * 0.05;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+    // and the little pool it throws on the inside of the shade
+    const eg = ctx.createRadialGradient(g.cx, ey, 0, g.cx, ey, rx * 1.05);
+    eg.addColorStop(0, `rgba(255,132,44,${0.38 * (0.30 + em * 0.70)})`);
+    eg.addColorStop(0.45, `rgba(255,110,36,${0.12 * (0.30 + em * 0.70)})`);
+    eg.addColorStop(1, 'rgba(255,104,32,0)');
+    ctx.fillStyle = eg;
+    ctx.beginPath(); ctx.arc(g.cx, ey, rx * 1.05, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
   _drawChain(ctx, glow) {
     const g = this.g;
     const pts = this.chain.points;
