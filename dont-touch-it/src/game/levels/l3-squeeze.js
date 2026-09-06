@@ -370,6 +370,7 @@ export class L3Squeeze extends Level {
     this._updateFingers(dt);
     this._updateBlobs(dt);
     this.world.step(Math.min(dt, 1 / 50));
+    this._pinchShape(dt);
     this._postSim(dt);
     for (const b of this.blobs) this._smoothOutline(b);
     this._updateSpill(dt);
@@ -421,6 +422,45 @@ export class L3Squeeze extends Level {
     // surface to sit on.
     for (const f of this.fingers)
       cols.push({ type: 'circle', x: f.x, y: f.y, r: f.r * 0.72, friction: 0.42, soft: 0.55 });
+  }
+
+  /**
+   * A body squeezed between two fingers has to NECK.
+   *
+   * The solver only knows the fingers as two small discs, and at a hard
+   * pinch both discs are deep INSIDE the body, where there is no perimeter
+   * for them to push on. Fingers driven to sixteen pixels apart on an
+   * eighty-eight-pixel specimen left it 110.9 wide by 110.7 tall —
+   * perfectly circular, while the player's fingers crossed. A soft body
+   * that stays round while your fingers pass through it is the most direct
+   * contradiction of the word "tactile" this game can produce.
+   *
+   * So the pinch is imposed on the shape as well as on the solver: the
+   * perimeter is pulled toward the pinch axis and swelled across it, area
+   * roughly held. A fraction per frame, and both position and previous
+   * position move together — so the shell and area constraints push back
+   * and it settles somewhere, rather than snapping to a target and
+   * flinging itself apart when the fingers leave.
+   */
+  _pinchShape(dt) {
+    const k = Math.min(dt, 1 / 50) * 60;
+    const rate = Math.min(1, 0.22 * k);
+    for (const b of this.blobs) {
+      if (b.fingers < 2 || b.neck < 0.04) continue;
+      const squash = smoothstep(clamp01(b.neck)) * 0.62;
+      const swell = 1 + squash * 0.85;
+      const ax = b.axX, ay = b.axY;
+      for (const p of b.points) {
+        const dx = p.x - b.mx, dy = p.y - b.my;
+        const al = dx * ax + dy * ay;
+        const pe = -dx * ay + dy * ax;
+        const tx = b.mx + al * (1 - squash) * ax - pe * swell * ay;
+        const ty = b.my + al * (1 - squash) * ay + pe * swell * ax;
+        const mvx = (tx - p.x) * rate, mvy = (ty - p.y) * rate;
+        p.x += mvx; p.y += mvy;
+        p.ox += mvx; p.oy += mvy;
+      }
+    }
   }
 
   /** Two Laplacian passes, draw-only. Never feed this back to the solver. */

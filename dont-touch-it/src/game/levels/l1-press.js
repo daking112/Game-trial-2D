@@ -135,6 +135,8 @@ export class L1Press extends Level {
       intact: true, restX: 0, restY: 0, restRot: 0, resting: false,
       ringT: 0, stress: 0,
     };
+    this.strikes = [];       // expanding wavefronts from each contact
+    this.prints = [];        // grease, and it stays
     this.jarSpring = { v: 0 };
     this.debris = [];        // fallen screws
     this.shards = [];        // jar glass
@@ -216,16 +218,50 @@ export class L1Press extends Level {
   }
 
   // ---------------- glass taps ----------------
+  /**
+   * Prodding the glass is the first thing anyone does in this game, and it
+   * used to answer on RELEASE with a hairline traced uniformly around the
+   * whole silhouette — 553 changed pixels out of 1.3 million, which is a
+   * CSS :hover state, not a struck object. It now answers on touchdown, at
+   * the point of contact, and the glass keeps the print.
+   */
   _updateGlassTaps(dt) {
+    // the strike itself: on the frame the finger lands
+    for (const p of this.input.presses) {
+      if (p.claimedBy) continue;
+      if (!this._insideJar(p.x, p.y)) continue;
+      const g = this.g;
+      this.jar.ringT = 1;
+      this.flinch.fire();
+      SFX.glassRing(1500 + rrange(-150, 150), 0.45);
+      Haptics.tick();
+      this.shake(0.05);
+      // a wavefront that leaves the fingertip and runs out across the glass
+      this.strikes.push({ x: p.x, y: p.y, t: 0 });
+      if (this.strikes.length > 4) this.strikes.shift();
+      // and the grease. A bell jar in a gallery that has been prodded all
+      // afternoon should look like it: every touch stays on the glass, so
+      // by the time the screws come out the evidence is all over it.
+      this.prints.push({
+        rx: p.x - g.cx, ry: p.y - g.jarBaseY,
+        a: 0, seed: (rand() * 1e6) | 0, rot: rrange(-0.5, 0.5),
+        // no two contacts leave the same amount behind
+        k: rrange(0.55, 1.15), sx: rrange(0.82, 1.2),
+      });
+      if (this.prints.length > 16) this.prints.shift();
+    }
+    for (let i = this.strikes.length - 1; i >= 0; i--) {
+      this.strikes[i].t += dt;
+      if (this.strikes[i].t > 0.85) this.strikes.splice(i, 1);
+    }
+    for (const pr of this.prints) pr.a = damp(pr.a, 1, 8, dt);
+
+    // the narrator waits for a completed tap, so it does not chatter at
+    // the start of every drag
     for (const p of this.input.taps) {
       if (p.claimedBy) continue;
       if (!this._insideJar(p.x, p.y)) continue;
       this.taps++;
-      this.flinch.fire();
-      this.jar.ringT = 1;
-      SFX.glassRing(1500 + rrange(-150, 150), 0.45);
-      Haptics.tick();
-      this.shake(0.05);
       const lines = [
         "It's behind glass. That should be enough.",
         "Tapping will not help you.",
@@ -717,6 +753,10 @@ export class L1Press extends Level {
     b.target = 1;
     SFX.buttonBottom();
     Haptics.bottom();
+    // Whatever the jar's destruction was saying, it is not saying it any
+    // more. A line about the jar held across four seconds of the button's
+    // escalation and through the flash reads as a caption that got stuck.
+    this.game.narrator.clear();
     // watch the switch bottom out, then watch the room lose its light
     this.transgress(g.cx, g.btnBaseY - g.bezelH - g.collarH, {
       zoom: 1.16, flash: '255,190,150', flashA: 0.34,
@@ -1637,18 +1677,68 @@ export class L1Press extends Level {
     ctx.lineWidth = Math.max(1, g.u * 0.19);
     ctx.stroke();
 
-    // ringing shimmer when struck
-    if (j.ringT > 0.01) {
+    // Struck glass rings FROM WHERE IT WAS STRUCK. Three copies of the
+    // whole outline glowing evenly is a selection halo; this strokes the
+    // same outline through an annulus that expands away from the finger,
+    // so only the part of the rim the wave has reached is lit.
+    if (this.strikes.length) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = j.ringT * 0.42;
-      for (let i = 0; i < 3; i++) {
-        const k = (this.t * 2.4 + i / 3) % 1;
-        ctx.strokeStyle = `rgba(200,235,255,${(1 - k) * 0.5})`;
-        ctx.lineWidth = Math.max(1, g.u * 0.14);
-        this._jarPath(ctx, cx, baseY, R * (1 + k * 0.035), straight * (1 + k * 0.022),
-          dome * (1 + k * 0.03), lip * (1 + k * 0.03));
+      for (const st of this.strikes) {
+        const k = clamp01(st.t / 0.85);
+        const rad = k * R * 3.0;
+        const band = R * 0.42;
+        const wg = ctx.createRadialGradient(
+          st.x, st.y, Math.max(0.1, rad - band), st.x, st.y, rad + band);
+        const a2 = (1 - k) * (1 - k) * 0.95;
+        wg.addColorStop(0, 'rgba(206,238,255,0)');
+        wg.addColorStop(0.5, `rgba(224,246,255,${a2})`);
+        wg.addColorStop(1, 'rgba(206,238,255,0)');
+        ctx.strokeStyle = wg;
+        ctx.lineWidth = Math.max(1.2, g.u * (0.30 - k * 0.16));
+        this._jarPath(ctx, cx, baseY, R, straight, dome, lip);
         ctx.stroke();
+        // and the compressed flash right under the fingertip on frame one
+        if (k < 0.3) {
+          const fg = ctx.createRadialGradient(st.x, st.y, 0, st.x, st.y, R * 0.5);
+          fg.addColorStop(0, `rgba(236,250,255,${(0.3 - k) * 1.5})`);
+          fg.addColorStop(1, 'rgba(236,250,255,0)');
+          ctx.fillStyle = fg;
+          ctx.beginPath(); ctx.arc(st.x, st.y, R * 0.5, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // every print anyone has left on it
+    if (this.prints.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const pr of this.prints) {
+        const x = cx + pr.rx + (j.x || 0), y = baseY + pr.ry - (j.lift || 0);
+        const rng = makeRng(pr.seed);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(pr.rot);
+        const w = g.u * 1.35 * pr.sx, h = g.u * 1.75;
+        const pa = pr.a * pr.k;
+        const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, h);
+        sg.addColorStop(0, `rgba(226,240,252,${0.15 * pa * E})`);
+        sg.addColorStop(0.6, `rgba(210,228,244,${0.055 * pa * E})`);
+        sg.addColorStop(1, 'rgba(210,228,244,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.ellipse(0, 0, w, h, 0, 0, TAU); ctx.fill();
+        // ridges — grease off a fingertip is not a smooth blob
+        ctx.strokeStyle = `rgba(232,244,255,${0.10 * pa * E})`;
+        ctx.lineWidth = Math.max(0.6, g.u * 0.075);
+        for (let i = 0; i < 5; i++) {
+          const rr2 = h * (0.20 + i * 0.16);
+          ctx.beginPath();
+          ctx.ellipse(0, h * 0.06, rr2 * 0.78, rr2, 0,
+            -1.9 + rng() * 0.5, 1.5 + rng() * 0.6);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
       ctx.restore();
     }
