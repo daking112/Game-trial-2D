@@ -877,6 +877,28 @@ export class L1Press extends Level {
       this.shake(0.5);
       this.interrupt("What have you done.", { hold: 2.4, agitated: true });
     });
+    // Between the impact and the recovery the frame was static for the
+    // best part of two seconds: a dim red wall, a plinth silhouette, one
+    // line of text, a fixed camera. The emergency circuit trying to pick
+    // up and failing is both motion and an explanation — three stutters,
+    // each shorter and weaker than the last, each with its own thump.
+    for (const [t, lvl, kick] of [[1.55, 0.46, 0.22], [2.02, 0.34, 0.14], [2.34, 0.27, 0.08]]) {
+      this.tl.after(t, () => {
+        // No `if (this.solved) return` guard here: solve() sets that flag
+        // the instant the switch commits and only DELAYS the advance, so
+        // the guard this started with killed all three stutters. The level
+        // stops ticking when the chapter actually ends, which is the only
+        // condition that matters.
+        // Set it, then decay it. Two tweens on one property meant the
+        // delayed one superseded the flash before it ever ran, and the
+        // exposure never left 0.22 — the stutter existed only in the code.
+        this.game.set.exposure = lvl;
+        this.game.tl.to(this.game.set, 'exposure', 0.20, 0.30, 'inQuad');
+        SFX.powerDown();
+        Haptics.tick();
+        this.shake(kick);
+      });
+    }
     this.tl.after(2.6, () => {
       this.game.set.tint = null;
       this.game.tl.to(this.game.set, 'exposure', 1, 1.4, 'outCubic');
