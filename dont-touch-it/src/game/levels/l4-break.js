@@ -280,6 +280,8 @@ export class L4Break extends Level {
     if (this.panes) this._syncPanes();
     this._reflection = null;         // rebuilt lazily at the new size
     this._buildRoomLayer();
+    // invalidate; the first draw that wants one bakes it at the new size
+    if (this.panes) for (const P of this.panes) P.refr = undefined;
   }
 
   _syncPanes() {
@@ -1252,34 +1254,62 @@ export class L4Break extends Level {
     this._roomRect = { wx0, wy0, wx1, wy1, k };
   }
 
-  _refract(ctx, G) {
-    // Surface bandwidth, not draw calls: three blits of a large region
-    // cost little on a phone and a lot on a tablet at the top tier. It
-    // rides the same quality gate as Chapter I's glass.
-    if (!this.r.quality.refract) return;
+  /**
+   * Bake it once, blit it once.
+   *
+   * Everything behind this pane is static, so the refraction is static
+   * too: the three scaled blits below produce the same picture on every
+   * frame of the chapter. Doing them live cost 0.6ms on a phone and
+   * 68.6ms on a tablet — superlinear, because a scaled drawImage of a
+   * large region is bandwidth, and six of them per frame at 820x1180@2 is
+   * more bandwidth than a frame has. Every other chapter on every other
+   * device sat between 2 and 5ms.
+   *
+   * The only thing that varies is the room's exposure, and that is a
+   * global alpha at blit time.
+   */
+  _bakeRefraction(P) {
+    P.refr = null;
     const R = this._roomRect;
     if (!R || !this._roomLayer) return;
+    const G = P.g;
     const cv = this._roomLayer.canvas;
     const k = R.k;
     const sx = (G.x0 - R.wx0) * k, sy = (G.y0 - R.wy0) * k;
     const sw = G.w * k, sh = G.h * k;
     if (sw < 4 || sh < 4) return;
+    const dk = clamp(this.r.dpr, 1, 2);
+    const L = (P.refr = new Layer())
+      .size(Math.max(1, Math.ceil(G.w * dk)), Math.max(1, Math.ceil(G.h * dk)));
+    const c = L.ctx;
+    c.setTransform(dk, 0, 0, dk, -G.x0 * dk, -G.y0 * dk);
     const inset = G.w * 0.085;
-    const lit = clamp01(this.game.set.lit);
 
-    ctx.save();
-    this._panePath(ctx, G);
-    ctx.clip();
-    ctx.globalAlpha = 0.94 * lit;
+    c.save();
+    this._panePath(c, G);
+    c.clip();
+    c.globalAlpha = 0.94;
     // body: magnified a touch and pushed the other way, as thick glass does
-    ctx.drawImage(cv, sx, sy, sw, sh,
+    c.drawImage(cv, sx, sy, sw, sh,
       G.x0 - G.w * 0.020, G.y0 - G.h * 0.014, G.w * 1.040, G.h * 1.028);
     // grazing edges: strong horizontal compression
-    ctx.globalAlpha = 0.85 * lit;
-    ctx.drawImage(cv, sx, sy, sw * 0.34, sh,
+    c.globalAlpha = 0.85;
+    c.drawImage(cv, sx, sy, sw * 0.34, sh,
       G.x0, G.y0 - G.h * 0.01, inset, G.h * 1.02);
-    ctx.drawImage(cv, sx + sw * 0.66, sy, sw * 0.34, sh,
+    c.drawImage(cv, sx + sw * 0.66, sy, sw * 0.34, sh,
       G.x1 - inset, G.y0 - G.h * 0.01, inset, G.h * 1.02);
+    c.restore();
+  }
+
+  _refract(ctx, G, P) {
+    if (!this.r.quality.refract) return;
+    if (P.refr === undefined) this._bakeRefraction(P);
+    if (!P.refr) return;
+    const lit = clamp01(this.game.set.lit);
+    if (lit <= 0.004) return;
+    ctx.save();
+    ctx.globalAlpha = lit;
+    ctx.drawImage(P.refr.canvas, G.x0, G.y0, G.w, G.h);
     ctx.restore();
   }
 
@@ -1288,7 +1318,7 @@ export class L4Break extends Level {
     const lit = this.game.set.lit;
     const brightness = lit;
 
-    if (P.kind === 'glass') this._refract(ctx, G);
+    if (P.kind === 'glass') this._refract(ctx, G, P);
 
     ctx.save();
     this._panePath(ctx, G);

@@ -156,6 +156,20 @@ your geometry as multiples of it so every chapter is framed identically.
 
 ## Performance traps this project has already paid for
 
+**Run `node budget.mjs` as well as `playtest.mjs`.** playtest drives a
+phone. Chapter III once cost 0.6ms on a phone and 68.6ms on a tablet, and
+not one test in the repo could see it.
+
+**Never hand the quality governor a clamped frame delta.** The simulation
+clamps `dt` so a tab returning from the background does not integrate a
+thirty-second step. The governor must not get that value: below 4fps every
+real delta exceeds the clamp, so it received a counterfeit 16.7ms on
+exactly the frames proving the device could not keep up, its seconds-based
+window accrued at a fifteenth of real time, and it could not demote at
+all. No threshold on the delta substitutes, either — a device slow enough
+to matter produces deltas indistinguishable from a resume. Only
+`visibilitychange` tells those apart.
+
 **Never read back the presenting canvas mid-frame.** `drawImage(mainCanvas, …)`
 while you are drawing on it forces an eager, unbatched raster of
 everything queued so far. Measured here it turned a 2.7ms frame into an

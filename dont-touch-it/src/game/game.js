@@ -52,7 +52,7 @@ export class Game {
     if (window.visualViewport) visualViewport.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { Haptics.stop(); }
-      else { this._last = performance.now() / 1000; Audio.resume(); }
+      else { this._last = performance.now() / 1000; this._resumed = true; Audio.resume(); }
     });
   }
 
@@ -218,11 +218,25 @@ export class Game {
     requestAnimationFrame(this._frame);
     if (this.paused) { this._last = ts / 1000; return; }
     const now = ts / 1000;
-    let dt = now - this._last;
+    const raw = now - this._last;
     this._last = now;
-    if (dt > 0.25) dt = 1 / 60;        // returned from background
+    let dt = raw > 0.25 ? 1 / 60 : raw;   // returned from background
     this.raw += dt;
-    this.gov.sample(dt, this.drawMs);
+    // The governor gets the REAL delta, never the clamped one. Below 4fps
+    // every frame exceeds the clamp, so feeding it `dt` handed it a
+    // counterfeit 16.7ms on precisely the frames that prove the device
+    // cannot keep up: its seconds-based window then accrued at a fifteenth
+    // of real time and it could not demote at all. That is the exact
+    // failure QualityGovernor's own comment says it measures in seconds to
+    // avoid.
+    //
+    // And no threshold on the delta can stand in for that clamp, because a
+    // device slow enough to matter produces deltas that look exactly like a
+    // tab resuming. Only visibility can tell those apart, so that is what
+    // we use: skip precisely one sample after a resume, and trust every
+    // other frame.
+    if (this._resumed) this._resumed = false;
+    else this.gov.sample(raw, this.drawMs);
 
     this._frames++; this._fpsT += dt;
     if (this._fpsT >= 0.5) { this._fps = this._frames / this._fpsT; this._frames = 0; this._fpsT = 0; }
