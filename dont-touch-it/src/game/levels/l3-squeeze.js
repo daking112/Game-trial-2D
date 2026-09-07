@@ -32,7 +32,7 @@ import {
 import {
   VerletWorld, BendConstraint, makeSoftBody,
 } from '../../physics/verlet.js';
-import { contactShadow, engrave, PALETTES, KEY, metalFill } from '../../render/materials.js';
+import { contactShadow, groundShadow, engrave, PALETTES, KEY, metalFill } from '../../render/materials.js';
 import { Audio } from '../../core/audio.js';
 import Haptics from '../../core/haptics.js';
 import { Pulse } from '../../core/tween.js';
@@ -175,7 +175,7 @@ export class L3Squeeze extends Level {
       w, h, u, cx: G.cx, R,
       dishRx, dishRy: dishRx * 0.235,
       dishY: G.topY - u * 1.1,
-      topY: G.topY,
+      topY: G.topY, topRx: G.topRx, topRy: G.topRy,
     };
     g.floorY = g.dishY + g.dishRy * 0.30;
     g.wallL = g.cx - dishRx * 0.90;
@@ -1099,6 +1099,13 @@ export class L3Squeeze extends Level {
   // =========================================================
   draw(ctx, glow) {
     const g = this.g;
+    // The specimen's shadow goes down FIRST, on the plinth, and the dish is
+    // painted over it. Most of it is hidden that way, which is right — the
+    // dish is between the blob and the stone — and what survives is the part
+    // that clears the dish's right wall and lands on bare plinth. That spill
+    // is the whole cue: it is the only thing on screen that says the blob is
+    // an object in a room and not a sticker on a photograph.
+    for (const b of this.blobs) this._castShadow(ctx, b);
     this._drawDishBack(ctx);
     for (const b of this.blobs) this._drawShadow(ctx, b);
     for (const b of this.blobs) this._drawBlob(ctx, glow, b);
@@ -1128,8 +1135,24 @@ export class L3Squeeze extends Level {
     const { cx, dishY, dishRx, dishRy } = g;
     const ex = this.game.set.exposure;
 
-    contactShadow(ctx, cx, g.topY + g.dishRy * 0.35, dishRx * 1.12, dishRy * 0.95,
-      { strength: 0.62 * ex });
+    // The dish throws a real shadow across the plinth, down and to the
+    // right of itself. The pool that used to be here was concentric and
+    // barely wider than the dish, so the dish covered it: a luminance scan
+    // across the plinth top found no discontinuity anywhere, which is why
+    // nothing in this chapter read as standing under a lamp.
+    const baseY = g.dishY + dishRy * 1.15;
+    groundShadow(ctx, (p) => {
+      p.ellipse(cx, baseY, dishRx, dishRy, 0, 0, Math.PI);
+      p.lineTo(cx - dishRx, g.dishY);
+      p.ellipse(cx, g.dishY, dishRx, dishRy, 0, Math.PI, 0, true);
+      p.closePath();
+    }, baseY, {
+      strength: 0.5 * ex, soft: g.u * 1.1,
+      clip: (c) => this.game.set.clipTop(c),
+    });
+    // and still the tight occlusion right where it touches
+    contactShadow(ctx, cx, baseY - dishRy * 0.1, dishRx * 0.94, dishRy * 0.5,
+      { strength: 0.5 * ex });
 
     // outer body of the dish (a squat turned-steel bowl)
     ctx.save();
@@ -1209,11 +1232,35 @@ export class L3Squeeze extends Level {
   }
 
   // ---------- shadow ----------
+  /**
+   * The specimen's own silhouette, thrown onto the plinth top. It is the
+   * shape that matters here and nothing coarser would do: when two fingers
+   * flatten the blob the shadow flattens with it and slides, and that is
+   * the only thing on screen that says the squeeze happened in a room.
+   * Subsampled to fourteen points — a shadow is not where detail reads.
+   */
+  _castShadow(ctx, b) {
+    const g = this.g;
+    const pts = b.draw && b.draw.length === b.points.length ? b.draw : b.points;
+    if (!pts || pts.length < 9) return;
+    const step = Math.max(1, Math.round(pts.length / 14));
+    const ground = g.dishY + g.dishRy * 1.15;
+    groundShadow(ctx, (p) => {
+      p.moveTo(pts[0].x, pts[0].y);
+      for (let i = step; i < pts.length; i += step) p.lineTo(pts[i].x, pts[i].y);
+      p.closePath();
+    }, ground, {
+      strength: 0.4 * this.game.set.exposure, soft: g.u * 2.6,
+      clip: (c) => this.game.set.clipTop(c),
+    });
+  }
+
   _drawShadow(ctx, b) {
     const g = this.g;
     const lift = clamp01((g.floorY - b.maxY) / (g.R * 0.9));
+    const ex = this.game.set.exposure;
     contactShadow(ctx, b.cx + g.u * 0.5, g.floorY + g.u * 0.35, b.rx * 1.02, b.rx * 0.24, {
-      strength: 0.55 * this.game.set.exposure, height: lift * 0.6,
+      strength: 0.5 * ex, height: lift * 0.6,
     });
   }
 

@@ -118,6 +118,68 @@ export function contactShadow(ctx, x, y, rx, ry, opts = {}) {
   ctx.restore();
 }
 
+/**
+ * The shadow an object throws onto the ground it stands on.
+ *
+ * `contactShadow` above is an occlusion pool: concentric, centred under the
+ * object, and — this is what it hid — almost entirely covered by the thing
+ * casting it. Every hero in this game had one and not one of them read as
+ * standing in light, because a luminance scan across the plinth top under
+ * any of them finds no discontinuity at all: the only darkness was under
+ * the object, where the object is. The debris looked better lit than the
+ * heroes for exactly this reason — a chip is small enough that its pool
+ * sticks out past it.
+ *
+ * This projects the silhouette onto the ground instead. `run` is taken from
+ * the key this whole module already shades to — LIGHT is (-0.55, -0.8), so
+ * a point `h` above the plane lands 0.55/0.8 of `h` to the right. `back`
+ * is how far up-screen it goes with it: the plinth's front face is the lit
+ * one and the back of its top face is the face in shade, so the lamp is in
+ * front of the object and its shadow recedes away from the camera. Getting
+ * that backwards throws the shadow off the front edge of the plinth, where
+ * there is barely a finger's width of stone, and nothing lands.
+ *
+ * Note the set throws the plinth's own floor shadow at a run of about 0.03
+ * — a near-vertical downlight — while every material in the room is shaded
+ * to a key 34 degrees off vertical. Only one of those can be true, and it
+ * is the one the shading uses: a room where nothing casts a shadow is the
+ * room this project shipped for months.
+ *
+ * Feathering is concentric strokes rather than a blur filter; a filtered
+ * fill costs more per object than the rest of the chapter costs per frame.
+ *
+ * `trace(p)` receives a Path2D and must draw the silhouette in ordinary
+ * world coordinates, standing up, as the object appears. Keep it coarse —
+ * an ellipse or a dozen segments. A shadow is not where detail reads.
+ *
+ * `clip(ctx)` bounds the ground: pass `set.clipTop` for the plinth. Without
+ * it the shadow of anything tall runs off the stone and hangs in the dark
+ * room beside it, which reads worse than the missing shadow it replaced.
+ */
+export function groundShadow(ctx, trace, groundY, opts = {}) {
+  const {
+    strength = 0.5, run = 0.62, back = 0.18, tint = '0,0,0',
+    soft = 6, rings = 3, clip = null,
+  } = opts;
+  if (!ok(groundY, strength, run, back, soft) || strength <= 0) return;
+  const p = new Path2D();
+  trace(p);
+  ctx.save();
+  if (clip) clip(ctx);
+  // x' = x + run*(gy - y)   y' = gy - back*(gy - y)
+  ctx.transform(1, 0, -run, back, run * groundY, groundY * (1 - back));
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (let i = rings; i >= 1; i--) {
+    ctx.lineWidth = soft * i * (2 / rings);
+    ctx.strokeStyle = `rgba(${tint},${(strength * 0.34) / i})`;
+    ctx.stroke(p);
+  }
+  ctx.fillStyle = `rgba(${tint},${strength})`;
+  ctx.fill(p);
+  ctx.restore();
+}
+
 /** True soft shadow: blurs whatever `draw` paints, offset along the light. */
 export function castShadow(renderer, ctx, draw, opts = {}) {
   const { blur = 14, dx = 10, dy = 16, alpha = 0.5, scale = 1.02 } = opts;

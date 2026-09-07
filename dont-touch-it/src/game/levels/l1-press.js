@@ -21,7 +21,7 @@ import {
 } from '../../core/math.js';
 import {
   PALETTES, metalFill, radialBrush, brushedStreaks, knurl, screwHead,
-  glassDome, caustic, engrave, emboss, contactShadow, roundRectPath,
+  glassDome, caustic, engrave, emboss, contactShadow, groundShadow, roundRectPath,
   KEY, litEdges, facetNormal,
 } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
@@ -1006,6 +1006,7 @@ export class L1Press extends Level {
     // is lifted clear, at which point the whole ring is below it and
     // belongs entirely to the scene behind.
     const jarUp = this.jar.lift > this.g.u * 1.4 || this.jar.gone;
+    this._castOnPlinth(ctx);
     this._drawPlate(ctx, glow);
     // What the jar does to the plate under it. This existed and was never
     // called — dead since some refactor — so a lifted bell jar was a hard
@@ -1017,6 +1018,7 @@ export class L1Press extends Level {
     if (jarUp) this._drawFlange(ctx, true);
     this._drawScrews(ctx, glow, false); // back screws, seated on it
     this._drawButton(ctx, glow);
+    this._castOnPlate(ctx);
     this._drawShards(ctx, glow);
     this._drawDebris(ctx);
     if (!this.jar.gone || this.jar.resting) this._drawJar(ctx, glow);
@@ -1037,6 +1039,77 @@ export class L1Press extends Level {
       ctx.fillRect(0, 0, g.w, g.h);
       ctx.restore();
     }
+  }
+
+  /**
+   * What the whole bolted assembly throws onto the plinth.
+   *
+   * The plate had two concentric pools under it and the jar had nothing at
+   * all, so a foot-tall bell jar stood on museum stone and left the stone
+   * exactly as bright as it was beside it. The jar's is deliberately weak —
+   * it is glass, and most of the lamp goes straight through — but it is the
+   * long one, because the jar is what has height.
+   */
+  _castOnPlinth(ctx) {
+    const g = this.g;
+    const E = this.game.set.lit;
+    const ground = g.plateY + g.plateTh;
+    const clip = (c) => this.game.set.clipTop(c);
+    const j = this.jar;
+    if (!j.gone && j.lift < g.jarStraight) {
+      const cx = g.cx + j.x;
+      const baseY = g.jarBaseY - j.lift;
+      const R = g.jarR, sh = baseY - g.jarStraight, top = sh - g.jarDome;
+      groundShadow(ctx, (p) => {
+        p.moveTo(cx - R, baseY);
+        p.lineTo(cx - R, sh);
+        p.quadraticCurveTo(cx - R, top, cx, top);
+        p.quadraticCurveTo(cx + R, top, cx + R, sh);
+        p.lineTo(cx + R, baseY);
+        p.closePath();
+      }, ground, { strength: 0.26 * E, soft: g.u * 3.2, clip });
+    }
+    groundShadow(ctx, (p) => {
+      p.ellipse(g.cx, g.plateY, g.plateRx, g.plateRy, 0, 0, TAU);
+      p.rect(g.cx - g.plateRx, g.plateY, g.plateRx * 2, g.plateTh);
+    }, ground, { strength: 0.6 * E, soft: g.u * 1.2, clip });
+  }
+
+  /**
+   * The jar leaning across the plate.
+   *
+   * This is the one shadow in the chapter with anywhere to land. The plate
+   * is nearly as wide as the plinth, so what the assembly throws onto the
+   * stone is a sliver; but the brass flange is right here under the glass,
+   * and half of it belongs in shade. Drawn after the back half of the ring
+   * and its screws, so the ring darkens with the plate instead of sitting
+   * on top of its own shadow, which is what gave the old build a flange lit
+   * evenly all the way round under a foot of glass.
+   */
+  _castOnPlate(ctx) {
+    const g = this.g, j = this.jar;
+    if (j.gone) return;
+    const E = this.game.set.lit;
+    const cx = g.cx + j.x;
+    const baseY = g.jarBaseY - j.lift;
+    const R = g.jarR, sh = baseY - g.jarStraight, top = sh - g.jarDome;
+    const h = clamp01(j.lift / (g.u * 24));
+    groundShadow(ctx, (p) => {
+      p.moveTo(cx - R, baseY);
+      p.lineTo(cx - R, sh);
+      p.quadraticCurveTo(cx - R, top, cx, top);
+      p.quadraticCurveTo(cx + R, top, cx + R, sh);
+      p.lineTo(cx + R, baseY);
+      p.closePath();
+    }, g.plateY, {
+      // Glass. Most of the lamp goes through it; what is left is the rim.
+      strength: 0.28 * E * (1 - h * 0.5), soft: g.u * 2.8,
+      clip: (c) => {
+        c.beginPath();
+        c.ellipse(g.cx, g.plateY, g.plateRx * 0.99, g.plateRy * 0.99, 0, 0, TAU);
+        c.clip();
+      },
+    });
   }
 
   // ---------- base plate ----------
@@ -2056,6 +2129,27 @@ export class L1Press extends Level {
     const bezelRy = g.bezelRx * K, collarRy = g.collarRx * K;
 
     // ---- the whole switch's shadow on the plate ----
+    // The switch is the thing the chapter is named after and it stood on a
+    // mirror-polished disc throwing nothing onto it. This is its silhouette
+    // — bezel, collar, and the rubber cap on top — laid across the plate,
+    // and it moves as the cap is pressed, which is the only cue on the
+    // plate that says the cap went down rather than got shorter.
+    groundShadow(ctx, (p) => {
+      p.ellipse(cx, capY, capRx, capRy + bulge * 0.5, 0, 0, TAU);
+      p.moveTo(cx - g.collarRx, baseY);
+      p.lineTo(cx - g.collarRx, collarTop);
+      p.lineTo(cx + g.collarRx, collarTop);
+      p.lineTo(cx + g.collarRx, baseY);
+      p.closePath();
+      p.ellipse(cx, baseY, g.bezelRx, bezelRy, 0, 0, TAU);
+    }, baseY, {
+      strength: 0.5 * E, soft: g.u * 1.5,
+      clip: (c) => {
+        c.beginPath();
+        c.ellipse(g.cx, g.plateY, g.plateRx * 0.995, g.plateRy * 0.995, 0, 0, TAU);
+        c.clip();
+      },
+    });
     contactShadow(ctx, cx, baseY + g.u * 0.4, g.bezelRx * 1.22, bezelRy * 1.5,
       { strength: 0.6 * E });
 

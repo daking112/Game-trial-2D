@@ -40,7 +40,7 @@ import {
   rand, rrange, makeRng, noise1, wrapAngle,
 } from '../../core/math.js';
 import {
-  PALETTES, metalFill, contactShadow, engrave, caustic, roundRectPath,
+  PALETTES, metalFill, contactShadow, groundShadow, engrave, caustic, roundRectPath,
 } from '../../render/materials.js';
 import { KEY, facetNormal } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
@@ -1144,17 +1144,24 @@ export class L4Break extends Level {
     const G = P.g, g = this.g;
     const lit = this.game.set.lit;
     if (P.broken) return;
-    ctx.save();
-    // key is upper-left, so the pane's shadow lies down and to the right
-    ctx.translate(G.cx + G.w * 0.13, G.baseY + g.u * 0.5);
-    ctx.scale(1, 0.30);
-    const gg = ctx.createRadialGradient(0, 0, 0, 0, 0, G.w * 0.62);
-    gg.addColorStop(0, `rgba(0,0,0,${0.52 * lit})`);
-    gg.addColorStop(0.55, `rgba(0,0,0,${0.22 * lit})`);
-    gg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gg;
-    ctx.beginPath(); ctx.arc(0, 0, G.w * 0.62, 0, TAU); ctx.fill();
-    ctx.restore();
+    // The pane is the tallest thing in the game and the only one whose
+    // shadow is a shape rather than a smudge: a leaning parallelogram of
+    // stone that runs off the right edge of the plinth. What used to be
+    // here was a radial pool a pane-and-a-quarter wide at 0.52 alpha, so
+    // gentle that a luminance scan across the plinth top found no
+    // discontinuity under it at all — the pane read as pasted on.
+    groundShadow(ctx, (p) => {
+      p.moveTo(G.x0, G.y0); p.lineTo(G.x1, G.y0);
+      p.lineTo(G.x1, G.y1); p.lineTo(G.x0, G.y1); p.closePath();
+    }, G.baseY, {
+      // Glass passes most of the light; only the mirror casts a solid one.
+      strength: (P.kind === 'glass' ? 0.30 : 0.58) * lit,
+      soft: g.u * 1.6,
+      clip: (c) => this.game.set.clipTop(c),
+    });
+    // and the hard occlusion in the millimetre where it meets the stone
+    contactShadow(ctx, G.cx + G.w * 0.04, G.baseY + g.u * 0.25,
+      G.w * 0.56, g.u * 0.9, { strength: 0.6 * lit });
 
     // the caustic the pane throws: a bright line right under the glass
     if (P.kind === 'glass') {

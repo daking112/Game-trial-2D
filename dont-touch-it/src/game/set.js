@@ -1054,6 +1054,24 @@ export class Set {
   shadow(ctx, x, y, rx, ry, opts) {
     contactShadow(ctx, x, y, rx, ry, { strength: 0.66 * this.lit, ...opts });
   }
+
+  /**
+   * Clip to the plinth's top face — the actual trapezoid, not the ellipse
+   * inscribed in it. Anything a hero throws onto the plinth has to be
+   * bounded by this or it hangs off the side into the dark room, which is
+   * a worse read than no shadow at all.
+   */
+  clipTop(ctx, inset = 0) {
+    const G = this.geom, P = G.plinth;
+    const hw = P.halfW * (1 - inset), bw = P.halfW * P.k * (1 - inset);
+    ctx.beginPath();
+    ctx.moveTo(G.cx - hw, P.yTop);
+    ctx.lineTo(G.cx + hw, P.yTop);
+    ctx.lineTo(G.cx + bw, P.yBack);
+    ctx.lineTo(G.cx - bw, P.yBack);
+    ctx.closePath();
+    ctx.clip();
+  }
 }
 
 function topYOf(yFront, yBack) { return (yFront + yBack) * 0.5; }
