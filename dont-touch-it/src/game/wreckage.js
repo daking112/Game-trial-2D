@@ -205,7 +205,12 @@ export class Wreckage {
     const rng = makeRng((it.seed + 991) >>> 0);
     const glassy = it.kind === 'shard';
     const n = glassy ? 3 + ((rng() * 2) | 0) : (it.kind === 'screw' ? 6 : 3 + ((rng() * 3) | 0));
-    const ar = glassy ? 2.0 + rng() * 2.0 : 1.0 + rng() * 0.3;
+    // Slivers, but not needles. At an aspect ratio of up to four, a piece
+    // foreshortened onto the plinth top by the room's K collapses into a
+    // chevron the width of a line, and forty of them read as a scatter of
+    // arrowheads. What you actually sweep up off a gallery floor is
+    // chunkier than the spikes a pane throws while it is still breaking.
+    const ar = glassy ? 1.35 + rng() * 1.05 : 1.0 + rng() * 0.3;
     const k = Math.sqrt(ar);
     const pts = [];
     for (let i = 0; i < n; i++) {
@@ -238,10 +243,17 @@ export class Wreckage {
   _screenPoly(it, x, y, s, out) {
     const pts = this._shape(it);
     const ca = Math.cos(it.a), sa = Math.sin(it.a);
+    // A fragment lying on the plinth top is seen at the same glancing
+    // angle the top itself is, so it foreshortens by the room's K. At the
+    // 0.72 this used to use, a long sliver rotated anywhere near vertical
+    // stood UP: the finale's pile came out as a row of grey kites standing
+    // on edge rather than a mess of glass lying on stone.
+    const G = this.game.set.geom;
+    const k = G ? Math.max(0.18, G.topRy / G.topRx) : 0.3;
     out.length = 0;
     for (let i = 0; i < pts.length; i += 2) {
       out.push(x + (pts[i] * ca - pts[i + 1] * sa) * s,
-        y + (pts[i] * sa + pts[i + 1] * ca) * s * 0.72);
+        y + (pts[i] * sa + pts[i + 1] * ca) * s * k);
     }
     out.ccw = pts.ccw;
     return out;

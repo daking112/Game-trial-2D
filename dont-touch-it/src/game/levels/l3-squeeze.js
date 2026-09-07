@@ -223,6 +223,7 @@ export class L3Squeeze extends Level {
     this.fingers = [];
     this._seed = 0;
     this.splits = 0;
+    this.strands = [];
     this.spentGesture = false;
     this.bursts = 0;
     this.pokes = 0;
@@ -374,6 +375,7 @@ export class L3Squeeze extends Level {
     this._postSim(dt);
     for (const b of this.blobs) this._smoothOutline(b);
     this._updateSpill(dt);
+    this._updateStrands(dt);
     this._updateStrainVoice(dt);
     this._hints(dt);
   }
@@ -866,6 +868,7 @@ export class L3Squeeze extends Level {
     this._destroyBlob(b);
     const c1 = this._child(snap, gen + 1, -px, -py);
     const c2 = this._child(snap2, gen + 1, px, py);
+    this._spawnStrands(c1, c2, parentR, pts[cuts[0]], pts[cuts[1]]);
 
     // ---- spectacle ----
     this.splits++;
@@ -987,9 +990,128 @@ export class L3Squeeze extends Level {
     return nb;
   }
 
+  /**
+   * The filaments that bridge the halves for the first half-second.
+   *
+   * Two smooth spheres drifting apart is the read this chapter has always
+   * lost on — the split has a rip, a flash and a spray, and then the frame
+   * settles into two rubber balls with nothing to say they were ever one
+   * thing. What actually happens when something viscous parts is that a
+   * few strands hold on, stretch, thin, and go. They are anchored to real
+   * ring points on both children, so they track the bodies rather than
+   * being animated over the top of them, and they break on length.
+   */
+  _spawnStrands(c1, c2, parentR, e0, e1) {
+    if (!e0 || !e1) return;
+    const n1 = c1.points.length, n2 = c2.points.length;
+    if (n1 < 4 || n2 < 4) return;
+    const K = 6;
+    // `_child` RESAMPLES the arc it is handed onto a fixed ring, so index
+    // 0 of a child is not the end of the cut it came from. Anchoring by
+    // index put both ends of every strand somewhere arbitrary on the two
+    // outlines. Anchor by position instead: walk the parent's cut chord
+    // and take the nearest ring point on each side.
+    const nearI = (b, x, y) => {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < b.points.length; i++) {
+        const p = b.points[i];
+        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < bd) { bd = d; bi = i; }
+      }
+      return bi;
+    };
+    // Anchoring every strand to the nearest ring point put all five on the
+    // same two vertices, so the tear came out as one tuft in the middle
+    // instead of a set of filaments across its width. Find where each end
+    // of the cut landed on each child, then walk the ring BETWEEN them —
+    // that arc is the torn face, and it is where a strand can start.
+    const arcPick = (b, i0, i1, t) => {
+      const n = b.points.length;
+      let span = (i1 - i0 + n) % n;
+      if (span > n / 2) { span -= n; }        // take the short way round
+      return b.points[((i0 + Math.round(span * t)) % n + n) % n];
+    };
+    const a0 = nearI(c1, e0.x, e0.y), a1 = nearI(c1, e1.x, e1.y);
+    const b0 = nearI(c2, e0.x, e0.y), b1 = nearI(c2, e1.x, e1.y);
+    for (let i = 0; i < K; i++) {
+      const t = (i + 0.5) / K;
+      this.strands.push({
+        a: arcPick(c1, a0, a1, t),
+        c: arcPick(c2, b0, b1, t),
+        life: rrange(0.34, 0.68), t: 0, fresh: true,
+        sag: rrange(0.10, 0.30) * (rand() < 0.5 ? -1 : 1),
+        w: rrange(0.5, 1.25),
+        // Absolute, in units of the body that just parted. A multiple of
+        // the strand's own starting length does not work: at the instant
+        // of the cut the two halves are still occupying the same outline,
+        // so that length is about a pixel and every strand broke on the
+        // first frame — the whole effect existed only in the source.
+        snap: parentR * rrange(0.85, 1.55),
+      });
+    }
+  }
+
+  _strandLen(s) {
+    return Math.hypot(s.c.x - s.a.x, s.c.y - s.a.y);
+  }
+
+  _updateStrands(dt) {
+    if (!this.strands.length) return;
+    // The frame a body divides on is the most expensive frame in the
+    // chapter — two soft bodies rebuilt, fifty-six particles emitted — and
+    // it runs long. Ageing a half-second effect by that frame's real dt
+    // killed every strand before one of them was ever drawn, which is the
+    // same shape of bug as the delayed tween and the ember: the effect
+    // existed only in the source. Cap the step, and never age one on the
+    // frame it was born.
+    const d = Math.min(dt, 1 / 30);
+    for (let i = this.strands.length - 1; i >= 0; i--) {
+      const s = this.strands[i];
+      if (s.fresh) { s.fresh = false; continue; }
+      s.t += d;
+      // gone when it has run out of time or been pulled past its limit
+      if (s.t >= s.life || this._strandLen(s) > s.snap) this.strands.splice(i, 1);
+    }
+  }
+
+  _drawStrands(ctx) {
+    if (!this.strands.length) return;
+    const g = this.g;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const s of this.strands) {
+      const k = 1 - clamp01(s.t / s.life);
+      const ax = s.a.x, ay = s.a.y, cx = s.c.x, cy = s.c.y;
+      const dx = cx - ax, dy = cy - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      // A strand under tension is thinnest in the middle and it sags
+      // across the pull, not along it.
+      const stretch = clamp01(len / s.snap);
+      const mx = (ax + cx) * 0.5 - dy * s.sag * (1 - stretch);
+      const my = (ay + cy) * 0.5 + dx * s.sag * (1 - stretch);
+      const w = Math.max(0.4, g.u * s.w * (1 - stretch * 0.8) * k);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(mx, my, cx, cy);
+      ctx.lineWidth = w;
+      ctx.strokeStyle = `rgba(214,72,86,${0.72 * k})`;
+      ctx.stroke();
+      // the light through it — a thread of membrane is thin enough to glow
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(mx, my, cx, cy);
+      ctx.lineWidth = w * 0.42;
+      ctx.strokeStyle = `rgba(255,196,178,${0.55 * k})`;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   _burst(b) {
     const g = this.g;
     const { cx, cy, r } = b;
+    this.strands = this.strands.filter(s =>
+      b.points.indexOf(s.a) < 0 && b.points.indexOf(s.c) < 0);
     this._destroyBlob(b);
     this.bursts++;
     S.pop((cx - g.cx) / (g.u * 22));
@@ -1109,6 +1231,7 @@ export class L3Squeeze extends Level {
     this._drawDishBack(ctx);
     for (const b of this.blobs) this._drawShadow(ctx, b);
     for (const b of this.blobs) this._drawBlob(ctx, glow, b);
+    this._drawStrands(ctx);
     this._drawSpill(ctx, glow);
     this._drawDishFront(ctx, glow);
   }

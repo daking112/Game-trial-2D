@@ -169,15 +169,25 @@ export class Level {
     // bigger than a fragment.
     // `size` is the fragment's half-width now that the wreckage normalises
     // its outlines, so this reads directly: nothing in the pile is wider
-    // than a fifth of the plinth's half-width.
-    const cap = G.topRx * 0.105;
+    // than a seventh of the plinth's half-width.
+    const cap = G.topRx * 0.072;
     const settled = list.filter(d => d.rest !== false);
     const src = settled.length ? settled : list;
-    const keep = src.slice().sort((a, b) => sizeOf(b) - sizeOf(a)).slice(0, max);
-    for (const d of keep) {
-      this.leave(kind, d.x, d.y, { size: Math.min(sizeOf(d), cap), a: d.a || 0 });
+    const rank = src.slice().sort((a, b) => sizeOf(b) - sizeOf(a));
+    // `max` is how many end up in the pile, not how many are offered.
+    // The wreckage throws away anything that came to rest past the edge of
+    // the top face — right, in the fiction, it went on to the floor — and
+    // a bursting bell jar and a toppling pane put most of their biggest
+    // pieces there. Taking the top `max` and letting the store bin two
+    // thirds of them is how Chapter I asked for eighteen shards and left
+    // eight, and Chapter III asked for twenty-four and left six. Walk the
+    // ranking instead and stop when the pile has what was asked for.
+    let kept = 0;
+    for (const d of rank) {
+      if (kept >= max) break;
+      if (this.leave(kind, d.x, d.y, { size: Math.min(sizeOf(d), cap), a: d.a || 0 })) kept++;
     }
-    return keep.length;
+    return kept;
   }
 
   solve(delay = 0) {

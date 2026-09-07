@@ -886,7 +886,17 @@ export class L1Press extends Level {
       if (this.game.ambience) this.game.ambience.set(0.002, 0.3);
     });
     this.tl.after(1.05, () => {
-      this.game.set.tint = '#ff2d18';
+      // The emergency fitting strikes: it comes up FAST and overshoots,
+      // the way a cold discharge lamp does, then settles. A tint set to
+      // '#ff2d18' used to go here and be added flat to every pixel, which
+      // is a grade, not a light — the room went beige-red all over and
+      // nothing in the frame had moved into or out of anything.
+      this.game.set.emergency = 1.15;
+      this.game.tl.to(this.game.set, 'emergency', 0.82, 0.45, 'outCubic');
+      // The vignette models the dead downlight's cone, and at 1.5 it was
+      // crushing the corner the fitting hangs in to black — the one light
+      // left in the room was being switched off by a post effect.
+      this.game.tl.to(this.game.set, 'vignette', 0.42, 0.5, 'outCubic');
       this.game.tl.to(this.game.set, 'exposure', 0.22, 0.3, 'outCubic');
       this.game.set.warmth = 0.05;
       SFX.bigImpact(1);
@@ -911,6 +921,9 @@ export class L1Press extends Level {
         // exposure never left 0.22 — the stutter existed only in the code.
         this.game.set.exposure = lvl;
         this.game.tl.to(this.game.set, 'exposure', 0.20, 0.30, 'inQuad');
+        // the fitting dips with the main circuit and recovers slower
+        this.game.set.emergency = 0.45;
+        this.game.tl.to(this.game.set, 'emergency', 0.86, 0.42, 'outQuad');
         SFX.powerDown();
         Haptics.tick();
         this.shake(kick);
@@ -918,6 +931,7 @@ export class L1Press extends Level {
     }
     this.tl.after(2.6, () => {
       this.game.set.tint = null;
+      this.game.tl.to(this.game.set, 'emergency', 0, 1.1, 'inCubic');
       this.game.tl.to(this.game.set, 'exposure', 1, 1.4, 'outCubic');
       this.game.tl.to(this.game.set, 'coneStrength', 1, 1.4, 'outCubic');
       this.game.tl.to(this.game.set, 'vignette', 0, 1.6, 'outCubic');

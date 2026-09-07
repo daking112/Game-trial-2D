@@ -73,6 +73,10 @@ export class Set {
     this._noteText = null; this._noteL = null; this.noteA = 0;
     this.tint = null;         // css colour graded additively over the room
     this.tintAmount = 0.12;
+    // The emergency luminaire. Not a grade — a light, with a place on the
+    // wall, so when the gallery's own lamp dies the room is lit by
+    // something the player can point at. See `drawEmergency`.
+    this.emergency = 0;       // 0..1, tweenable
     this.flicker = 0;
     this.geom = null;
 
@@ -1008,6 +1012,109 @@ export class Set {
       }
       ctx.restore();
     }
+    if (this.emergency > 0.005) this._emergencyWall(ctx);
+  }
+
+  /** Where the emergency fitting is: high on the right wall, off-axis. */
+  _emergencyAt() {
+    const G = this.geom;
+    return { x: G.w * 0.805, y: G.h * 0.185, r: G.h * 0.86 };
+  }
+
+  /**
+   * The wall, lit by the emergency fitting.
+   *
+   * What used to happen when the gallery lost power was `tint = '#ff2d18'`
+   * and a full-frame fillRect in `lighter` — a flat red added to every
+   * pixel equally, which is a grade and not a light, and read as a beige
+   * wash over a photograph rather than as a room in trouble. This has a
+   * source: a falloff from a fitting on the right wall, so the far corner
+   * stays black, the near wall is hot, and the frame gains a second light
+   * direction opposite the dead downlight's.
+   */
+  _emergencyWall(ctx) {
+    const G = this.geom, k = clamp01(this.emergency);
+    const L = this._emergencyAt();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(L.x, L.y, L.r * 0.02, L.x, L.y, L.r);
+    g.addColorStop(0, `rgba(255,116,78,${0.72 * k})`);
+    g.addColorStop(0.14, `rgba(236,64,38,${0.40 * k})`);
+    g.addColorStop(0.42, `rgba(168,30,22,${0.17 * k})`);
+    g.addColorStop(1, 'rgba(96,10,8,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, G.w, G.h);
+    ctx.restore();
+  }
+
+  /**
+   * The fitting itself, and what it does to whatever is standing in front
+   * of it. Drawn over the level, because a second light source that never
+   * touches the objects is still a grade.
+   */
+  drawEmergency(ctx, glow) {
+    const G = this.geom; if (!G || this.emergency <= 0.005) return;
+    const k = clamp01(this.emergency);
+    const L = this._emergencyAt();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // the objects, rimmed from the fitting's side
+    const wash = ctx.createLinearGradient(G.w, 0, G.w * 0.18, G.h * 0.75);
+    wash.addColorStop(0, `rgba(255,86,50,${0.40 * k})`);
+    wash.addColorStop(0.45, `rgba(206,42,26,${0.15 * k})`);
+    wash.addColorStop(1, 'rgba(140,18,14,0)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, G.w, G.h);
+    // the halo
+    const hr = G.h * 0.10;
+    const hg = ctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, hr);
+    hg.addColorStop(0, `rgba(255,214,190,${0.85 * k})`);
+    hg.addColorStop(0.28, `rgba(255,110,70,${0.42 * k})`);
+    hg.addColorStop(1, 'rgba(220,40,26,0)');
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(L.x, L.y, hr, 0, TAU); ctx.fill();
+    ctx.restore();
+    // Into the bloom buffer as well, so the fitting reads as a source and
+    // not as a decal: post is what makes a light look like a light, and
+    // everything else in this room that emits already goes through it.
+    if (glow) {
+      glow.save();
+      glow.globalCompositeOperation = 'lighter';
+      const br = G.h * 0.16;
+      const bg = glow.createRadialGradient(L.x, L.y, 0, L.x, L.y, br);
+      bg.addColorStop(0, `rgba(255,180,140,${0.62 * k})`);
+      bg.addColorStop(0.3, `rgba(255,96,56,${0.26 * k})`);
+      bg.addColorStop(1, 'rgba(220,40,26,0)');
+      glow.fillStyle = bg;
+      glow.beginPath(); glow.arc(L.x, L.y, br, 0, TAU); glow.fill();
+      glow.restore();
+    }
+    // the fitting: a bulkhead lamp in a wire guard, which is the one thing
+    // in the frame that is only true of an emergency light
+    const w = G.w * 0.072, h = w * 0.60;
+    ctx.save();
+    ctx.translate(L.x, L.y);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.5, h * 0.5, 0, 0, TAU);
+    const lens = ctx.createRadialGradient(-w * 0.10, -h * 0.14, 0, 0, 0, w * 0.62);
+    lens.addColorStop(0, `rgba(255,250,242,${0.98 * k})`);
+    lens.addColorStop(0.34, `rgba(255,204,150,${0.95 * k})`);
+    lens.addColorStop(0.72, `rgba(255,116,64,${0.92 * k})`);
+    lens.addColorStop(1, `rgba(176,32,18,${0.88 * k})`);
+    ctx.fillStyle = lens;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(18,10,8,${0.75 * k})`;
+    ctx.lineWidth = Math.max(1, w * 0.055);
+    ctx.stroke();
+    // the guard, three bars across the lens
+    ctx.strokeStyle = `rgba(14,8,6,${0.72 * k})`;
+    ctx.lineWidth = Math.max(0.8, w * 0.04);
+    for (let i = -1; i <= 1; i++) {
+      const yy = i * h * 0.24;
+      const hw = (w * 0.5) * Math.sqrt(Math.max(0, 1 - (yy / (h * 0.5)) ** 2));
+      ctx.beginPath(); ctx.moveTo(-hw, yy); ctx.lineTo(hw, yy); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawLightCone(ctx) {

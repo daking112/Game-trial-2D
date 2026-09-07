@@ -116,6 +116,7 @@ export class Game {
     this.particles.clear();
     this.narrator.clear();
     this.set.tint = null;
+    this.set.emergency = 0;
     this.set.warmth = 1;
     this.set.flicker = 0;
     this.set.plinthOpacity = 1;
@@ -207,6 +208,7 @@ export class Game {
     this.set.coneStrength = 0.42;
     this.set.warmth = 1;
     this.set.tint = null;
+    this.set.emergency = 0;
     this.hud.showBar(false);
     this.narrator.clear();
     const n = this.levelClasses.length;
@@ -328,6 +330,7 @@ export class Game {
     if (this.level) this.level.draw(ctx, g);
     this.particles.draw(ctx, g);
     if (this.level) this.level.drawFront(ctx, g);
+    this.set.drawEmergency(ctx, g);
     this.set.drawAtmosphere(ctx);
 
     // The room's exposure dims the ROOM (its layers are blitted with
