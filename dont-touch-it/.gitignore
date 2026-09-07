@@ -18,3 +18,4 @@ tools/bell.mjs
 tools/crop.mjs
 lum.py
 __pycache__/
+dist/

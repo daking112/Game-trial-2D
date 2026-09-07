@@ -79,7 +79,18 @@ export class Renderer {
     const rect = this.canvas.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width || window.innerWidth));
     const h = Math.max(1, Math.round(rect.height || window.innerHeight));
-    const dpr = clamp(window.devicePixelRatio || 1, 1, this.quality.dprCap);
+    let dpr = clamp(window.devicePixelRatio || 1, 1, this.quality.dprCap);
+    // An absolute ceiling on how many pixels we agree to shade.
+    //
+    // dprCap alone bounds the RATIO, not the area, so a wide viewport walks
+    // straight past it: a page without a `width=device-width` viewport meta
+    // lays out at 980 CSS px, which at dpr 1.5 is a 1470x3188 canvas — 4.7
+    // megapixels, and 136ms a frame even on the `low` tier. A desktop
+    // browser maximised on a large display does the same thing. Trade
+    // resolution for the frame rather than the other way round.
+    const MAXPX = 2.6e6;
+    const area = w * h * dpr * dpr;
+    if (area > MAXPX) dpr = Math.max(1, dpr * Math.sqrt(MAXPX / area));
     if (!force && w === this.w && h === this.h && dpr === this.dpr) return false;
     this.w = w; this.h = h; this.dpr = dpr;
     this.u = Math.min(w, h) / 100;
