@@ -1,0 +1,4 @@
+# Scratch files. Agents working in this repo write throwaway temporaries at
+# the root; an empty .tmp is never a deliverable, and one showing up as
+# untracked has stopped a clean tree more than once.
+*.tmp
