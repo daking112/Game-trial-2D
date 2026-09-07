@@ -2253,7 +2253,14 @@ export class L1Press extends Level {
     rl.addColorStop(1, `rgba(255,176,148,${0.34 * dead})`);
     ctx.fillStyle = rl;
     ctx.fillRect(cx, capY - bulge * 2, capRx * 1.3, bulge * 2 + capRy * 2);
-    ctx.restore();
+
+    // NOTE: the cap's clip is still open here, and everything below wants
+    // it. It used to be popped on this line, so the parting line, the
+    // polish patch and the specular hotspot were all drawn UNCLIPPED —
+    // the highlight straddled the dome's contour and spilled onto the wall
+    // above it, and the parting line ran from the wall, over the dome and
+    // down through it, fully detached from the button at 70% press. On the
+    // game's key art.
 
     // ---- the incident ----
     // A moulded cap has a parting line where the two halves of the tool
@@ -2301,7 +2308,10 @@ export class L1Press extends Level {
     ctx.fillStyle = hg;
     ctx.beginPath(); ctx.ellipse(hx, hy, capRx * 0.20, bulge * 0.15, -0.4, 0, TAU); ctx.fill();
     ctx.restore();
+    ctx.restore();   // ...and the cap's clip closes here, not before it
 
+    // The skirt is the one thing that belongs OUTSIDE the clip: it is the
+    // silhouette's own edge, and clipping it would cut it in half.
     // the skirt's own dark underside, so the cap sits ON something
     ctx.save();
     ctx.beginPath();
