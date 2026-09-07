@@ -148,6 +148,35 @@ export class Level {
     this.game.wreck.addDebris(list, kind, sizeOf);
   }
 
+  /**
+   * Deposit the BIGGEST pieces of a debris field, and only those.
+   *
+   * A chapter that hands over everything it broke buries the plinth: two
+   * glass chapters at sixty-odd pieces each, plus a mirror, is two hundred
+   * overlapping translucent quads by the finale, which is the
+   * transparency-accumulates trap under a different name. The large pieces
+   * are what the eye reads as "this was smashed" anyway; the fines are
+   * noise at plinth scale.
+   */
+  leaveBiggest(list, kind, max = 22, sizeOf = (d) => (d.data && (d.data.size ?? d.data.r)) || 1) {
+    const G = this.game.set.geom;
+    if (!G) return 0;
+    // A piece has to be plausible AS DEBRIS, not at the size it was when
+    // it was part of something. Chapter III's mirror comes apart into
+    // wedges a third of the pane across on purpose — deposited at that
+    // size they lie on the plinth like sheets of glass, wider than the
+    // bell and hanging off both edges. Nothing in the pile gets to be
+    // bigger than a fragment.
+    const cap = G.topRx * 0.085;
+    const settled = list.filter(d => d.rest !== false);
+    const src = settled.length ? settled : list;
+    const keep = src.slice().sort((a, b) => sizeOf(b) - sizeOf(a)).slice(0, max);
+    for (const d of keep) {
+      this.leave(kind, d.x, d.y, { size: Math.min(sizeOf(d), cap), a: d.a || 0 });
+    }
+    return keep.length;
+  }
+
   solve(delay = 0) {
     if (this.solved) return;
     this.solved = true;

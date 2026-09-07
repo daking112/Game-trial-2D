@@ -37,9 +37,23 @@ export class Wreckage {
   add(it) {
     const G = this.game.set.geom;
     if (!G || !KINDS.has(it.kind)) return null;
+
+    // Nothing lands off the plinth.
+    //
+    // A chapter throws debris hard enough to clear the top face, and a
+    // piece that comes to rest past the edge has, in the fiction, gone on
+    // to the floor — but stored in plinth-relative coordinates it just
+    // gets painted wherever that lands, which was in the void beside the
+    // plinth and, for the higher ones, stuck to the back wall: full
+    // brightness, unoccluded, larger than the pieces actually on the
+    // plinth. The top face is an ellipse, so test against the ellipse.
+    const rx = (it.x - G.cx) / G.topRx;
+    const ry = (it.y - G.topY) / Math.max(1, G.topRy);
+    if (rx * rx + ry * ry > 0.92 * 0.92) return null;
+
     const rec = {
       kind: it.kind,
-      rx: (it.x - G.cx) / G.topRx,
+      rx,
       ry: (it.y - G.topY) / G.u,
       a: it.a || 0,
       size: (it.size || G.u) / G.u,        // in layout units

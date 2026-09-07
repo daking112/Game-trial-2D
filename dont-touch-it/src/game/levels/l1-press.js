@@ -169,7 +169,24 @@ export class L1Press extends Level {
     this.hint('');
   }
 
-  exit() { this.hideHint(); }
+  /**
+   * What this chapter leaves on the plinth for the rest of the game.
+   *
+   * It left nothing at all until now, which quietly cost the anthology its
+   * whole thesis: a chapter that smashes a bolted bell jar into sixty-odd
+   * pieces and backs four sealed screws out of a brass ring handed the
+   * next chapter a showroom-clean plinth, and the finale — where the
+   * player feels around in the dark for what they have done — found only
+   * Chapter II's beads.
+   */
+  exit() {
+    this.hideHint();
+    if (!this.jar.intact) this.leaveBiggest(this.shards, 'shard', 18);
+    // the brass, including the sheared stud's own head
+    for (const d of this.debris) {
+      this.leave('screw', d.x, d.y, { size: (d.data && d.data.r) || this.g.u * 1.9, a: d.a || 0 });
+    }
+  }
 
   intro() {
     this.say("Behind the glass is a switch.", { hold: 1.4 });

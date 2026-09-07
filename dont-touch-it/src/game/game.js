@@ -210,12 +210,34 @@ export class Game {
     this.hud.showBar(false);
     this.narrator.clear();
     const n = this.levelClasses.length;
+    // Counted by kind, and named. The last line used to be a threshold
+    // guess — `glass > 20 ? 'Most of it was glass' : 'Room 1 of 140'` —
+    // and because two chapters deposited nothing, glass was ZERO in every
+    // real playthrough and the game's closing line to a player who had
+    // just shattered a bell jar, a tempered pane and a mirror fell through
+    // to the filler branch. A receipt for a crime that was never recorded.
+    const by = {};
+    for (const it of this.wreck.items) by[it.kind] = (by[it.kind] || 0) + 1;
     const debris = this.wreck.items.length;
-    const glass = this.wreck.items.filter(i => i.kind === 'shard').length;
+    const NAME = {
+      shard: ['piece of glass', 'pieces of glass'],
+      screw: ['screw', 'screws'],
+      bead: ['bead', 'beads'],
+      thread: ['thread', 'threads'],
+      crumb: ['crumb', 'crumbs'],
+      ash: ['trace of ash', 'traces of ash'],
+    };
+    // Ordered by what the game is about, not by what there happens to be
+    // most of: the glass leads even when the beads outnumber it.
+    const ORDER = ['shard', 'screw', 'bead', 'thread', 'crumb', 'ash'];
+    const parts = Object.entries(by)
+      .sort((a, b) => ORDER.indexOf(a[0]) - ORDER.indexOf(b[0]))
+      .slice(0, 2)
+      .map(([k, c]) => `${c} ${(NAME[k] || ['piece', 'pieces'])[c === 1 ? 0 : 1]}`);
     this.hud.end('You were told.', [
       `${this.transgressions} of ${n} rules broken`,
       debris ? `${debris} pieces left where they fell` : 'Nothing left behind',
-      glass > 20 ? 'Most of it was glass' : 'Room 1 of 140',
+      parts.length ? parts.join(', ') : 'Room 1 of 140',
     ], () => location.reload());
   }
 

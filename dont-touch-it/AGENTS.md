@@ -156,6 +156,17 @@ your geometry as multiples of it so every chapter is framed identically.
 
 ## Performance traps this project has already paid for
 
+**Run `node inorder.mjs` too, and believe it over the others.** It is the
+only tool here that PLAYS THE GAME — from the title, in order, no `?level=`
+jump. Everything else enters a chapter through `?level=` or `goto()`, and
+that is the exact code path that hid the anthology's central mechanic
+being unimplemented for five reviews: Chapters I and III deposited no
+wreckage at all, and the finale covered for them with a demo pile that
+only seeded when the store was empty — which is every `?level=` entry, so
+the pile every tool and every screenshot showed was the fake one, and the
+real Chapter IV was never once on screen. A debug path that is prettier
+than the real one hides the bug it is standing in front of.
+
 **Run `node budget.mjs` as well as `playtest.mjs`.** playtest drives a
 phone. Chapter III once cost 0.6ms on a phone and 68.6ms on a tablet, and
 not one test in the repo could see it.

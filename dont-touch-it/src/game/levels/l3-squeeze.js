@@ -1035,11 +1035,15 @@ export class L3Squeeze extends Level {
       const rr = Math.sqrt(rand()) * r * 2.4 + g.u * 1.5;
       const bx = clamp(x + Math.cos(a) * rr, g.cx - g.dishRx * 1.5, g.cx + g.dishRx * 1.5);
       const by = g.topY + rrange(-g.dishRy * 0.6, g.dishRy * 0.85);
-      this.leave('bead', bx, by, {
-        size: g.u * rrange(0.35, 1.15),
-        a: rand() * TAU,
-        hue: SKIN.bead,
-      });
+      // Capped: this chapter used to hand over every bead it made, and
+      // fifty-four of them drowned the glass from the other three.
+      if (this.beads < 26) {
+        this.leave('bead', bx, by, {
+          size: g.u * rrange(0.35, 1.15),
+          a: rand() * TAU,
+          hue: SKIN.bead,
+        });
+      }
       this.beads++;
     }
   }
@@ -1058,7 +1062,9 @@ export class L3Squeeze extends Level {
         s.y = floor;
         s.settled = 0.0001;
         S.splat((s.x - g.cx) / (g.u * 22), s.r / g.u);
-        this.leave('bead', s.x, s.y, { size: s.r * 1.25, a: rand() * TAU, hue: SKIN.bead });
+        if (this.beads < 26) {
+          this.leave('bead', s.x, s.y, { size: s.r * 1.25, a: rand() * TAU, hue: SKIN.bead });
+        }
         this.beads++;
         this.p.emit({
           x: s.x, y: s.y, vx: rrange(-50, 50), vy: rrange(-90, -20),

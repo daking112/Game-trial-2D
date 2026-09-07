@@ -341,7 +341,17 @@ export class L4Break extends Level {
     this.hideHint();
   }
 
-  exit() { this.hideHint(); }
+  /**
+   * The pane and the mirror, both of which used to vanish with the
+   * chapter. Between them they are most of the glass in the game.
+   */
+  exit() {
+    this.hideHint();
+    // the mirror first, so its bigger wedges survive the per-kind cap
+    for (const P of [this.panes[1], this.panes[0]]) {
+      if (P && P.shards.length) this.leaveBiggest(P.shards, 'shard', P.kind === 'mirror' ? 10 : 14);
+    }
+  }
 
   roomLight() { return 1; }
 

@@ -79,9 +79,18 @@ export class L5Dark extends Level {
     this.world = new VerletWorld({ gravity: 2600, damping: 0.985, iterations: 8, substeps: 2 });
     this._buildChain();
 
-    // If a player jumps straight here, seed the mess so the reveal has
-    // something to find. A real playthrough arrives with its own.
-    if (this.game.wreck.items.length === 0) this._seedWreckage();
+    // A demo pile, for jumping straight here from a tool or a deep link.
+    //
+    // This is gated on an EXPLICIT flag now, and that matters more than it
+    // looks. It used to fire whenever the store happened to be empty —
+    // which is every ?level= entry, which is how every tool in this repo
+    // and every screenshot in every review reached this chapter. So the
+    // pile everyone had been looking at was the seeded one, and the real
+    // chapter, which was arriving nearly empty because two of the three
+    // chapters before it deposited nothing, was never once on screen.
+    // A debug path that is prettier than the real one hides the bug it is
+    // standing in front of.
+    if (new URLSearchParams(location.search).has('demo')) this._seedWreckage();
 
   }
 
