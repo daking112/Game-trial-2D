@@ -213,6 +213,16 @@ export class Wreckage {
       const rr = glassy ? 0.80 + rng() * 0.26 : 0.55 + rng() * 0.7;
       pts.push(Math.cos(ang) * rr * k, Math.sin(ang) * rr / k);
     }
+    // Normalise to the unit circle. Without this `s` is a radius the shape
+    // then multiplies: a glassy sliver picks an aspect ratio of up to four
+    // and stretches its long axis by its square root, so a piece the level
+    // capped at eight per cent of the plinth came out lying across a fifth
+    // of it — sheets of glass, not chips. `s` now means what every caller
+    // already assumed it meant, the half-size of the piece.
+    let mr = 0;
+    for (let i = 0; i < pts.length; i += 2) mr = Math.max(mr, Math.hypot(pts[i], pts[i + 1]));
+    if (mr > 0) for (let i = 0; i < pts.length; i++) pts[i] /= mr;
+
     // Which way round did that come out? Sign the area once so the edge
     // pass can trust its outward normals instead of guessing.
     let area = 0;
@@ -243,7 +253,7 @@ export class Wreckage {
     ctx.closePath();
   }
 
-  _edges(ctx, p, L, lit, dim, wid) { litEdges(ctx, p, L, lit, dim, wid); }
+  _edges(ctx, p, L, lit, dim, wid, bias) { litEdges(ctx, p, L, lit, dim, wid, bias); }
 
   _shard(ctx, x, y, s, it, l, L) {
     const n = this._normal(it);
@@ -285,10 +295,16 @@ export class Wreckage {
       ctx.fillRect(x - s * 2.2, y - s * 2.2, s * 4.4, s * 4.4);
       ctx.restore();
     }
+    // A chip has three or four edges and at the old bias three of them
+    // caught the lamp, so every piece in the pile came out a white
+    // wireframe diamond — the exact cut-paper read this shading exists to
+    // avoid. At 0.66 most pieces catch nothing and the few square-on to
+    // the lamp are the ones that flash, which is what a heap of broken
+    // glass on a lit floor actually looks like.
     this._edges(ctx, p, L,
       `rgba(244,254,255,${(0.30 + diff * 0.62) * l})`,
       `rgba(10,16,24,${0.42 * l})`,
-      Math.max(0.7, s * 0.10));
+      Math.max(0.7, s * 0.10), 0.66);
   }
 
   _screw(ctx, x, y, s, it, l, L) {

@@ -42,7 +42,7 @@ import {
 import {
   PALETTES, metalFill, contactShadow, groundShadow, engrave, caustic, roundRectPath,
 } from '../../render/materials.js';
-import { KEY, facetNormal } from '../../render/materials.js';
+import { KEY, facetNormal, litEdges } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
 import { Layer } from '../../render/renderer.js';
 import { Audio } from '../../core/audio.js';
@@ -585,7 +585,7 @@ export class L4Break extends Level {
         pts: [G.flaw.x, G.flaw.y],
       }],
       paths: [],
-      path2d: null,
+      path2d: null, bands2d: null,
       target: mid,
       arrested: false,
     };
@@ -670,7 +670,7 @@ export class L4Break extends Level {
         S.tick(tip.gen, (tip.x - G.cx) / (G.w * 1.2), 0.5);
         Haptics.tick();
         this._crackDust(tip, G, 6);
-        c.path2d = null;
+        c.path2d = null; c.bands2d = null;
         continue;
       }
 
@@ -678,7 +678,7 @@ export class L4Break extends Level {
         tip.lastNode = tip.len;
         tip.pts.push(tip.x, tip.y);
         c.nodes++;
-        c.path2d = null;
+        c.path2d = null; c.bands2d = null;
         S.tick(tip.gen, (tip.x - G.cx) / (G.w * 1.2));
         Haptics.tick();
         this._crackDust(tip, G, 2);
@@ -1545,22 +1545,70 @@ export class L4Break extends Level {
     const a = (0.5 + pulse * 0.5) * b;
 
     ctx.save();
-    // the conchoidal chip: a tiny bright wedge biting into the edge
-    ctx.beginPath();
-    ctx.moveTo(f.x - u * 0.5, f.y - u * 1.2);
-    ctx.lineTo(f.x + u * 1.5, f.y - u * 0.1);
-    ctx.lineTo(f.x + u * 0.5, f.y + u * 0.7);
-    ctx.lineTo(f.x - u * 0.5, f.y + u * 1.3);
-    ctx.closePath();
-    const fg = ctx.createLinearGradient(f.x - u, f.y - u, f.x + u * 1.6, f.y + u);
-    fg.addColorStop(0, `rgba(255,255,255,${0.85 * a})`);
-    fg.addColorStop(0.5, `rgba(196,244,236,${0.5 * a})`);
-    fg.addColorStop(1, `rgba(120,190,190,${0.24 * a})`);
+    // The conchoidal chip.
+    //
+    // This was a four-point wedge with a white stroke of one width all the
+    // way round, and it read as a triangular glyph stuck on the glass —
+    // a play button, not a flaw. Glass does not chip in straight lines. It
+    // chips in shells: a shallow scallop bitten out of the edge, bulging
+    // into the face, with the ridge where the scallop meets the face
+    // catching the lamp and a couple of Wallner ripples running back
+    // toward where it was struck. That is what makes it a bite rather
+    // than a shape drawn on top.
+    const top = f.y - u * 1.35, bot = f.y + u * 1.5, deep = f.x + u * 1.85;
+    const scallop = (c) => {
+      c.beginPath();
+      c.moveTo(f.x, top);
+      c.bezierCurveTo(f.x + u * 1.5, top + u * 0.25, deep, f.y - u * 0.35,
+        deep - u * 0.15, f.y + u * 0.25);
+      c.bezierCurveTo(f.x + u * 1.3, f.y + u * 1.0, f.x + u * 0.55, bot - u * 0.1,
+        f.x, bot);
+      c.closePath();
+    };
+    scallop(ctx);
+    // Seen through the missing glass: the far side of the chip is a window
+    // onto nothing, the near side picks the lamp up along the ridge.
+    const fg = ctx.createLinearGradient(f.x, f.y - u, deep, f.y + u);
+    fg.addColorStop(0, `rgba(228,250,248,${0.30 * a})`);
+    fg.addColorStop(0.45, `rgba(176,224,220,${0.20 * a})`);
+    fg.addColorStop(1, `rgba(96,152,158,${0.10 * a})`);
     ctx.fillStyle = fg;
     ctx.fill();
-    ctx.strokeStyle = `rgba(255,255,255,${0.6 * a})`;
-    ctx.lineWidth = Math.max(0.8, u * 0.1);
+    // the ridge only — the edge side is the pane's own edge, already drawn
+    ctx.beginPath();
+    ctx.moveTo(f.x, top);
+    ctx.bezierCurveTo(f.x + u * 1.5, top + u * 0.25, deep, f.y - u * 0.35,
+      deep - u * 0.15, f.y + u * 0.25);
+    ctx.bezierCurveTo(f.x + u * 1.3, f.y + u * 1.0, f.x + u * 0.55, bot - u * 0.1,
+      f.x, bot);
+    ctx.strokeStyle = `rgba(255,255,255,${0.62 * a})`;
+    ctx.lineWidth = Math.max(0.7, u * 0.09);
+    ctx.lineCap = 'round';
     ctx.stroke();
+    // Wallner lines: the shockwave's own record of how fast it travelled
+    ctx.save();
+    scallop(ctx); ctx.clip();
+    ctx.strokeStyle = `rgba(255,255,255,${0.20 * a})`;
+    ctx.lineWidth = Math.max(0.5, u * 0.05);
+    // Nested copies of the ridge, not fresh arcs from the same two points
+    // — drawn that way they crossed it and the chip came out reading as a
+    // letter D. A ripple runs PARALLEL to the front that made it.
+    for (let i = 1; i <= 2; i++) {
+      const k = 1 - i * 0.28;
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.scale(k, k);
+      ctx.translate(-f.x, -f.y);
+      ctx.beginPath();
+      ctx.moveTo(f.x, top);
+      ctx.bezierCurveTo(f.x + u * 1.5, top + u * 0.25, deep, f.y - u * 0.35,
+        deep - u * 0.15, f.y + u * 0.25);
+      ctx.bezierCurveTo(f.x + u * 1.3, f.y + u * 1.0, f.x + u * 0.55, bot - u * 0.1,
+        f.x, bot);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
     ctx.restore();
 
     if (glow) {
@@ -2118,6 +2166,44 @@ export class L4Break extends Level {
     return p;
   }
 
+  /**
+   * The same crack, cut into width bands.
+   *
+   * A fracture is not a line of constant width. It is widest where it
+   * started, because that is where the two faces have had longest to pull
+   * apart, and it closes to nothing at the tip that is still running — and
+   * a branch is always finer than the trunk it left. Stroking the whole
+   * thing at one width is what made the mirror read as drawn on with a
+   * white marker.
+   *
+   * Returns bands from widest to finest, each a Path2D of the segments
+   * whose taper falls in that band, so the whole crack is still three or
+   * four stroke calls rather than one per segment.
+   */
+  _crackBands(c, bands = 4) {
+    if (c.bands2d && c.bands2d.length === bands) return c.bands2d;
+    const out = [];
+    for (let i = 0; i < bands; i++) out.push(new Path2D());
+    for (const tip of c.paths) {
+      const pts = tip.pts;
+      const n = pts.length;
+      if (n < 4) continue;
+      // A branch starts life at its parent's width and never regains it.
+      const head = 1 / (1 + tip.gen * 0.85);
+      for (let i = 2; i < n; i += 2) {
+        // Squared, so the crack holds its width for most of its length and
+        // then closes quickly — which is what a fracture actually does.
+        const t = 1 - (i / (n - 2));
+        const w = head * t * t;
+        const b = Math.min(bands - 1, Math.max(0, Math.floor((1 - w) * bands)));
+        out[b].moveTo(pts[i - 2], pts[i - 1]);
+        out[b].lineTo(pts[i], pts[i + 1]);
+      }
+    }
+    c.bands2d = out;
+    return out;
+  }
+
   _drawCrack(ctx, glow, P) {
     const c = P.crack;
     if (!c) return;
@@ -2138,19 +2224,24 @@ export class L4Break extends Level {
     ctx.stroke(path);
     ctx.restore();
 
-    // 2. the dark opening
+    // 2. the dark opening — widest at the origin, closed at the tip
+    const bands = this._crackBands(c);
     ctx.strokeStyle = `rgba(8,12,20,${0.55 + hot * 0.25})`;
-    ctx.lineWidth = Math.max(1.1, u * 0.30);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.stroke(path);
+    for (let i = 0; i < bands.length; i++) {
+      ctx.lineWidth = Math.max(0.6, u * 0.30 * (1 - i / bands.length));
+      ctx.stroke(bands[i]);
+    }
 
     // 3. the lit fracture face, offset toward the key light
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.translate(-u * 0.11, -u * 0.15);
-    ctx.strokeStyle = `rgba(255,255,255,${0.42 + hot * 0.34})`;
-    ctx.lineWidth = Math.max(0.8, u * 0.15);
-    ctx.stroke(path);
+    for (let i = 0; i < bands.length; i++) {
+      ctx.strokeStyle = `rgba(255,255,255,${(0.42 + hot * 0.34) * (1 - i / (bands.length + 1))})`;
+      ctx.lineWidth = Math.max(0.5, u * 0.15 * (1 - i / bands.length));
+      ctx.stroke(bands[i]);
+    }
     ctx.restore();
 
     // 4. the live tips: hot, and shedding light

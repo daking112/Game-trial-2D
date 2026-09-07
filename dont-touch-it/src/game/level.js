@@ -167,7 +167,10 @@ export class Level {
     // size they lie on the plinth like sheets of glass, wider than the
     // bell and hanging off both edges. Nothing in the pile gets to be
     // bigger than a fragment.
-    const cap = G.topRx * 0.085;
+    // `size` is the fragment's half-width now that the wreckage normalises
+    // its outlines, so this reads directly: nothing in the pile is wider
+    // than a fifth of the plinth's half-width.
+    const cap = G.topRx * 0.105;
     const settled = list.filter(d => d.rest !== false);
     const src = settled.length ? settled : list;
     const keep = src.slice().sort((a, b) => sizeOf(b) - sizeOf(a)).slice(0, max);

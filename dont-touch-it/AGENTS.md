@@ -151,6 +151,16 @@ your geometry as multiples of it so every chapter is framed identically.
    the instant one turns. The bell is a casting, so it has a sound bow.
    Smooth gradients are what an object looks like when nobody decided
    what it was made of.
+9. **Never let one stroke define a silhouette.** A closed path stroked at
+   one width and one colour is the single fastest way to make a rendered
+   object read as cut paper, and this project has shipped it on the
+   wreckage (white wireframe diamonds), on Chapter III's flaw (a
+   triangular glyph) and on its cracks (a white marker line of constant
+   width). Use `litEdges` — only the edges turned toward the lamp catch
+   anything and the rest go darker than the ground — or a gradient that
+   tracks the surface normal, or vary the width along the run. If you are
+   about to write `ctx.stroke()` right after `ctx.fill()` on the same
+   path, that is the tell.
 
 ---
 
@@ -267,6 +277,18 @@ then `tl.to(obj, k, …, delay)` on the same property does not queue: the
 second replaces the first before it ever runs. Chapter I's power stutter
 existed only in the source for this reason. To flash a value, SET it and
 tween back — one tween.
+
+**A shadow centred on its object is invisible.** `contactShadow` draws a
+pool concentric with whatever you pass it, so if you also size it to the
+object — `plateRx * 1.16`, `flangeOut * 0.98`, `G.w * 0.62` under a pane —
+the object covers it and the frame gains nothing. Every hero in the game
+had one and none of them read as standing in light; a luminance scan across
+the plinth top under any of them walked from edge to edge without a
+discontinuity while the code looked correct and the comments said "cast
+shadow". Use `contactShadow` for the millimetre where something touches,
+and `groundShadow` for anything with height. The test is a scan, not a
+look: if the ground beside the object measures the same as the ground away
+from it, nothing is being cast.
 
 **`solve()` sets `solved` immediately.** Only the chapter *advance* is
 delayed. An `if (this.solved) return` guard inside anything scheduled

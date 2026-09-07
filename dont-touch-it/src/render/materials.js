@@ -29,8 +29,15 @@ export const KEY = (() => {
  *
  * `pts` is a flat screen-space [x,y,x,y,…]. The winding is derived here,
  * so callers do not have to keep track of it.
+ *
+ * `bias` is how square-on to the lamp an edge has to be before it catches
+ * anything. It matters more than it looks: at the default a four-edged
+ * chip lights three of them and comes out a white wireframe, which is the
+ * cut-paper read this function exists to avoid. Raise it for small flat
+ * pieces, where most of the heap should catch nothing at all and the two
+ * or three that do are what makes it read as a heap.
  */
-export function litEdges(ctx, pts, L, litStyle, dimStyle, width) {
+export function litEdges(ctx, pts, L, litStyle, dimStyle, width, bias = 0.35) {
   const n = pts.length;
   if (n < 6) return;
   let area = 0;
@@ -45,7 +52,7 @@ export function litEdges(ctx, pts, L, litStyle, dimStyle, width) {
     const qx = pts[i], qy = pts[i + 1];
     const ex = qx - px, ey = qy - py;
     const len = Math.hypot(ex, ey) || 1;
-    const t = ((ey / len) * L.x + (-ex / len) * L.y) * flip > 0.35 ? litP : dimP;
+    const t = ((ey / len) * L.x + (-ex / len) * L.y) * flip > bias ? litP : dimP;
     t.moveTo(px, py); t.lineTo(qx, qy);
     px = qx; py = qy;
   }
