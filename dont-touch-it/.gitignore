@@ -4,16 +4,17 @@ tools/node_modules
 # Throwaway diagnostics. Critics and debugging sessions write one-off
 # scripts in tools/; the keepers are named for what they do (harness,
 # playtest, audit, perf, still, statediff, audio-lab, play-l*).
-tools/diag*.mjs
-tools/dbg*.mjs
-tools/crit*.mjs
-tools/tmp*.mjs
-tools/zoom.mjs
+# Extension-agnostic on purpose: reviewers write these in whatever language
+# suits the measurement — a PNG luminance sampler is easier in Python than
+# in node — and a .py throwaway is no more a deliverable than a .mjs one.
+tools/diag*
+tools/dbg*
+tools/crit*
+tools/tmp*
+tools/zoom*
 tools/refdump.mjs
 tools/play-l1b.mjs
 tools/bell.mjs
-tools/zoomshot.mjs
 tools/crop.mjs
-tools/crit-*.mjs
 lum.py
 __pycache__/
