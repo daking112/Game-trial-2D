@@ -222,6 +222,53 @@ will be looking at the wrong image.
 
 ---
 
+## Silent failures this project has already paid for
+
+Four separate times now, a change has looked right in the source, passed
+`node --check`, passed `playtest.mjs`, and been wrong on screen. They share
+a shape: **the code never ran, or ran and was thrown away, and nothing
+said so.** Assume this is the failure mode here, and check the pixels.
+
+**A shadowed `const` deletes a whole chapter.** `levels/index.js` is
+fault-tolerant: a module that throws on import is dropped from the
+manifest and the game runs with the rest. So `const sq` shadowing one
+already in scope took Chapter I out of the build, and every `?level=`
+after it silently pointed at the wrong chapter. `node --check` does not
+catch a redeclaration in a nested scope. `budget.mjs` and `playtest.mjs`
+both assert the full manifest before they measure anything — keep it that
+way, and when a chapter behaves strangely check it is *there* first:
+
+```js
+node -e "import('./src/game/levels/l1-press.js').then(()=>console.log('OK')).catch(e=>console.log(e.message))"
+```
+
+**A throw inside a draw call leaves a plausible picture.** An exception
+part-way through `draw()` aborts the rest of it, so whatever that method
+had left to do simply does not happen — and what you see is the previous
+layers, which usually look like a lighting bug rather than a crash. A
+temporal-dead-zone `const on = fil` cost Chapter IV its entire darkness
+mask this way: the room stayed lit through the blackout and every test
+passed. If a frame looks wrong in a way you cannot explain, check the
+console before you touch the maths.
+
+**A delayed tween supersedes the one already running.** `tl.to(obj, k, …)`
+then `tl.to(obj, k, …, delay)` on the same property does not queue: the
+second replaces the first before it ever runs. Chapter I's power stutter
+existed only in the source for this reason. To flash a value, SET it and
+tween back — one tween.
+
+**`solve()` sets `solved` immediately.** Only the chapter *advance* is
+delayed. An `if (this.solved) return` guard inside anything scheduled
+after `solve()` will never run. The level stops ticking when the chapter
+really ends, which is the only condition worth guarding on.
+
+The general lesson: when a change does not appear, do not re-read the
+code and adjust the numbers. Prove the code ran — count the callbacks,
+read the value back a frame later, diff the frame against the previous
+build. Every one of these cost more time to guess at than to measure.
+
+---
+
 ## Wreckage — what you broke stays broken
 
 `src/game/wreckage.js` holds a persistent, chapter-spanning pile of debris.
