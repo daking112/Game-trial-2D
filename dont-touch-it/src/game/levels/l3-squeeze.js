@@ -502,15 +502,6 @@ export class L3Squeeze extends Level {
     }
   }
 
-  /** Retire any body whose geometry has stopped being a number. */
-  _reapDegenerate() {
-    for (let i = this.blobs.length - 1; i >= 0; i--) {
-      const b = this.blobs[i];
-      if (!b.degenerate) continue;
-      this._destroyBlob(b);
-    }
-  }
-
   _nearestBlob(x, y) {
     let best = null, bd = Infinity;
     for (const b of this.blobs) {

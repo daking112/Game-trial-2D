@@ -990,6 +990,12 @@ export class L1Press extends Level {
     // belongs entirely to the scene behind.
     const jarUp = this.jar.lift > this.g.u * 1.4 || this.jar.gone;
     this._drawPlate(ctx, glow);
+    // What the jar does to the plate under it. This existed and was never
+    // called — dead since some refactor — so a lifted bell jar was a hard
+    // outline floating over a plate it did not touch, darken or throw
+    // anything onto. Drawn here, over the plate and under everything that
+    // stands on it, which is where a cast shadow goes.
+    if (!this.jar.gone || this.jar.resting) this._drawJarContact(ctx);
     this._drawFlange(ctx, false);       // far half of the clamp ring
     if (jarUp) this._drawFlange(ctx, true);
     this._drawScrews(ctx, glow, false); // back screws, seated on it
