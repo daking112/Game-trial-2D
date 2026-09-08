@@ -517,10 +517,18 @@ export class Set {
     const G = this.geom, txt = this._noteText;
     if (!G || !txt) return null;
     const u = G.u;
-    const w = u * 11.4, pad = u * 0.95;
+    // The conservator's note is the HINT — the thing that unblocks a player
+    // who is stuck — and it was set in an italic Didone at u*1.02, which is
+    // about four pixels on a phone. A high-contrast serif at four pixels
+    // has no hairlines left: blown up six times it still could not be read.
+    // The best idea in this game's interface was invisible. It is set at
+    // the same size as the label's own title now, with a floor in absolute
+    // pixels, and the card is the width of the label above it.
+    const w = u * 15.0, pad = u * 1.1;
+    const fs = Math.max(9.5, u * 1.62);
     // measure first: the card is as tall as the note needs
     const probe = document.createElement('canvas').getContext('2d');
-    probe.font = `italic ${u * 1.02}px 'Instrument Serif', Georgia, serif`;
+    probe.font = `italic ${fs}px 'Instrument Serif', Georgia, serif`;
     const words = String(txt).split(/\s+/);
     const lines = [];
     let line = '';
@@ -530,7 +538,7 @@ export class Set {
       else line = next;
     }
     if (line) lines.push(line);
-    const lh = u * 1.30;
+    const lh = fs * 1.30;
     const h = pad * 2 + lines.length * lh;
 
     const lay = (this._noteL = new Layer())
@@ -542,15 +550,17 @@ export class Set {
     bg.addColorStop(1, '#d5cec0');
     c.fillStyle = bg;
     c.fillRect(0, 0, w, h);
-    c.fillStyle = 'rgba(52,46,38,0.88)';
-    c.font = `italic ${u * 1.02}px 'Instrument Serif', Georgia, serif`;
-    let y = pad + u * 1.0;
-    for (const l of lines) { c.fillText(l, pad, y); y += lh; }
+    // The board's tooth goes down BEFORE the print. Multiplied over the
+    // glyphs it was eating what little of them was left.
     c.save();
     c.globalCompositeOperation = 'multiply';
     c.globalAlpha = 0.45;
     c.drawImage(this._stoneTile(), 0, 0, w, h);
     c.restore();
+    c.fillStyle = 'rgba(40,35,28,0.94)';
+    c.font = `italic ${fs}px 'Instrument Serif', Georgia, serif`;
+    let y = pad + fs * 0.92;
+    for (const l of lines) { c.fillText(l, pad, y); y += lh; }
     lay.w = w; lay.h = h;
     return lay;
   }
