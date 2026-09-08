@@ -32,6 +32,13 @@ import { Smooth, Pulse } from '../../core/tween.js';
 
 const SCREW_ANGLES = [128, 52, 232, 308];      // deg, on the flange ellipse
 
+// How much a thing lying on the flange is foreshortened. The room's own K
+// is 0.255, which is correct and unusable: at that squash the hex recess
+// and the torque seal both stop being legible, and reading them IS the
+// puzzle. This is the compromise the whole chapter's small hardware uses,
+// in one place so the heads and the seals painted across them agree.
+const SEAL_K = 0.66;
+
 export class L1Press extends Level {
   static id = 'l1';
   static chapter = 'I';
@@ -1439,6 +1446,7 @@ export class L1Press extends Level {
       screwHead(ctx, x, y, s.r, s.spin, {
         type: 'hex', palette: PALETTES.brass, seated: seat,
         glowSeat: Math.max(s.glow * 0.8, hintGlow * 0.55),
+        squash: SEAL_K,
       });
 
       // and the half painted across the head, which turns with it. One
@@ -1470,23 +1478,44 @@ export class L1Press extends Level {
   _sealStroke(ctx, s, a, r0, r1, alpha) {
     const g = this.g;
     const ca = Math.cos(a), sa = Math.sin(a);
-    // the flange is seen at a shallow angle, so anything lying on it is
-    // foreshortened the same way the screw holes are
-    const K = 0.56;
+    // anything lying on the flange is foreshortened the same way the head
+    // it is painted across is
+    const K = SEAL_K;
+    // An inspector's torque seal is a bead of coloured lacquer — that is
+    // the whole point of it, that it is not the colour of the metal. This
+    // was a near-white line of one width with round caps at both ends: a
+    // toothpick laid on the screw. It is laid down thick where the brush
+    // landed at the flange and drawn out thin toward the head, and the end
+    // that broke is left square, because lacquer snaps, it does not taper.
+    const x0 = s.x + ca * r0, y0 = s.y + sa * r0 * K;
+    const x1 = s.x + ca * r1, y1 = s.y + sa * r1 * K;
+    const w = Math.max(1.3, g.u * 0.36);
     ctx.save();
-    ctx.lineCap = 'round';
-    // the shadow the raised bead of lacquer casts on the brass beside it
-    ctx.strokeStyle = `rgba(24,16,4,${0.5 * alpha})`;
-    ctx.lineWidth = Math.max(1.6, g.u * 0.46);
+    // the shadow the raised bead casts on the brass beside it
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = `rgba(24,14,4,${0.55 * alpha})`;
+    ctx.lineWidth = w * 1.5;
     ctx.beginPath();
-    ctx.moveTo(s.x + ca * r0, s.y + sa * r0 * K + g.u * 0.08);
-    ctx.lineTo(s.x + ca * r1, s.y + sa * r1 * K + g.u * 0.08);
+    ctx.moveTo(x0, y0 + g.u * 0.09);
+    ctx.lineTo(x1, y1 + g.u * 0.09);
     ctx.stroke();
-    ctx.strokeStyle = `rgba(246,240,220,${0.88 * alpha})`;
-    ctx.lineWidth = Math.max(1.3, g.u * 0.34);
+    // the bead itself, tapering along the brush's travel
+    const N = 5;
+    for (let i = 0; i < N; i++) {
+      const t0 = i / N, t1 = (i + 1) / N;
+      ctx.strokeStyle = `rgba(196,58,32,${(0.92 - t0 * 0.22) * alpha})`;
+      ctx.lineWidth = w * (1.12 - t0 * 0.52);
+      ctx.beginPath();
+      ctx.moveTo(lerp(x0, x1, t0), lerp(y0, y1, t0));
+      ctx.lineTo(lerp(x0, x1, t1), lerp(y0, y1, t1));
+      ctx.stroke();
+    }
+    // the wet highlight along the top of the bead
+    ctx.strokeStyle = `rgba(255,176,140,${0.42 * alpha})`;
+    ctx.lineWidth = Math.max(0.6, w * 0.3);
     ctx.beginPath();
-    ctx.moveTo(s.x + ca * r0, s.y + sa * r0 * K);
-    ctx.lineTo(s.x + ca * r1, s.y + sa * r1 * K);
+    ctx.moveTo(x0, y0 - w * 0.24);
+    ctx.lineTo(lerp(x0, x1, 0.72), lerp(y0, y1, 0.72) - w * 0.24);
     ctx.stroke();
     // a highlight along the crown of the brush stroke
     ctx.strokeStyle = `rgba(255,254,248,${0.55 * alpha})`;

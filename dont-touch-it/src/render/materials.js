@@ -525,18 +525,34 @@ export function plasterTile(w, h, base = '#141418', seed = 21) {
  * A machined hex/slotted screw head, lit consistently and rotatable.
  * type: 'hex' | 'slot' | 'phillips' | 'torx'
  */
+/**
+ * `squash` foreshortens the head into the plane it is screwed into. A head
+ * lying in a surface seen at a glancing angle is an ELLIPSE; drawn as a
+ * true circle it reads as a coin standing on edge in a hole. The room's own
+ * K is far too steep to use literally here — at 0.26 the hex recess and the
+ * torque seal both stop being readable, and reading them is the puzzle — so
+ * callers pass a compromise and get an object that at least lies down.
+ */
 export function screwHead(ctx, cx, cy, r, angle, opts = {}) {
-  const { type = 'hex', palette = PALETTES.steel, seated = 1, glowSeat = 0 } = opts;
-  if (!ok(cx, cy, r, angle) || r <= 0) return;
+  const {
+    type = 'hex', palette = PALETTES.steel, seated = 1, glowSeat = 0, squash = 1,
+  } = opts;
+  if (!ok(cx, cy, r, angle, squash) || r <= 0) return;
   ctx.save();
   // recess shadow around the head
   const rec = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.5);
   rec.addColorStop(0, `rgba(0,0,0,${0.5 * seated})`);
   rec.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = rec;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(1, squash); ctx.translate(-cx, -cy);
   ctx.beginPath(); ctx.arc(cx, cy, r * 1.5, 0, TAU); ctx.fill();
+  ctx.restore();
 
   ctx.translate(cx, cy);
+  // squash first, THEN spin, so the head turns in its own plane rather
+  // than shearing as it goes round
+  ctx.scale(1, squash);
   ctx.rotate(angle);
 
   // head body
