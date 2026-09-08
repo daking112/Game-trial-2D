@@ -511,7 +511,22 @@ export class L5Dark extends Level {
       // mostly dark front face. The nearest rank now reads about three
       // times the furthest.
       const fade = (0.03 + (pl.s / 0.34) ** 1.7 * 0.44) * pl.a * this.reveal;
-      ctx.globalAlpha = clamp01(fade);
+      // Haze by MIXING toward the room behind, not by alpha.
+      //
+      // Sorting farthest-first only occludes if what is drawn is opaque,
+      // and every rank was going down at its fade as globalAlpha — so a
+      // near plinth at 0.4 let the far one show straight through it. You
+      // could follow a back plinth's vertical arris down through two boxes
+      // in front of it, and the reveal the whole game builds to read as a
+      // stack of transparencies rather than as a room that keeps going.
+      // Mixing gives the identical value with none of that.
+      const k = clamp01(fade);
+      const HZ = [46, 44, 46];              // the wall at this height
+      const hz = (r, gg, b, a = 1) => `rgba(${
+        Math.round(HZ[0] + (r - HZ[0]) * k)},${
+        Math.round(HZ[1] + (gg - HZ[1]) * k)},${
+        Math.round(HZ[2] + (b - HZ[2]) * k)},${a})`;
+      ctx.globalAlpha = 1;
       const hw = g.topRx * pl.s;
       const bw = hw * K;                       // back edge, as the hero's
       const ry = hw * 0.19;
@@ -528,29 +543,29 @@ export class L5Dark extends Level {
       ctx.lineTo(pl.x - bw, pl.y - ry * 1.9);
       ctx.closePath();
       const tg = ctx.createLinearGradient(pl.x, pl.y - ry * 1.9, pl.x, pl.y);
-      tg.addColorStop(0, 'rgba(52,50,52,0.9)');
-      tg.addColorStop(0.5, 'rgba(112,108,102,0.92)');
-      tg.addColorStop(1, 'rgba(148,142,132,0.94)');
+      tg.addColorStop(0, hz(52, 50, 52));
+      tg.addColorStop(0.5, hz(112, 108, 102));
+      tg.addColorStop(1, hz(148, 142, 132));
       ctx.fillStyle = tg;
       ctx.fill();
 
       // front face, tuned to the hero's own paint
       const grd = ctx.createLinearGradient(0, pl.y, 0, pl.y + hh);
-      grd.addColorStop(0, '#3b3a3e');
-      grd.addColorStop(0.22, '#2b2b31');
-      grd.addColorStop(0.62, '#17171c');
-      grd.addColorStop(1, '#0b0b0f');
+      grd.addColorStop(0, hz(0x3b, 0x3a, 0x3e));
+      grd.addColorStop(0.22, hz(0x2b, 0x2b, 0x31));
+      grd.addColorStop(0.62, hz(0x17, 0x17, 0x1c));
+      grd.addColorStop(1, hz(0x0b, 0x0b, 0x0f));
       ctx.fillStyle = grd;
       ctx.fillRect(pl.x - hw, pl.y, hw * 2, hh);
       // and its chamfered left arris, which is what tells you it is a box
       const lc = ctx.createLinearGradient(pl.x - hw, 0, pl.x - hw + hw * 0.10, 0);
-      lc.addColorStop(0, 'rgba(210,200,182,0.20)');
+      lc.addColorStop(0, `rgba(210,200,182,${0.20 * k})`);
       lc.addColorStop(1, 'rgba(210,200,182,0)');
       ctx.fillStyle = lc;
       ctx.fillRect(pl.x - hw, pl.y, hw * 0.10, hh);
 
       // the front-top arris: the brightest line on the hero, so also here
-      ctx.strokeStyle = 'rgba(255,242,214,0.42)';
+      ctx.strokeStyle = `rgba(255,242,214,${0.42 * k})`;
       ctx.lineWidth = Math.max(0.6, hw * 0.022);
       ctx.beginPath();
       ctx.moveTo(pl.x - hw, pl.y);
@@ -561,7 +576,7 @@ export class L5Dark extends Level {
       // room rather than another box
       ctx.globalCompositeOperation = 'lighter';
       const lp = ctx.createRadialGradient(pl.x, pl.y - hw * 0.9, 0, pl.x, pl.y - hw * 0.9, hw * 2.1);
-      lp.addColorStop(0, 'rgba(255,222,178,0.10)');
+      lp.addColorStop(0, `rgba(255,222,178,${0.10 * k})`);
       lp.addColorStop(1, 'rgba(255,222,178,0)');
       ctx.fillStyle = lp;
       ctx.fillRect(pl.x - hw * 2.2, pl.y - hw * 3, hw * 4.4, hw * 4);

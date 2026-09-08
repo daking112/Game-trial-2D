@@ -29,11 +29,12 @@ if (params.has('quality')) { game.r.setQuality(params.get('quality')); game.gov.
 // ------------------------------------------------------------
 overlay.insertAdjacentHTML('afterbegin', `
   <div id="title">
+    <div class="eyebrow">Gallery of Irreversible Acts</div>
     <div class="mark">
       <span><i>Don't</i></span>
-      <span><i>Touch</i></span>
-      <span><i>It</i></span>
+      <span><i>Touch It</i></span>
     </div>
+    <div class="rule"></div>
     <div class="sub">An exhibition of poor impulse control</div>
     <div class="prompt">Tap to enter</div>
   </div>
@@ -44,8 +45,10 @@ const bootEl = document.getElementById('boot');
 
 async function boot() {
   try { await document.fonts.ready; } catch (_) {}
-  game.set.exposure = 0.18;
-  game.set.coneStrength = 0.30;
+  // The exhibit behind the poster was at 0.18 and effectively invisible;
+  // this is still a museum after hours, but you can see what is on the plinth.
+  game.set.exposure = 0.27;
+  game.set.coneStrength = 0.42;
   game.start();
   // The first exhibit is already on its plinth, in half-light, behind the
   // title. Tapping doesn't load a level — it turns the lights on.
@@ -58,10 +61,16 @@ async function boot() {
     el.style.transitionDelay = `${0.12 + i * 0.09}s`;
     requestAnimationFrame(() => { el.style.transform = 'translate3d(0,0,0)'; });
   });
-  const sub = titleEl.querySelector('.sub');
-  sub.style.transition = 'opacity 1.2s cubic-bezier(.16,1,.3,1)';
-  sub.style.transitionDelay = '.5s';
-  requestAnimationFrame(() => { sub.style.opacity = '1'; });
+  // the masthead comes up before the title, the rule draws under it after
+  const fade = (el, delay, dur = 1.2) => {
+    if (!el) return;
+    el.style.transition = `opacity ${dur}s cubic-bezier(.16,1,.3,1)`;
+    el.style.transitionDelay = `${delay}s`;
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+  };
+  fade(titleEl.querySelector('.eyebrow'), 0.05, 1.0);
+  fade(titleEl.querySelector('.rule'), 0.62, 0.9);
+  fade(titleEl.querySelector('.sub'), 0.78);
   const prompt = titleEl.querySelector('.prompt');
   setTimeout(() => { prompt.style.opacity = '1'; prompt.classList.add('on'); }, 1500);
   game.state = 'title';

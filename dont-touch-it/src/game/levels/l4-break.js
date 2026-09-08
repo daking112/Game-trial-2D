@@ -2316,16 +2316,37 @@ export class L4Break extends Level {
     ctx.restore();
 
     // --- shadows
-    ctx.save();
+    // One path, one fill. Drawn one ellipse at a time these were hard-edged
+    // solids at 0.5 alpha stacking on top of each other, so a heap of a
+    // hundred and sixty produced a field of concentric rings under itself —
+    // coffee stains, in the frame the chapter's whole camera move lands on.
+    // A single path fills the union once and the banding is gone.
+    const shadowP = new Path2D();
+    let any = false;
     for (const d of P.shards) {
       if (!d.rest) continue;
-      ctx.globalAlpha = 0.5 * lit;
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
-      ctx.beginPath();
-      ctx.ellipse(d.x + u * 0.5, d.floorY + u * 0.35, d.data.r * 1.1, d.data.r * 0.34, 0, 0, TAU);
-      ctx.fill();
+      shadowP.ellipse(d.x + u * 0.45, d.floorY + u * 0.2,
+        d.data.r * 0.82, d.data.r * 0.24, 0, 0, TAU);
+      any = true;
     }
-    ctx.restore();
+    if (any) {
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.strokeStyle = '#000';
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      // Feather the union's boundary, or the merged shape has a hard
+      // scalloped edge and reads as one grey cloud laid on the stone
+      // instead of as a hundred and sixty small shadows.
+      for (let i = 3; i >= 1; i--) {
+        ctx.globalAlpha = (0.54 * lit) * 0.22 / i;
+        ctx.lineWidth = u * 1.1 * i;
+        ctx.stroke(shadowP);
+      }
+      ctx.globalAlpha = 0.54 * lit;
+      ctx.fill(shadowP);
+      ctx.restore();
+    }
 
     // --- bodies
     for (const d of P.shards) {
@@ -2339,6 +2360,13 @@ export class L4Break extends Level {
       if (d.rest) ctx.scale(1, d.tilt ?? 0.52);
       ctx.rotate(d.a);
       if (mirror && d.img) {
+        if (d.rest) {
+          ctx.save();
+          ctx.translate(0, Math.max(0.8, u * 0.30) / (d.tilt ?? 0.52));
+          ctx.fillStyle = `rgba(8,10,14,${0.6 * lit})`;
+          ctx.fill(d.p2);
+          ctx.restore();
+        }
         // the shard still shows its piece of the reflection
         ctx.drawImage(d.img.canvas, -d.img.r, -d.img.r, d.img.r * 2, d.img.r * 2);
         if (!d.gloss) d.gloss = this._shardGrad(ctx, d.data.r, true);
@@ -2369,6 +2397,19 @@ export class L4Break extends Level {
         // sheet, and at moderate alpha the middle of the heap composited
         // to solid white. A flat fill keyed to the facet is both cheaper
         // and the only thing that gives a pile a range.
+        // 6mm of glass seen edge-on. A piece at rest is lying almost flat,
+        // so what you see of its thickness is a band along its near edge —
+        // painted by filling the same outline offset toward the viewer in a
+        // darker value and letting the face cover the rest. Without it the
+        // pile is a hundred and sixty flat navy plates, which is the read
+        // the whole chapter's payoff was losing on.
+        if (d.rest) {
+          ctx.save();
+          ctx.translate(0, Math.max(0.8, u * 0.30) / (d.tilt ?? 0.52));
+          ctx.fillStyle = `rgba(6,10,16,${0.5 * lit})`;
+          ctx.fill(d.p2);
+          ctx.restore();
+        }
         ctx.fillStyle = `rgba(10,16,24,${(0.34 - d.diff * 0.16) * lit})`;
         ctx.fill(d.p2);
         if (d.diff > 0.66) {
@@ -2407,23 +2448,43 @@ export class L4Break extends Level {
         // Only edges genuinely turned toward the key light catch it: at a
         // loose threshold roughly half of every outline landed in the lit
         // bucket, which reads as a scribble rather than as glass.
-        const tgt = (nx * LX + ny * LY) > (mirror ? 0.42 : 0.62)
-          ? (hot ? litHi : litLo) : dimP;
-        tgt.moveTo(px, py); tgt.lineTo(qx, qy);
+        const isLit = (nx * LX + ny * LY) > (mirror ? 0.42 : 0.62);
+        if (!isLit) {
+          dimP.moveTo(px, py); dimP.lineTo(qx, qy);
+        } else {
+          const tgt = hot ? litHi : litLo;
+          // A mirror wedge is a third of the pane across, so "its lit edge"
+          // was a dead-straight pure-white rule three hundred pixels long,
+          // and forty of those crossing each other read as a wireframe
+          // laid over the pile rather than as light on broken glass. A real
+          // fracture edge is not straight enough to catch the lamp along
+          // its whole length: past a threshold, light only the middle of
+          // it, with where and how much seeded off the piece.
+          const seg = u * 9;
+          if (L > seg) {
+            const f = 0.30 + ((d.spark * 7 + i * 3) % 5) * 0.055;   // 0.30..0.52
+            const c = 0.5 + (((d.spark + i) % 3) - 1) * 0.16;       // biased centre
+            const t0 = clamp01(c - f * 0.5), t1 = clamp01(c + f * 0.5);
+            tgt.moveTo(px + ex * t0, py + ey * t0);
+            tgt.lineTo(px + ex * t1, py + ey * t1);
+          } else {
+            tgt.moveTo(px, py); tgt.lineTo(qx, qy);
+          }
+        }
         px = qx; py = qy;
       }
     }
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.strokeStyle = `rgba(96,134,156,${0.20 * lit})`;
-    ctx.lineWidth = Math.max(0.6, u * 0.08);
+    ctx.strokeStyle = `rgba(96,134,156,${0.13 * lit})`;
+    ctx.lineWidth = Math.max(0.5, u * 0.065);
     ctx.stroke(dimP);
     ctx.globalCompositeOperation = 'lighter';
     ctx.strokeStyle = `rgba(226,244,255,${(mirror ? 0.30 : 0.13) * lit})`;
     ctx.lineWidth = Math.max(0.6, u * (mirror ? 0.10 : 0.075));
     ctx.stroke(litLo);
-    ctx.strokeStyle = `rgba(255,255,255,${(mirror ? 0.72 : 0.42) * lit})`;
-    ctx.lineWidth = Math.max(0.7, u * (mirror ? 0.14 : 0.10));
+    ctx.strokeStyle = `rgba(248,252,255,${(mirror ? 0.46 : 0.30) * lit})`;
+    ctx.lineWidth = Math.max(0.7, u * (mirror ? 0.11 : 0.085));
     ctx.stroke(litHi);
     ctx.restore();
 

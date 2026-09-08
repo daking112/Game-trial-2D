@@ -265,12 +265,20 @@ export class Set {
     c.fillStyle = sh;
     c.fillRect(0, sy, w, fh * 0.62);
 
-    // the downlight pool landing on the floor around the plinth
-    const py = sy + fh * 0.70;
-    const pool = c.createRadialGradient(cx, py, 0, cx, py, w * 0.95);
-    pool.addColorStop(0, 'rgba(255,224,182,0.30)');
-    pool.addColorStop(0.30, 'rgba(252,212,170,0.155)');
-    pool.addColorStop(0.62, 'rgba(230,190,150,0.055)');
+    // The downlight pool landing on the floor around the plinth.
+    //
+    // Centred on the BASE LINE, not two thirds down the floor. A scan of
+    // the old build across the floor either side of the plinth read 6 to 11
+    // out of 255 — the plinth stood in a void, and the contact shadow the
+    // set carefully draws at its base landed on black and did nothing. The
+    // plinth needs a plane to stand on before it can throw anything onto
+    // one; this is that plane, and it stays a pool rather than becoming
+    // room light because it is tight and steep.
+    const py = G.baseY;
+    const pool = c.createRadialGradient(cx, py, 0, cx, py, w * 0.80);
+    pool.addColorStop(0, 'rgba(255,224,182,0.56)');
+    pool.addColorStop(0.26, 'rgba(252,212,170,0.30)');
+    pool.addColorStop(0.58, 'rgba(230,190,150,0.105)');
     pool.addColorStop(1, 'rgba(220,180,142,0)');
     c.save();
     c.translate(cx, py); c.scale(1, 0.52); c.translate(-cx, -py);
