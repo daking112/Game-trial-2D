@@ -25,6 +25,7 @@ import {
   KEY, litEdges, facetNormal,
 } from '../../render/materials.js';
 import { Debris } from '../../render/particles.js';
+import { Layer } from '../../render/renderer.js';
 import { Audio, SFX } from '../../core/audio.js';
 import Haptics from '../../core/haptics.js';
 import { Smooth, Pulse } from '../../core/tween.js';
@@ -1241,20 +1242,74 @@ export class L1Press extends Level {
     this._drawSeat(ctx, E);
   }
 
+  /**
+   * The warning cut into the plate.
+   *
+   * This was one straight line of text laid across the middle of the top
+   * face — where the brass flange is. The flange draws over it, so what
+   * reached the screen was "D" and "SS" with the middle missing, and on a
+   * tablet that is legible enough to read as broken rather than as absent.
+   *
+   * A machinist engraving a round plate sets the text ROUND, on the rim
+   * outside the bolt circle, and that solves both problems at once: it is
+   * never under the flange, and an arc is long enough to hold the words
+   * that a chord across the front of the plate is not. Baked once per
+   * layout, because twelve glyphs times two passes is not a per-frame
+   * cost worth paying for something that never moves.
+   */
+  _engravingLayer() {
+    const g = this.g;
+    if (this._engL && this._engW === g.plateRx && this._engU === g.u) return this._engL;
+    const L = this._engL || (this._engL = new Layer());
+    this._engW = g.plateRx; this._engU = g.u;
+    const pad = g.u * 6;
+    const W = Math.ceil((g.plateRx + pad) * 2), H = Math.ceil((g.plateRy + pad) * 2);
+    const dpr = clamp(this.r.dpr, 1, 2);
+    L.size(Math.max(1, Math.round(W * dpr)), Math.max(1, Math.round(H * dpr)));
+    const c = L.ctx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+    c.translate(W / 2, H / 2);
+    // the lettering ring: outside the bolt circle, inside the chamfer
+    const rx = (g.flangeOut + g.plateRx) * 0.5;
+    const ry = rx * g.K;
+    const text = 'DO NOT PRESS';
+    const span = 1.28;                      // radians of arc it occupies
+    // Swept from right to left in angle, because on the FRONT of an
+    // ellipse (screen y growing downward) that is the direction that
+    // carries the reader left to right. Sweeping the other way sets the
+    // whole line backwards and upside down, which is what it did first.
+    const a0 = Math.PI / 2 + span / 2;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === ' ') continue;
+      const t = text.length > 1 ? i / (text.length - 1) : 0.5;
+      const a = a0 - span * t;
+      const x = Math.cos(a) * rx, y = Math.sin(a) * ry;
+      // the tangent of the ELLIPSE, in the direction of travel
+      const tang = Math.atan2(-Math.cos(a) * ry, Math.sin(a) * rx);
+      c.save();
+      c.translate(x, y);
+      c.rotate(tang);
+      c.scale(1, g.K * 1.7);
+      engrave(c, ch, 0, 0, {
+        font: `800 ${g.u * 4.2}px Inter, sans-serif`,
+        letterSpacing: '0px',
+        depth: Math.max(1.2, g.u * 0.3), darkness: 0.9, light: 0.32,
+      });
+      c.restore();
+    }
+    this._engBox = { W, H };
+    return L;
+  }
+
   _drawEngraving(ctx, E) {
     const g = this.g;
-    const { cx, plateY } = g;
-    // sits on the FRONT half of the top face, squashed into the plane
-    const py = plateY + g.plateRy * 0.60;
+    const L = this._engravingLayer();
+    const { W, H } = this._engBox;
     ctx.save();
     ctx.globalAlpha = clamp01(E * 1.25);
-    ctx.translate(cx, py);
-    ctx.scale(1, g.K * 1.55);
-    engrave(ctx, 'DO NOT PRESS', 0, 0, {
-      font: `800 ${g.u * 4.4}px Inter, sans-serif`,
-      letterSpacing: `${g.u * 0.5}px`,
-      depth: Math.max(1.2, g.u * 0.32), darkness: 0.86, light: 0.30,
-    });
+    ctx.drawImage(L.canvas, g.cx - W / 2, g.plateY - H / 2, W, H);
     ctx.restore();
   }
 

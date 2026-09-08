@@ -278,6 +278,14 @@ second replaces the first before it ever runs. Chapter I's power stutter
 existed only in the source for this reason. To flash a value, SET it and
 tween back — one tween.
 
+**`setTransform(1,0,0,1,0,0)` is not "undo my translate".** It wipes the
+world transform — the renderer's dpr scale and the camera with it — so
+anything drawn after it lands at half size in the wrong half of the screen.
+The finale's pull-chain grew a second, ghostly copy of itself down the wall
+this way, faint enough to read as a `setLineDash` guide left in the build,
+and it took a per-column luminance scan across three chapters to find. Undo
+an offset with `save()`/`restore()`, always.
+
 **A shadow centred on its object is invisible.** `contactShadow` draws a
 pool concentric with whatever you pass it, so if you also size it to the
 object — `plateRx * 1.16`, `flangeOut * 0.98`, `G.w * 0.62` under a pane —

@@ -20,6 +20,7 @@ import {
 } from '../../core/math.js';
 import {
   PALETTES, metalFill, radialBrush, knurl, engrave, contactShadow, roundRectPath,
+  litEdges, KEY,
 } from '../../render/materials.js';
 import { Layer } from '../../render/renderer.js';
 import { VerletWorld, makeRope } from '../../physics/verlet.js';
@@ -781,8 +782,25 @@ export class L5Dark extends Level {
     ctx.fillStyle = ig;
     ctx.fillRect(g.cx - rx, top, rx * 2, bot - top + rx);
     ctx.restore();
-    ctx.strokeStyle = `rgba(255,236,190,${0.3 + 0.3 * on})`;
-    ctx.lineWidth = Math.max(1, g.u * 0.14);
+    // The cone was finished with one stroke of one width and one colour all
+    // the way round — the cut-paper tell, on the room's hero fitting. An
+    // enamelled cone catches the lamp on the shoulder that faces it and
+    // goes darker than the wall everywhere else.
+    litEdges(ctx, [
+      g.cx - rx, bot,
+      g.cx - rx * 0.16, top,
+      g.cx + rx * 0.16, top,
+      g.cx + rx, bot,
+    ], KEY,
+      `rgba(255,238,196,${0.34 + 0.34 * on})`,
+      `rgba(28,20,10,${0.44})`,
+      Math.max(1, g.u * 0.15));
+    // and the lip, which is the brightest line on the fitting because it
+    // is the one edge the bulb itself lights from beneath
+    ctx.beginPath();
+    ctx.ellipse(g.cx, bot, rx, rx * 0.24, 0, 0, Math.PI);
+    ctx.strokeStyle = `rgba(255,240,206,${0.30 + 0.44 * on})`;
+    ctx.lineWidth = Math.max(1, g.u * 0.13);
     ctx.stroke();
 
     // the mouth: hot when lit, a dark hole when not
@@ -801,15 +819,32 @@ export class L5Dark extends Level {
       const fy = bot + rx * 0.10;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      // A coil, not a squiggle. Two and a half cycles sampled fifteen times
+      // is a hard zigzag, and drawn nearly half the shade's width across a
+      // blown-out pool the only part of it that survived was the peaks —
+      // two white chevrons floating in the light, which is what a reviewer
+      // sees. A real pendant filament is a tight coil between two support
+      // wires, small enough to sit inside its own glare.
+      const half = rx * 0.17, amp = rx * 0.036;
       ctx.strokeStyle = `rgba(255,${200 * fil + 40 | 0},${110 * fil + 12 | 0},${Math.min(1, fil * 1.4)})`;
-      ctx.lineWidth = Math.max(1, g.u * 0.22);
+      ctx.lineWidth = Math.max(0.8, g.u * 0.15);
       ctx.beginPath();
-      for (let i = 0; i <= 14; i++) {
-        const tt = i / 14;
-        const px = g.cx + (tt - 0.5) * rx * 0.42;
-        const py = fy + Math.sin(tt * Math.PI * 5) * rx * 0.05;
+      for (let i = 0; i <= 72; i++) {
+        const tt = i / 72;
+        const px = g.cx + (tt - 0.5) * half * 2;
+        // tapered at both ends, the way a coil is wound onto its supports
+        const env = Math.sin(tt * Math.PI) ** 0.6;
+        const py = fy + Math.sin(tt * Math.PI * 13) * amp * env;
         i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
+      ctx.stroke();
+      // the two support wires it is wound onto — dimmer than the coil,
+      // because they are not what is glowing
+      ctx.strokeStyle = `rgba(255,190,120,${0.34 * fil})`;
+      ctx.lineWidth = Math.max(0.6, g.u * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(g.cx - half, fy); ctx.lineTo(g.cx - half * 0.36, fy - rx * 0.13);
+      ctx.moveTo(g.cx + half, fy); ctx.lineTo(g.cx + half * 0.36, fy - rx * 0.13);
       ctx.stroke();
       ctx.restore();
       if (glow) {
@@ -892,41 +927,52 @@ export class L5Dark extends Level {
     ctx.strokeStyle = '#9c7a34';
     ctx.lineWidth = r * 2;
     ctx.stroke(path);
-    // the specular running down the lit side of every bead
-    ctx.save();
-    ctx.translate(-r * 0.34, -r * 0.30);
-    ctx.strokeStyle = 'rgba(255,236,178,0.72)';
-    ctx.lineWidth = r * 0.72;
-    ctx.stroke(path);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(r * 0.42, r * 0.36);
-    ctx.strokeStyle = 'rgba(52,36,10,0.55)';
-    ctx.lineWidth = r * 0.6;
-    ctx.stroke(path);
-    ctx.restore();
 
-    // the pinches: one every bead-diameter, walked at constant arc length
-    // so they stay evenly spaced however the rope happens to hang
-    ctx.strokeStyle = 'rgba(44,30,8,0.62)';
-    ctx.lineWidth = Math.max(0.8, r * 0.34);
-    ctx.beginPath();
-    const step = r * 1.92;
-    let carry = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const a2 = pts[i - 1], b2 = pts[i];
-      const dx = b2.x - a2.x, dy = b2.y - a2.y;
-      const len = Math.hypot(dx, dy);
-      if (len < 1e-4) continue;
-      const nx = -dy / len, ny = dx / len;
-      for (let d = step - carry; d < len; d += step) {
-        const px = a2.x + dx * (d / len), py = a2.y + dy * (d / len);
-        ctx.moveTo(px - nx * r * 0.86, py - ny * r * 0.86);
-        ctx.lineTo(px + nx * r * 0.86, py + ny * r * 0.86);
-      }
-      carry = (carry + len) % step;
-    }
-    ctx.stroke();
+    // Beads, not a ladder.
+    //
+    // This drew its specular as one continuous stroke down the lit side and
+    // then its articulation as full-width perpendicular bars across the
+    // body, one per bead — two gold rails and a set of rungs, which is a
+    // ladder, and it was hanging in the middle of the frame the finale
+    // opens on. A bead is a sphere: its highlight is a DOT, and its joint
+    // is a constriction, not a bar. Dashing along the path gives both, one
+    // mark per bead, spaced by real arc length so they stay right however
+    // the rope hangs and however it swings.
+    const bead = r * 1.92;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // the constriction between one bead and the next
+    ctx.setLineDash([bead * 0.20, bead * 0.80]);
+    ctx.lineDashOffset = bead * 0.90;
+    ctx.strokeStyle = 'rgba(44,30,8,0.55)';
+    ctx.lineWidth = r * 1.7;
+    ctx.stroke(path);
+    // the shaded side of each bead
+    ctx.save();
+    ctx.translate(r * 0.44, r * 0.38);
+    ctx.setLineDash([bead * 0.46, bead * 0.54]);
+    ctx.lineDashOffset = bead * 0.30;
+    ctx.strokeStyle = 'rgba(52,36,10,0.5)';
+    ctx.lineWidth = r * 0.62;
+    ctx.stroke(path);
+    ctx.restore();
+    // and its highlight, one per bead, on the side the lamp is.
+    //
+    // Undoing the offset with setTransform(1,0,0,1,0,0) instead of a
+    // save/restore does not restore the transform this was called with —
+    // it wipes the renderer's dpr scale and the camera with it, so the
+    // highlight was drawn at half size half a screen away and hung a
+    // second, ghostly chain down the wall. save/restore, always.
+    ctx.save();
+    ctx.translate(-r * 0.36, -r * 0.32);
+    ctx.setLineDash([bead * 0.34, bead * 0.66]);
+    ctx.lineDashOffset = bead * 0.32;
+    ctx.strokeStyle = 'rgba(255,238,184,0.8)';
+    ctx.lineWidth = r * 0.66;
+    ctx.stroke(path);
+    ctx.restore();
+    ctx.restore();
+    ctx.setLineDash([]);
 
     // The acorn on the end — the thing the player actually takes hold of,
     // so it is turned rather than blobbed: a collar, a shoulder, a point.
