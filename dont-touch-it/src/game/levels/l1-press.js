@@ -1766,6 +1766,30 @@ export class L1Press extends Level {
     }
   }
 
+  /**
+   * What the wall does to what is behind it — and why it does not bend it.
+   *
+   * The comment below said "the scene, bent by the wall" for months and
+   * nothing under it bent anything: a screw seen THROUGH the glass measured
+   * pixel-identical to the same screw beside it. So it was built — a
+   * cylindrical warp that squeezes the strip behind each wall toward the
+   * silhouette, `drawImage` from the canvas back onto itself inside the
+   * clip — and it looked right. The back screws smeared and compressed
+   * exactly the way they do behind real glass.
+   *
+   * It costs nine milliseconds per call. Two calls took Chapter I from
+   * 2.5ms to 20ms on a phone and 32ms on a tablet; seven-slice ramping,
+   * which is what made it look good, took it to 48 and 76. The price is
+   * the readback, not the pixels — sampling the canvas you are drawing to
+   * flushes it — so it does not come down by shrinking the source.
+   *
+   * Doing it without a readback means drawing everything behind the jar
+   * twice, once clipped outside the rim bands and once warped inside them,
+   * which is a restructure of this chapter's whole draw order rather than
+   * an effect. Left undone deliberately, and written down so the next
+   * person does not spend the afternoon rediscovering the number.
+   */
+
   // ---------- the bell jar ----------
   /**
    * Outline of the glass shell. `inset` shrinks it by the wall thickness so

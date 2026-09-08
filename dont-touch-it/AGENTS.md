@@ -278,6 +278,14 @@ second replaces the first before it ever runs. Chapter I's power stutter
 existed only in the source for this reason. To flash a value, SET it and
 tween back — one tween.
 
+**Sampling the canvas you are drawing to costs ~9ms a call.** Not per pixel
+— per call. Reading the world canvas back to warp a strip of it (the honest
+way to refract what is behind glass) took Chapter I from 2.5ms to 20ms with
+two `drawImage` calls and to 48ms with seven, on a phone, and shrinking the
+source rect changes nothing because the price is the flush. Anything that
+wants what is already on screen has to get it by drawing the geometry a
+second time, not by reading the pixels.
+
 **`setTransform(1,0,0,1,0,0)` is not "undo my translate".** It wipes the
 world transform — the renderer's dpr scale and the camera with it — so
 anything drawn after it lands at half size in the wrong half of the screen.
